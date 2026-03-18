@@ -1,23 +1,30 @@
-from picamera2 import Picamera2
+from picamera2 import Picamera2, Preview
 import time
 
 picam2 = Picamera2()
 
-# 네 카메라 최대 모드 기준
-capture_config = picam2.create_still_configuration(
-    main={"size": (5120, 800)}
+# 네 카메라(5120x800)의 비율을 유지한 축소 미리보기
+config = picam2.create_preview_configuration(
+    main={"size": (1280, 200), "format": "RGB888"}
 )
+picam2.configure(config)
 
-picam2.configure(capture_config)
-
-# 자동 노출 끄고 노출시간/게인 고정
+# 노출시간/게인 고정
 picam2.set_controls({
     "AeEnable": False,
-    "ExposureTime": 50000,   # 50ms = 50000us
+    "ExposureTime": 50000,   # 50ms
     "AnalogueGain": 1.0
 })
 
+# 미리보기 창 시작 -> 그 다음 카메라 시작
+picam2.start_preview(Preview.QTGL, width=1280, height=200)
 picam2.start()
-time.sleep(2)  # 카메라 안정화
-picam2.capture_file("capture_5120x800_exp50ms.jpg")
-picam2.stop()
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    pass
+finally:
+    picam2.stop_preview()
+    picam2.stop()
