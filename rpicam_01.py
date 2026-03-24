@@ -20,7 +20,7 @@ cam.configure(config)
 # 먼저 아주 보수적으로 시작
 cam.set_controls({
     "AeEnable": False,
-    "ExposureTime": 8000,   # 8ms
+    "ExposureTime": 15000,   # 8ms
     "AnalogueGain": 1.0
 })
 
