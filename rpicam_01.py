@@ -113,9 +113,9 @@ try:
         # -------------------------
         # 라벨 표시
         # -------------------------
-        cv2.putText(cam3, "CAM 3", (20, 40),
+        cv2.putText(cam3, "405nm", (20, 40),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-        cv2.putText(cam4, "CAM 4", (20, 40),
+        cv2.putText(cam4, "660nm", (20, 40),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
 
         cv2.putText(cam3, f"Exp: {exposure_ms} ms", (20, 80),
