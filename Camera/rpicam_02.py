@@ -11,16 +11,50 @@ CAPTURE_WIDTH = 5120
 CAPTURE_HEIGHT = 800
 SINGLE_WIDTH = CAPTURE_WIDTH // 4   # 1280
 
-DISPLAY_WIDTH = 960
-DISPLAY_HEIGHT = 600
+# 기본 미리보기(3분할) 표시 크기
+PREVIEW_WIDTH = 640
+PREVIEW_HEIGHT = 400
+
+# 단독 촬영 시 표시 크기
+SINGLE_VIEW_WIDTH = 1280
+SINGLE_VIEW_HEIGHT = 800
 
 MIN_EXPOSURE_MS = 1
 MAX_EXPOSURE_MS = 100
 INITIAL_EXPOSURE_MS = 8
 
-WINDOW_NAME = "CAM 3 + CAM 4"
+WINDOW_NAME = "Cam2 | Cam3 | Cam4 Preview"
 
 SAVE_ROOT = Path.home() / "Graduate_Project" / "captures"
+
+CURRENT_GAIN = 1.0
+
+CAMERA_INFO = {
+    "cam2": {
+        "label": "CAM 2 - NO FILTER",
+        "folder": "cam2_no_filter",
+        "filter": "no_filter",
+        "x_start": SINGLE_WIDTH * 1,
+        "x_end": SINGLE_WIDTH * 2,
+        "sequence_order": 1
+    },
+    "cam3": {
+        "label": "CAM 3 - 405nm FILTER",
+        "folder": "cam3_405nm",
+        "filter": "405nm_filter",
+        "x_start": SINGLE_WIDTH * 2,
+        "x_end": SINGLE_WIDTH * 3,
+        "sequence_order": 2
+    },
+    "cam4": {
+        "label": "CAM 4 - 660nm FILTER",
+        "folder": "cam4_660nm",
+        "filter": "660nm_filter",
+        "x_start": SINGLE_WIDTH * 3,
+        "x_end": SINGLE_WIDTH * 4,
+        "sequence_order": 3
+    }
+}
 
 
 # =========================
@@ -31,35 +65,66 @@ def nothing(x):
 
 
 # =========================
+# 프레임 추출
+# =========================
+def extract_cam_frame(full_frame_bgr, cam_key):
+    info = CAMERA_INFO[cam_key]
+    return full_frame_bgr[:, info["x_start"]:info["x_end"]]
+
+
+# =========================
+# 텍스트 표시
+# =========================
+def draw_text(img, title, exposure_ms, extra_text=None):
+    out = img.copy()
+
+    cv2.putText(
+        out, title, (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX, 1.0,
+        (255, 255, 255), 2
+    )
+    cv2.putText(
+        out, f"Exposure: {exposure_ms} ms", (20, 80),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.8,
+        (255, 255, 255), 2
+    )
+
+    if extra_text is not None:
+        cv2.putText(
+            out, extra_text, (20, 120),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.8,
+            (255, 255, 255), 2
+        )
+
+    return out
+
+
+# =========================
 # 저장 함수
 # =========================
-def save_capture(full_frame_bgr, cam3_bgr, cam4_bgr, exposure_ms, gain):
-    now = datetime.now()
-    folder = SAVE_ROOT / now.strftime("%Y-%m-%d")
-    folder.mkdir(parents=True, exist_ok=True)
+def save_one_camera_image(cam_key, frame_bgr, timestamp, exposure_ms, gain):
+    info = CAMERA_INFO[cam_key]
 
-    base_name = now.strftime("%Y%m%d_%H%M%S")
+    date_folder = SAVE_ROOT / info["folder"] / timestamp.strftime("%Y-%m-%d")
+    date_folder.mkdir(parents=True, exist_ok=True)
 
-    full_path = folder / f"{base_name}_full.jpg"
-    cam3_path = folder / f"{base_name}_cam3.jpg"
-    cam4_path = folder / f"{base_name}_cam4.jpg"
-    meta_path = folder / f"{base_name}_metadata.json"
+    base_name = timestamp.strftime("%Y%m%d_%H%M%S_%f")[:-3]
 
-    # 이미지 저장
-    cv2.imwrite(str(full_path), full_frame_bgr)
-    cv2.imwrite(str(cam3_path), cam3_bgr)
-    cv2.imwrite(str(cam4_path), cam4_bgr)
+    image_path = date_folder / f"{base_name}_{cam_key}.jpg"
+    meta_path = date_folder / f"{base_name}_{cam_key}_metadata.json"
+
+    cv2.imwrite(str(image_path), frame_bgr)
 
     metadata = {
-        "captured_at": now.isoformat(),
+        "captured_at": timestamp.isoformat(),
+        "camera_name": cam_key,
+        "camera_label": info["label"],
+        "filter_type": info["filter"],
+        "sequence_order": info["sequence_order"],
         "camera_mode": {
             "capture_width": CAPTURE_WIDTH,
             "capture_height": CAPTURE_HEIGHT,
             "single_width": SINGLE_WIDTH
-        },
-        "display_mode": {
-            "display_width": DISPLAY_WIDTH,
-            "display_height": DISPLAY_HEIGHT
         },
         "camera_control": {
             "AeEnable": False,
@@ -67,34 +132,72 @@ def save_capture(full_frame_bgr, cam3_bgr, cam4_bgr, exposure_ms, gain):
             "ExposureTime_us": exposure_ms * 1000,
             "AnalogueGain": gain
         },
-        "channels": {
-            "cam3_region": {
-                "x_start": SINGLE_WIDTH * 2,
-                "x_end": SINGLE_WIDTH * 3,
-                "y_start": 0,
-                "y_end": CAPTURE_HEIGHT
-            },
-            "cam4_region": {
-                "x_start": SINGLE_WIDTH * 3,
-                "x_end": SINGLE_WIDTH * 4,
-                "y_start": 0,
-                "y_end": CAPTURE_HEIGHT
-            }
+        "crop_region": {
+            "x_start": info["x_start"],
+            "x_end": info["x_end"],
+            "y_start": 0,
+            "y_end": CAPTURE_HEIGHT
         },
-        "saved_files": {
-            "full_image": str(full_path),
-            "cam3_image": str(cam3_path),
-            "cam4_image": str(cam4_path)
-        }
+        "saved_file": str(image_path)
     }
 
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f, ensure_ascii=False, indent=4)
 
-    print(f"[저장 완료] {full_path}")
-    print(f"[저장 완료] {cam3_path}")
-    print(f"[저장 완료] {cam4_path}")
+    print(f"[저장 완료] {image_path}")
     print(f"[저장 완료] {meta_path}")
+
+
+# =========================
+# 단독 출력 함수
+# =========================
+def show_single_camera(window_name, frame_bgr, cam_key, exposure_ms, hold_ms=700):
+    info = CAMERA_INFO[cam_key]
+
+    single_view = cv2.resize(
+        frame_bgr,
+        (SINGLE_VIEW_WIDTH, SINGLE_VIEW_HEIGHT),
+        interpolation=cv2.INTER_CUBIC
+    )
+
+    single_view = draw_text(
+        single_view,
+        info["label"],
+        exposure_ms,
+        extra_text="Capturing..."
+    )
+
+    cv2.imshow(window_name, single_view)
+    cv2.waitKey(hold_ms)
+
+
+# =========================
+# 순차 촬영 함수
+# =========================
+def capture_sequence(cam, exposure_ms, gain):
+    """
+    Cam2 -> Cam3 -> Cam4 순서로
+    각각 단독 출력 후 저장
+    """
+    for cam_key in ["cam2", "cam3", "cam4"]:
+        # 각 카메라 순서마다 새 프레임 1장 획득
+        frame = cam.capture_array()
+        full_frame_bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+
+        target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
+
+        # 단독 출력
+        show_single_camera(WINDOW_NAME, target_frame, cam_key, exposure_ms, hold_ms=700)
+
+        # 저장
+        timestamp = datetime.now()
+        save_one_camera_image(
+            cam_key=cam_key,
+            frame_bgr=target_frame,
+            timestamp=timestamp,
+            exposure_ms=exposure_ms,
+            gain=gain
+        )
 
 
 # =========================
@@ -113,12 +216,10 @@ config = cam.create_preview_configuration(
 )
 cam.configure(config)
 
-current_gain = 1.0
-
 cam.set_controls({
     "AeEnable": False,
     "ExposureTime": INITIAL_EXPOSURE_MS * 1000,
-    "AnalogueGain": current_gain
+    "AnalogueGain": CURRENT_GAIN
 })
 
 cam.start()
@@ -127,7 +228,7 @@ cam.start()
 # 창 / 트랙바 생성
 # =========================
 cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-cv2.resizeWindow(WINDOW_NAME, DISPLAY_WIDTH * 2, DISPLAY_HEIGHT)
+cv2.resizeWindow(WINDOW_NAME, PREVIEW_WIDTH * 3, PREVIEW_HEIGHT)
 
 cv2.createTrackbar(
     "Exposure(ms)",
@@ -137,14 +238,12 @@ cv2.createTrackbar(
     nothing
 )
 
-cv2.setTrackbarMin("Exposure(ms)", WINDOW_NAME, MIN_EXPOSURE_MS)
-
 prev_exposure_ms = INITIAL_EXPOSURE_MS
 
 try:
     while True:
         # -------------------------
-        # ExposureTime 트랙바 값 읽기
+        # ExposureTime 읽기
         # -------------------------
         exposure_ms = cv2.getTrackbarPos("Exposure(ms)", WINDOW_NAME)
         if exposure_ms < MIN_EXPOSURE_MS:
@@ -161,62 +260,49 @@ try:
         # 전체 프레임 읽기
         # -------------------------
         frame = cam.capture_array()
-
-        # XRGB8888 -> BGR
         full_frame_bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
 
         # -------------------------
-        # cam3 / cam4 추출
+        # Cam2 / Cam3 / Cam4 추출
         # -------------------------
-        cam3 = full_frame_bgr[:, SINGLE_WIDTH * 2:SINGLE_WIDTH * 3]
-        cam4 = full_frame_bgr[:, SINGLE_WIDTH * 3:SINGLE_WIDTH * 4]
-
-        # 저장용 원본 복사
-        cam3_save = cam3.copy()
-        cam4_save = cam4.copy()
+        cam2 = extract_cam_frame(full_frame_bgr, "cam2")
+        cam3 = extract_cam_frame(full_frame_bgr, "cam3")
+        cam4 = extract_cam_frame(full_frame_bgr, "cam4")
 
         # -------------------------
         # 표시용 크기 조절
         # -------------------------
-        cam3_view = cv2.resize(cam3, (DISPLAY_WIDTH, DISPLAY_HEIGHT), interpolation=cv2.INTER_CUBIC)
-        cam4_view = cv2.resize(cam4, (DISPLAY_WIDTH, DISPLAY_HEIGHT), interpolation=cv2.INTER_CUBIC)
+        cam2_view = cv2.resize(cam2, (PREVIEW_WIDTH, PREVIEW_HEIGHT), interpolation=cv2.INTER_CUBIC)
+        cam3_view = cv2.resize(cam3, (PREVIEW_WIDTH, PREVIEW_HEIGHT), interpolation=cv2.INTER_CUBIC)
+        cam4_view = cv2.resize(cam4, (PREVIEW_WIDTH, PREVIEW_HEIGHT), interpolation=cv2.INTER_CUBIC)
 
         # -------------------------
-        # 라벨 표시
+        # 라벨 / 안내문 표시
         # -------------------------
-        cv2.putText(cam3_view, "CAM 3", (20, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
-        cv2.putText(cam4_view, "CAM 4", (20, 40),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+        cam2_view = draw_text(cam2_view, "CAM 2 - NO FILTER", exposure_ms)
+        cam3_view = draw_text(cam3_view, "CAM 3 - 405nm FILTER", exposure_ms)
+        cam4_view = draw_text(cam4_view, "CAM 4 - 660nm FILTER", exposure_ms)
 
-        cv2.putText(cam3_view, f"Exp: {exposure_ms} ms", (20, 80),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-        cv2.putText(cam4_view, f"Exp: {exposure_ms} ms", (20, 80),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-
-        cv2.putText(cam3_view, "Press 'c' to capture", (20, 120),
+        cv2.putText(cam2_view, "Press 'c' to capture sequence", (20, 120),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        cv2.putText(cam3_view, "Cam2 -> Cam3 -> Cam4", (20, 120),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         cv2.putText(cam4_view, "Press 'q' to quit", (20, 120),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
         # -------------------------
-        # cam3 | cam4 가로 배치
+        # 3개 가로 출력
         # -------------------------
-        final_view = cv2.hconcat([cam3_view, cam4_view])
-
-        cv2.imshow(WINDOW_NAME, final_view)
+        preview = cv2.hconcat([cam2_view, cam3_view, cam4_view])
+        cv2.imshow(WINDOW_NAME, preview)
 
         key = cv2.waitKey(1) & 0xFF
 
-        # 촬영 및 저장
+        # -------------------------
+        # 촬영 시퀀스 실행
+        # -------------------------
         if key == ord('c'):
-            save_capture(
-                full_frame_bgr=full_frame_bgr,
-                cam3_bgr=cam3_save,
-                cam4_bgr=cam4_save,
-                exposure_ms=exposure_ms,
-                gain=current_gain
-            )
+            capture_sequence(cam, exposure_ms, CURRENT_GAIN)
 
         # 종료
         if key == ord('q'):
