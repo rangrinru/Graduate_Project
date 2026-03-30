@@ -11,11 +11,11 @@ CAPTURE_WIDTH = 5120
 CAPTURE_HEIGHT = 800
 SINGLE_WIDTH = CAPTURE_WIDTH // 4   # 1280
 
-# 기본 미리보기(3분할) 표시 크기
+# 미리보기용 표시 크기
 PREVIEW_WIDTH = 640
 PREVIEW_HEIGHT = 400
 
-# 단독 촬영 시 표시 크기
+# 개별 촬영 시 단독 표시 크기
 SINGLE_VIEW_WIDTH = 1280
 SINGLE_VIEW_HEIGHT = 800
 
@@ -27,7 +27,13 @@ WINDOW_NAME = "Cam2 | Cam3 | Cam4 Preview"
 
 SAVE_ROOT = Path.home() / "Graduate_Project" / "captures"
 
+# 공통 Gain (현재 구조상 카메라별 독립 설정 불가)
 CURRENT_GAIN = 1.0
+
+# 저장 형식
+# True  -> PNG (무손실, 분석용 추천)
+# False -> JPG (용량 절약)
+SAVE_AS_PNG = True
 
 CAMERA_INFO = {
     "cam2": {
@@ -62,6 +68,17 @@ CAMERA_INFO = {
 # =========================
 def nothing(x):
     pass
+
+
+# =========================
+# 공통 수동 제어 적용
+# =========================
+def set_manual_controls(camera, exposure_ms, gain):
+    camera.set_controls({
+        "AeEnable": False,
+        "ExposureTime": exposure_ms * 1000,   # ms -> us
+        "AnalogueGain": gain
+    })
 
 
 # =========================
@@ -100,9 +117,19 @@ def draw_text(img, title, exposure_ms, extra_text=None):
 
 
 # =========================
-# 저장 함수
+# 이미지 저장
 # =========================
-def save_one_camera_image(cam_key, frame_bgr, timestamp, exposure_ms, gain):
+def save_image(path, img_bgr):
+    if path.suffix.lower() == ".png":
+        cv2.imwrite(str(path), img_bgr, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+    else:
+        cv2.imwrite(str(path), img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 100])
+
+
+# =========================
+# 개별 카메라 이미지 + metadata 저장
+# =========================
+def save_one_camera_image(cam_key, frame_bgr, timestamp, exposure_ms, gain, ext):
     info = CAMERA_INFO[cam_key]
 
     date_folder = SAVE_ROOT / info["folder"] / timestamp.strftime("%Y-%m-%d")
@@ -110,10 +137,10 @@ def save_one_camera_image(cam_key, frame_bgr, timestamp, exposure_ms, gain):
 
     base_name = timestamp.strftime("%Y%m%d_%H%M%S_%f")[:-3]
 
-    image_path = date_folder / f"{base_name}_{cam_key}.jpg"
+    image_path = date_folder / f"{base_name}_{cam_key}.{ext}"
     meta_path = date_folder / f"{base_name}_{cam_key}_metadata.json"
 
-    cv2.imwrite(str(image_path), frame_bgr)
+    save_image(image_path, frame_bgr)
 
     metadata = {
         "captured_at": timestamp.isoformat(),
@@ -121,6 +148,8 @@ def save_one_camera_image(cam_key, frame_bgr, timestamp, exposure_ms, gain):
         "camera_label": info["label"],
         "filter_type": info["filter"],
         "sequence_order": info["sequence_order"],
+        "capture_type": "high_quality_still_fullframe_then_crop",
+        "file_format": ext,
         "camera_mode": {
             "capture_width": CAPTURE_WIDTH,
             "capture_height": CAPTURE_HEIGHT,
@@ -149,7 +178,7 @@ def save_one_camera_image(cam_key, frame_bgr, timestamp, exposure_ms, gain):
 
 
 # =========================
-# 단독 출력 함수
+# 단독 출력
 # =========================
 def show_single_camera(window_name, frame_bgr, cam_key, exposure_ms, hold_ms=700):
     info = CAMERA_INFO[cam_key]
@@ -172,31 +201,66 @@ def show_single_camera(window_name, frame_bgr, cam_key, exposure_ms, hold_ms=700
 
 
 # =========================
-# 순차 촬영 함수
+# 고화질 전체 프레임 캡처
 # =========================
-def capture_sequence(cam, exposure_ms, gain):
+def capture_high_quality_full_frame(cam, preview_config, still_config, exposure_ms, gain):
     """
-    Cam2 -> Cam3 -> Cam4 순서로
-    각각 단독 출력 후 저장
+    미리보기 모드 -> 고화질 still 모드 -> 전체 프레임 캡처 -> 다시 미리보기 모드 복귀
     """
-    for cam_key in ["cam2", "cam3", "cam4"]:
-        # 각 카메라 순서마다 새 프레임 1장 획득
-        frame = cam.capture_array()
-        full_frame_bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+    # still 모드로 전환
+    cam.stop()
+    cam.configure(still_config)
+    cam.start()
+    set_manual_controls(cam, exposure_ms, gain)
 
+    still_frame = cam.capture_array()   # RGB888 예상
+    full_frame_bgr = cv2.cvtColor(still_frame, cv2.COLOR_RGB2BGR)
+
+    # 다시 preview 모드로 복귀
+    cam.stop()
+    cam.configure(preview_config)
+    cam.start()
+    set_manual_controls(cam, exposure_ms, gain)
+
+    return full_frame_bgr
+
+
+# =========================
+# 순차 촬영
+# Cam2 -> Cam3 -> Cam4
+# =========================
+def capture_sequence(cam, preview_config, still_config, exposure_ms, gain, save_as_png=True):
+    """
+    고화질 전체 프레임 1장을 still 모드로 캡처한 뒤,
+    Cam2 -> Cam3 -> Cam4 순서로 단독 출력하고 각각 다른 폴더에 저장
+    """
+    ext = "png" if save_as_png else "jpg"
+
+    # 집계 카메라 구조상 전체 프레임 1장을 고화질로 받아서 crop
+    full_frame_bgr = capture_high_quality_full_frame(
+        cam=cam,
+        preview_config=preview_config,
+        still_config=still_config,
+        exposure_ms=exposure_ms,
+        gain=gain
+    )
+
+    capture_timestamp = datetime.now()
+
+    for cam_key in ["cam2", "cam3", "cam4"]:
         target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
 
-        # 단독 출력
+        # 단독 표시
         show_single_camera(WINDOW_NAME, target_frame, cam_key, exposure_ms, hold_ms=700)
 
-        # 저장
-        timestamp = datetime.now()
+        # 개별 저장
         save_one_camera_image(
             cam_key=cam_key,
             frame_bgr=target_frame,
-            timestamp=timestamp,
+            timestamp=capture_timestamp,
             exposure_ms=exposure_ms,
-            gain=gain
+            gain=gain,
+            ext=ext
         )
 
 
@@ -211,17 +275,25 @@ if len(camera_list) == 0:
 
 cam = Picamera2(0)
 
-config = cam.create_preview_configuration(
+# =========================
+# 설정 분리
+# preview용 / still용
+# =========================
+preview_config = cam.create_preview_configuration(
     main={"size": (CAPTURE_WIDTH, CAPTURE_HEIGHT), "format": "XRGB8888"}
 )
-cam.configure(config)
 
-cam.set_controls({
-    "AeEnable": False,
-    "ExposureTime": INITIAL_EXPOSURE_MS * 1000,
-    "AnalogueGain": CURRENT_GAIN
-})
+still_config = cam.create_still_configuration(
+    main={"size": (CAPTURE_WIDTH, CAPTURE_HEIGHT), "format": "RGB888"}
+)
 
+cam.configure(preview_config)
+
+# Picamera2 저장 옵션
+cam.options["quality"] = 100
+cam.options["compress_level"] = 0
+
+set_manual_controls(cam, INITIAL_EXPOSURE_MS, CURRENT_GAIN)
 cam.start()
 
 # =========================
@@ -250,14 +322,11 @@ try:
             exposure_ms = MIN_EXPOSURE_MS
 
         if exposure_ms != prev_exposure_ms:
-            cam.set_controls({
-                "AeEnable": False,
-                "ExposureTime": exposure_ms * 1000
-            })
+            set_manual_controls(cam, exposure_ms, CURRENT_GAIN)
             prev_exposure_ms = exposure_ms
 
         # -------------------------
-        # 전체 프레임 읽기
+        # preview 프레임 읽기
         # -------------------------
         frame = cam.capture_array()
         full_frame_bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
@@ -299,10 +368,17 @@ try:
         key = cv2.waitKey(1) & 0xFF
 
         # -------------------------
-        # 촬영 시퀀스 실행
+        # 고화질 촬영 시퀀스 실행
         # -------------------------
         if key == ord('c'):
-            capture_sequence(cam, exposure_ms, CURRENT_GAIN)
+            capture_sequence(
+                cam=cam,
+                preview_config=preview_config,
+                still_config=still_config,
+                exposure_ms=exposure_ms,
+                gain=CURRENT_GAIN,
+                save_as_png=SAVE_AS_PNG
+            )
 
         # 종료
         if key == ord('q'):
