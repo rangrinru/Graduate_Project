@@ -82,6 +82,17 @@ def set_manual_controls(camera, exposure_ms, gain):
 
 
 # =========================
+# 현재 트랙바 값 읽기
+# rpicam_01 스타일처럼 최소값 보정 포함
+# =========================
+def get_current_exposure_ms():
+    exposure_ms = cv2.getTrackbarPos("Exposure(ms)", WINDOW_NAME)
+    if exposure_ms < MIN_EXPOSURE_MS:
+        exposure_ms = MIN_EXPOSURE_MS
+    return exposure_ms
+
+
+# =========================
 # 프레임 추출
 # =========================
 def extract_cam_frame(full_frame_bgr, cam_key):
@@ -310,6 +321,9 @@ cv2.createTrackbar(
     nothing
 )
 
+# rpicam_01처럼 최소값 강제
+cv2.setTrackbarMin("Exposure(ms)", WINDOW_NAME, MIN_EXPOSURE_MS)
+
 prev_exposure_ms = INITIAL_EXPOSURE_MS
 
 try:
@@ -317,9 +331,7 @@ try:
         # -------------------------
         # ExposureTime 읽기
         # -------------------------
-        exposure_ms = cv2.getTrackbarPos("Exposure(ms)", WINDOW_NAME)
-        if exposure_ms < MIN_EXPOSURE_MS:
-            exposure_ms = MIN_EXPOSURE_MS
+        exposure_ms = get_current_exposure_ms()
 
         if exposure_ms != prev_exposure_ms:
             set_manual_controls(cam, exposure_ms, CURRENT_GAIN)
@@ -371,6 +383,10 @@ try:
         # 고화질 촬영 시퀀스 실행
         # -------------------------
         if key == ord('c'):
+            # 현재 트랙바 값으로 다시 읽어서 촬영 시 즉시 반영
+            exposure_ms = get_current_exposure_ms()
+            set_manual_controls(cam, exposure_ms, CURRENT_GAIN)
+
             capture_sequence(
                 cam=cam,
                 preview_config=preview_config,
@@ -379,6 +395,11 @@ try:
                 gain=CURRENT_GAIN,
                 save_as_png=SAVE_AS_PNG
             )
+
+            # 촬영 후 preview 복귀 뒤 현재 트랙바 값 재적용
+            exposure_ms = get_current_exposure_ms()
+            set_manual_controls(cam, exposure_ms, CURRENT_GAIN)
+            prev_exposure_ms = exposure_ms
 
         # 종료
         if key == ord('q'):
