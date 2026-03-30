@@ -1,0 +1,27 @@
+{
+    "captured_at": "2026-03-30T18:00:56.522870",
+    "camera_name": "cam4",
+    "camera_label": "CAM 4 - 660nm FILTER",
+    "filter_type": "660nm_filter",
+    "sequence_order": 3,
+    "capture_type": "high_quality_still_fullframe_then_crop",
+    "file_format": "png",
+    "camera_mode": {
+        "capture_width": 5120,
+        "capture_height": 800,
+        "single_width": 1280
+    },
+    "camera_control": {
+        "AeEnable": false,
+        "ExposureTime_ms": 80,
+        "ExposureTime_us": 80000,
+        "AnalogueGain": 1.0
+    },
+    "crop_region": {
+        "x_start": 3840,
+        "x_end": 5120,
+        "y_start": 0,
+        "y_end": 800
+    },
+    "saved_file": "/home/park/Graduate_Project/captures/cam4_660nm/2026-03-30/20260330_180056_522_cam4.png"
+}
