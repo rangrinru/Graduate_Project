@@ -5,7 +5,9 @@ relay = LED(17, active_high=False)
 
 while True:
 	relay.on()
+	print("relay on")
 	sleep(1)
 	relay.off()
+	print("relay off")
 	sleep(1)
 
