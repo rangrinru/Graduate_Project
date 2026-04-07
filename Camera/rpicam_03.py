@@ -13,11 +13,11 @@ CAPTURE_WIDTH = 5120
 CAPTURE_HEIGHT = 800
 SINGLE_WIDTH = CAPTURE_WIDTH // 4   # 1280
 
-# 미리보기용 표시 크기
+# 미리보기용 표시 크기 (회전 전 기준)
 PREVIEW_WIDTH = 640
 PREVIEW_HEIGHT = 400
 
-# 개별 촬영 시 단독 표시 크기
+# 개별 촬영 시 단독 표시 크기 (회전 전 기준)
 SINGLE_VIEW_WIDTH = 1280
 SINGLE_VIEW_HEIGHT = 800
 
@@ -36,6 +36,14 @@ CURRENT_GAIN = 1.0
 # True  -> PNG (무손실, 분석용 추천)
 # False -> JPG (용량 절약)
 SAVE_AS_PNG = True
+
+# =========================
+# 표시 회전 설정
+# True면 화면 출력만 90도 회전
+# 저장 원본은 회전하지 않음
+# =========================
+ROTATE_DISPLAY = True
+DISPLAY_ROTATE_CODE = cv2.ROTATE_90_CLOCKWISE
 
 # =========================
 # 릴레이 / LED 설정
@@ -121,6 +129,15 @@ def get_current_exposure_ms():
 def extract_cam_frame(full_frame_bgr, cam_key):
     info = CAMERA_INFO[cam_key]
     return full_frame_bgr[:, info["x_start"]:info["x_end"]]
+
+
+# =========================
+# 표시용 회전
+# =========================
+def rotate_for_display(img):
+    if ROTATE_DISPLAY:
+        return cv2.rotate(img, DISPLAY_ROTATE_CODE)
+    return img
 
 
 # =========================
@@ -228,6 +245,9 @@ def show_single_camera(window_name, frame_bgr, cam_key, exposure_ms, hold_ms=700
         interpolation=cv2.INTER_CUBIC
     )
 
+    # 화면 표시용으로만 회전
+    single_view = rotate_for_display(single_view)
+
     single_view = draw_text(
         single_view,
         info["label"],
@@ -300,7 +320,7 @@ def capture_sequence(cam, preview_config, still_config, exposure_ms, gain, save_
             # 단독 표시
             show_single_camera(WINDOW_NAME, target_frame, cam_key, exposure_ms, hold_ms=700)
 
-            # 개별 저장
+            # 개별 저장 (원본 방향 그대로 저장)
             save_one_camera_image(
                 cam_key=cam_key,
                 frame_bgr=target_frame,
@@ -354,7 +374,13 @@ relay_off()
 # 창 / 트랙바 생성
 # =========================
 cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-cv2.resizeWindow(WINDOW_NAME, PREVIEW_WIDTH * 3, PREVIEW_HEIGHT)
+
+# 회전된 화면 기준 창 크기 설정
+if ROTATE_DISPLAY:
+    # 각 화면이 400x640이 되고, 3개를 가로로 붙임 -> 1200x640
+    cv2.resizeWindow(WINDOW_NAME, PREVIEW_HEIGHT * 3, PREVIEW_WIDTH)
+else:
+    cv2.resizeWindow(WINDOW_NAME, PREVIEW_WIDTH * 3, PREVIEW_HEIGHT)
 
 cv2.createTrackbar(
     "Exposure(ms)",
@@ -400,6 +426,13 @@ try:
         cam4_view = cv2.resize(cam4, (PREVIEW_WIDTH, PREVIEW_HEIGHT), interpolation=cv2.INTER_CUBIC)
 
         # -------------------------
+        # 화면 표시용 회전
+        # -------------------------
+        cam2_view = rotate_for_display(cam2_view)
+        cam3_view = rotate_for_display(cam3_view)
+        cam4_view = rotate_for_display(cam4_view)
+
+        # -------------------------
         # 라벨 / 안내문 표시
         # -------------------------
         cam2_view = draw_text(cam2_view, "CAM 2 - NO FILTER", exposure_ms)
@@ -415,6 +448,7 @@ try:
 
         # -------------------------
         # 3개 가로 출력
+        # 회전된 세로 화면 3개를 가로로 배치
         # -------------------------
         preview = cv2.hconcat([cam2_view, cam3_view, cam4_view])
         cv2.imshow(WINDOW_NAME, preview)
