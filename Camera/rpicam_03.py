@@ -245,12 +245,9 @@ def show_single_camera(window_name, frame_bgr, cam_key, exposure_ms, hold_ms=700
 # =========================
 def capture_high_quality_full_frame(cam, preview_config, still_config, exposure_ms, gain):
     """
-    미리보기 모드 -> 릴레이 ON -> 고화질 still 모드 -> 전체 프레임 캡처 -> 릴레이 OFF
-    -> 다시 미리보기 모드 복귀
+    미리보기 모드 -> 고화질 still 모드 -> 전체 프레임 캡처 -> 다시 미리보기 모드 복귀
+    릴레이 ON/OFF는 바깥(capture_sequence)에서 담당
     """
-    relay_on()
-    sleep(RELAY_WARMUP_SEC)
-
     try:
         # still 모드로 전환
         cam.stop()
@@ -262,8 +259,6 @@ def capture_high_quality_full_frame(cam, preview_config, still_config, exposure_
         full_frame_bgr = cv2.cvtColor(still_frame, cv2.COLOR_RGB2BGR)
 
     finally:
-        relay_off()
-
         # 다시 preview 모드로 복귀
         cam.stop()
         cam.configure(preview_config)
@@ -279,37 +274,44 @@ def capture_high_quality_full_frame(cam, preview_config, still_config, exposure_
 # =========================
 def capture_sequence(cam, preview_config, still_config, exposure_ms, gain, save_as_png=True):
     """
-    고화질 전체 프레임 1장을 still 모드로 캡처한 뒤,
-    Cam2 -> Cam3 -> Cam4 순서로 단독 출력하고 각각 다른 폴더에 저장
+    릴레이 ON -> 전체 프레임 고화질 촬영 -> Cam2/Cam3/Cam4 저장 -> metadata 저장
+    -> 모든 저장 완료 후 릴레이 OFF
     """
     ext = "png" if save_as_png else "jpg"
 
-    # 집계 카메라 구조상 전체 프레임 1장을 고화질로 받아서 crop
-    full_frame_bgr = capture_high_quality_full_frame(
-        cam=cam,
-        preview_config=preview_config,
-        still_config=still_config,
-        exposure_ms=exposure_ms,
-        gain=gain
-    )
+    relay_on()
+    sleep(RELAY_WARMUP_SEC)
 
-    capture_timestamp = datetime.now()
-
-    for cam_key in ["cam2", "cam3", "cam4"]:
-        target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
-
-        # 단독 표시
-        show_single_camera(WINDOW_NAME, target_frame, cam_key, exposure_ms, hold_ms=700)
-
-        # 개별 저장
-        save_one_camera_image(
-            cam_key=cam_key,
-            frame_bgr=target_frame,
-            timestamp=capture_timestamp,
+    try:
+        # 집계 카메라 구조상 전체 프레임 1장을 고화질로 받아서 crop
+        full_frame_bgr = capture_high_quality_full_frame(
+            cam=cam,
+            preview_config=preview_config,
+            still_config=still_config,
             exposure_ms=exposure_ms,
-            gain=gain,
-            ext=ext
+            gain=gain
         )
+
+        capture_timestamp = datetime.now()
+
+        for cam_key in ["cam2", "cam3", "cam4"]:
+            target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
+
+            # 단독 표시
+            show_single_camera(WINDOW_NAME, target_frame, cam_key, exposure_ms, hold_ms=700)
+
+            # 개별 저장
+            save_one_camera_image(
+                cam_key=cam_key,
+                frame_bgr=target_frame,
+                timestamp=capture_timestamp,
+                exposure_ms=exposure_ms,
+                gain=gain,
+                ext=ext
+            )
+
+    finally:
+        relay_off()
 
 
 # =========================
