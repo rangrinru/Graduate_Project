@@ -98,13 +98,16 @@ def save_image(path, img_bgr):
 
 def sanitize_profile_name(profile_name: str) -> str:
     cleaned = profile_name.strip()
-    cleaned = re.sub(r'[\\/:*?"<>|]+', "_", cleaned)
-    cleaned = re.sub(r"\s+", "_", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
 
     if not cleaned:
         raise ValueError("유효한 프로필 이름이 아닙니다.")
 
     return cleaned
+
+
+def make_folder_id() -> str:
+    return f"profile_{int(datetime.now().timestamp() * 1000)}"
 
 
 def load_profiles():
@@ -123,8 +126,8 @@ def save_profiles(profiles):
         json.dump(profiles, f, ensure_ascii=False, indent=2)
 
 
-def ensure_profile_dirs(profile_name: str):
-    profile_root = SAVE_ROOT / profile_name
+def ensure_profile_dirs(folder_id: str):
+    profile_root = SAVE_ROOT / folder_id
     profile_root.mkdir(parents=True, exist_ok=True)
 
     for cam in CAMERA_INFO.values():
@@ -133,45 +136,63 @@ def ensure_profile_dirs(profile_name: str):
     return profile_root
 
 
+def find_profile_by_id(profile_id: str):
+    profiles = load_profiles()
+    for profile in profiles:
+        if profile["folderId"] == profile_id:
+            return profile
+    return None
+
+
 def create_profile(profile_name: str):
-    sanitized = sanitize_profile_name(profile_name)
+    display_name = sanitize_profile_name(profile_name)
     profiles = load_profiles()
 
-    exists = any(p["name"] == sanitized for p in profiles)
+    # 표시 이름 중복 방지
+    exists = any(p["name"] == display_name for p in profiles)
     if exists:
         raise ValueError("이미 존재하는 프로필입니다.")
 
     created_at = datetime.now().strftime("%Y.%m.%d")
+    profile_id = int(datetime.now().timestamp() * 1000)
+    folder_id = make_folder_id()
 
     new_profile = {
-        "id": int(datetime.now().timestamp() * 1000),
-        "name": sanitized,
+        "id": profile_id,
+        "name": display_name,      # 화면 표시용
+        "folderId": folder_id,     # 실제 디렉토리용
         "createdAt": created_at
     }
 
     profiles.append(new_profile)
     save_profiles(profiles)
-    ensure_profile_dirs(sanitized)
+    ensure_profile_dirs(folder_id)
 
     return new_profile
 
 
-def delete_profile(profile_name: str):
-    sanitized = sanitize_profile_name(profile_name)
+def delete_profile(profile_id: str):
     profiles = load_profiles()
-    new_profiles = [p for p in profiles if p["name"] != sanitized]
+    target = None
 
-    if len(new_profiles) == len(profiles):
+    for p in profiles:
+        if p["folderId"] == profile_id:
+            target = p
+            break
+
+    if target is None:
         raise ValueError("삭제할 프로필이 없습니다.")
 
-    profile_root = SAVE_ROOT / sanitized
+    new_profiles = [p for p in profiles if p["folderId"] != profile_id]
+
+    profile_root = SAVE_ROOT / target["folderId"]
     if profile_root.exists() and profile_root.is_dir():
         shutil.rmtree(profile_root)
 
     save_profiles(new_profiles)
 
 
-def save_one_camera_image(cam_key, frame_bgr, profile_root, capture_id, timestamp, exposure_ms, gain, ext, profile_name):
+def save_one_camera_image(cam_key, frame_bgr, profile_root, capture_id, timestamp, exposure_ms, gain, ext, profile_name, folder_id):
     info = CAMERA_INFO[cam_key]
 
     frame_bgr = cv2.rotate(frame_bgr, cv2.ROTATE_90_CLOCKWISE)
@@ -187,6 +208,7 @@ def save_one_camera_image(cam_key, frame_bgr, profile_root, capture_id, timestam
     metadata = {
         "captured_at": timestamp.isoformat(),
         "profile_name": profile_name,
+        "profile_folder_id": folder_id,
         "camera_name": cam_key,
         "camera_label": info["label"],
         "filter_type": info["filter"],
@@ -306,10 +328,10 @@ def create_profile_api():
         }), 400
 
 
-@app.route("/profiles/<profile_name>", methods=["DELETE"])
-def delete_profile_api(profile_name):
+@app.route("/profiles/<profile_id>", methods=["DELETE"])
+def delete_profile_api(profile_id):
     try:
-        delete_profile(profile_name)
+        delete_profile(profile_id)
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({
@@ -365,21 +387,30 @@ def stream_cam4():
 def capture_all():
     try:
         body = request.get_json(silent=True) or {}
-        raw_profile_name = body.get("profileName", "")
+        profile_id = body.get("profileId", "")
 
-        if not raw_profile_name.strip():
+        if not str(profile_id).strip():
             return jsonify({
                 "ok": False,
-                "error": "profileName이 필요합니다."
+                "error": "profileId가 필요합니다."
             }), 400
 
-        profile_name = sanitize_profile_name(raw_profile_name)
-        profile_root = SAVE_ROOT / profile_name
+        profile = find_profile_by_id(profile_id)
+
+        if profile is None:
+            return jsonify({
+                "ok": False,
+                "error": "존재하지 않는 프로필입니다."
+            }), 400
+
+        profile_name = profile["name"]
+        folder_id = profile["folderId"]
+        profile_root = SAVE_ROOT / folder_id
 
         if not profile_root.exists():
             return jsonify({
                 "ok": False,
-                "error": "존재하지 않는 프로필입니다."
+                "error": "프로필 폴더가 존재하지 않습니다."
             }), 400
 
         exposure_ms = INITIAL_EXPOSURE_MS
@@ -409,7 +440,8 @@ def capture_all():
                 exposure_ms=exposure_ms,
                 gain=gain,
                 ext=ext,
-                profile_name=profile_name
+                profile_name=profile_name,
+                folder_id=folder_id
             )
             saved_files.append(result)
 
@@ -417,6 +449,7 @@ def capture_all():
             "ok": True,
             "captured_at": capture_timestamp.isoformat(),
             "profile_name": profile_name,
+            "profile_id": folder_id,
             "capture_id": capture_id,
             "files": saved_files
         })

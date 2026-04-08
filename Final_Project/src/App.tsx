@@ -4,7 +4,8 @@ type Screen = "profiles" | "camera";
 
 type Profile = {
   id: number;
-  name: string;
+  name: string;       // 화면 표시용 이름 (한글 가능)
+  folderId: string;   // 실제 저장/삭제용 안전한 ID
   createdAt: string;
 };
 
@@ -93,6 +94,7 @@ function App() {
 
   // =========================
   // 프로필 삭제
+  // 실제 삭제 기준은 folderId
   // =========================
   const deleteProfile = async (profile: Profile) => {
     const ok = window.confirm(
@@ -102,10 +104,10 @@ function App() {
     if (!ok) return;
 
     try {
-      setIsDeletingProfile(profile.name);
+      setIsDeletingProfile(profile.folderId);
 
-      const encodedName = encodeURIComponent(profile.name);
-      const res = await fetch(`${API_BASE}/profiles/${encodedName}`, {
+      const encodedId = encodeURIComponent(profile.folderId);
+      const res = await fetch(`${API_BASE}/profiles/${encodedId}`, {
         method: "DELETE",
       });
 
@@ -116,9 +118,9 @@ function App() {
         return;
       }
 
-      setProfiles((prev) => prev.filter((p) => p.name !== profile.name));
+      setProfiles((prev) => prev.filter((p) => p.folderId !== profile.folderId));
 
-      if (selectedProfile?.name === profile.name) {
+      if (selectedProfile?.folderId === profile.folderId) {
         setSelectedProfile(null);
         setScreen("profiles");
       }
@@ -148,6 +150,7 @@ function App() {
 
   // =========================
   // 촬영
+  // 실제 촬영 기준은 profileId(folderId)
   // =========================
   const capturePhoto = async () => {
     if (!selectedProfile) {
@@ -164,7 +167,7 @@ function App() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          profileName: selectedProfile.name,
+          profileId: selectedProfile.folderId,
         }),
       });
 
@@ -742,9 +745,9 @@ function App() {
                               e.stopPropagation();
                               deleteProfile(profile);
                             }}
-                            disabled={isDeletingProfile === profile.name}
+                            disabled={isDeletingProfile === profile.folderId}
                           >
-                            {isDeletingProfile === profile.name
+                            {isDeletingProfile === profile.folderId
                               ? "삭제 중..."
                               : "삭제"}
                           </button>
