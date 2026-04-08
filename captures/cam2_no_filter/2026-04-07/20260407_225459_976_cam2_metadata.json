@@ -1,0 +1,32 @@
+{
+    "captured_at": "2026-04-07T22:54:59.976474",
+    "camera_name": "cam2",
+    "camera_label": "CAM 2 - NO FILTER",
+    "filter_type": "no_filter",
+    "sequence_order": 1,
+    "capture_type": "high_quality_still_fullframe_then_crop",
+    "file_format": "png",
+    "camera_mode": {
+        "capture_width": 5120,
+        "capture_height": 800,
+        "single_width": 1280
+    },
+    "camera_control": {
+        "AeEnable": false,
+        "ExposureTime_ms": 1,
+        "ExposureTime_us": 1000,
+        "AnalogueGain": 1.0
+    },
+    "relay_control": {
+        "relay_pin": 17,
+        "active_high": false,
+        "relay_used": true
+    },
+    "crop_region": {
+        "x_start": 1280,
+        "x_end": 2560,
+        "y_start": 0,
+        "y_end": 800
+    },
+    "saved_file": "/home/park/Graduate_Project/captures/cam2_no_filter/2026-04-07/20260407_225459_976_cam2.png"
+}

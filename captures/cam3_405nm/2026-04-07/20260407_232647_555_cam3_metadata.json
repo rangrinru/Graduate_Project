@@ -1,0 +1,32 @@
+{
+    "captured_at": "2026-04-07T23:26:47.555707",
+    "camera_name": "cam3",
+    "camera_label": "CAM 3 - 405nm FILTER",
+    "filter_type": "405nm_filter",
+    "sequence_order": 2,
+    "capture_type": "high_quality_still_fullframe_then_crop",
+    "file_format": "png",
+    "camera_mode": {
+        "capture_width": 5120,
+        "capture_height": 800,
+        "single_width": 1280
+    },
+    "camera_control": {
+        "AeEnable": false,
+        "ExposureTime_ms": 80,
+        "ExposureTime_us": 80000,
+        "AnalogueGain": 1.0
+    },
+    "relay_control": {
+        "relay_pin": 17,
+        "active_high": false,
+        "relay_used": true
+    },
+    "crop_region": {
+        "x_start": 2560,
+        "x_end": 3840,
+        "y_start": 0,
+        "y_end": 800
+    },
+    "saved_file": "/home/park/Graduate_Project/captures/cam3_405nm/2026-04-07/20260407_232647_555_cam3.png"
+}
