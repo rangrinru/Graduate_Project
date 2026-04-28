@@ -1,29 +1,85 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type Screen = "profiles" | "camera";
+type Screen =
+  | "profiles"
+  | "camera"
+  | "history"
+  | "historyDetail";
 
 type Profile = {
   id: number;
   name: string;
+  folderId: string;
   createdAt: string;
+};
+
+type HistoryItem = {
+  captureId: string;
+  capturedAt: string;
+  displayTime: string;
+  profileId: string;
+  profileName: string;
+};
+
+type HistoryImageItem = {
+  camera: string;
+  display_name: string;
+  filter_type: string;
+  exists: boolean;
+  image_url: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+type HistoryDetail = {
+  captureId: string;
+  capturedAt: string;
+  displayTime: string;
+  profileId: string;
+  profileName: string;
+  images: {
+    no_filter?: HistoryImageItem;
+    "405nm_filter"?: HistoryImageItem;
+    "660nm_filter"?: HistoryImageItem;
+  };
 };
 
 const API_BASE = "http://192.168.137.145:8000";
 
 function App() {
   const [screen, setScreen] = useState<Screen>("profiles");
+
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+
   const [showGuide, setShowGuide] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newProfileName, setNewProfileName] = useState("");
+
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
   const [isDeletingProfile, setIsDeletingProfile] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
 
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  const [selectedHistory, setSelectedHistory] = useState<HistoryDetail | null>(null);
+  const [isLoadingHistoryDetail, setIsLoadingHistoryDetail] = useState(false);
+
+  const [selectedFilter, setSelectedFilter] = useState<
+    "no_filter" | "405nm_filter" | "660nm_filter"
+  >("no_filter");
+
   // =========================
-  // 백엔드에서 프로필 목록 불러오기
+  // 현재 선택된 이미지 데이터
+  // =========================
+  const currentImage = useMemo(() => {
+    if (!selectedHistory) return null;
+    return selectedHistory.images[selectedFilter] || null;
+  }, [selectedHistory, selectedFilter]);
+
+  // =========================
+  // 프로필 목록 불러오기
   // =========================
   const fetchProfiles = async () => {
     try {
@@ -102,10 +158,10 @@ function App() {
     if (!ok) return;
 
     try {
-      setIsDeletingProfile(profile.name);
+      setIsDeletingProfile(profile.folderId);
 
-      const encodedName = encodeURIComponent(profile.name);
-      const res = await fetch(`${API_BASE}/profiles/${encodedName}`, {
+      const encodedId = encodeURIComponent(profile.folderId);
+      const res = await fetch(`${API_BASE}/profiles/${encodedId}`, {
         method: "DELETE",
       });
 
@@ -116,9 +172,9 @@ function App() {
         return;
       }
 
-      setProfiles((prev) => prev.filter((p) => p.name !== profile.name));
+      setProfiles((prev) => prev.filter((p) => p.folderId !== profile.folderId));
 
-      if (selectedProfile?.name === profile.name) {
+      if (selectedProfile?.folderId === profile.folderId) {
         setSelectedProfile(null);
         setScreen("profiles");
       }
@@ -135,15 +191,19 @@ function App() {
   // =========================
   const selectProfile = (profile: Profile) => {
     setSelectedProfile(profile);
+    setSelectedHistory(null);
+    setHistoryItems([]);
     setScreen("camera");
   };
 
   // =========================
-  // 프로필 선택 화면으로 돌아가기
+  // 프로필 화면으로 이동
   // =========================
   const goToProfiles = () => {
     setScreen("profiles");
     setSelectedProfile(null);
+    setSelectedHistory(null);
+    setHistoryItems([]);
   };
 
   // =========================
@@ -164,7 +224,7 @@ function App() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          profileName: selectedProfile.name,
+          profileId: selectedProfile.folderId,
         }),
       });
 
@@ -187,17 +247,102 @@ function App() {
   };
 
   // =========================
-  // 이전 기록 확인
+  // 이전 기록 목록 불러오기
   // =========================
-  const openHistory = () => {
+  const fetchHistory = async () => {
     if (!selectedProfile) {
       alert("프로필을 먼저 선택하세요.");
       return;
     }
 
-    alert(
-      `${selectedProfile.name} 프로필의 이전 기록 확인 화면은 다음 단계에서 연결하면 됩니다.`
-    );
+    try {
+      setIsLoadingHistory(true);
+
+      const encodedId = encodeURIComponent(selectedProfile.folderId);
+      const res = await fetch(`${API_BASE}/profiles/${encodedId}/history`);
+      const data = await res.json();
+
+      if (!data.ok) {
+        alert(data.error || "이전 기록 불러오기 실패");
+        return;
+      }
+
+      setHistoryItems(data.history || []);
+      setScreen("history");
+    } catch (error) {
+      console.error(error);
+      alert("이전 기록 불러오기 실패");
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  // =========================
+  // 특정 기록 상세 조회
+  // =========================
+  const openHistoryDetail = async (captureId: string) => {
+    if (!selectedProfile) {
+      alert("프로필을 먼저 선택하세요.");
+      return;
+    }
+
+    try {
+      setIsLoadingHistoryDetail(true);
+
+      const encodedProfileId = encodeURIComponent(selectedProfile.folderId);
+      const encodedCaptureId = encodeURIComponent(captureId);
+
+      const res = await fetch(
+        `${API_BASE}/profiles/${encodedProfileId}/history/${encodedCaptureId}`
+      );
+      const data = await res.json();
+
+      if (!data.ok) {
+        alert(data.error || "기록 상세 불러오기 실패");
+        return;
+      }
+
+      setSelectedHistory(data);
+      setSelectedFilter("no_filter");
+      setScreen("historyDetail");
+    } catch (error) {
+      console.error(error);
+      alert("기록 상세 불러오기 실패");
+    } finally {
+      setIsLoadingHistoryDetail(false);
+    }
+  };
+
+  // =========================
+  // 이전 기록 확인 버튼
+  // =========================
+  const openHistory = () => {
+    fetchHistory();
+  };
+
+  // =========================
+  // history -> camera
+  // =========================
+  const backToCamera = () => {
+    setScreen("camera");
+  };
+
+  // =========================
+  // detail -> history
+  // =========================
+  const backToHistory = () => {
+    setScreen("history");
+  };
+
+  // =========================
+  // 이미지 URL 만들기
+  // =========================
+  const getImageSrc = (imageUrl: string | null | undefined) => {
+    if (!imageUrl) return "";
+    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+      return imageUrl;
+    }
+    return `${API_BASE}${imageUrl}`;
   };
 
   return (
@@ -278,7 +423,9 @@ function App() {
           white-space: nowrap;
         }
 
-        .profiles-container {
+        .profiles-container,
+        .history-container,
+        .history-detail-container {
           height: 100%;
           padding: 110px 20px 20px 20px;
           overflow-y: auto;
@@ -291,14 +438,15 @@ function App() {
         }
 
         .profile-card,
-        .add-card {
+        .add-card,
+        .history-card {
           border-radius: 24px;
-          min-height: 220px;
-          padding: 20px;
           transition: 0.2s ease;
         }
 
         .profile-card {
+          min-height: 220px;
+          padding: 20px;
           background: rgba(255,255,255,0.07);
           border: 1px solid rgba(255,255,255,0.1);
           color: white;
@@ -306,6 +454,15 @@ function App() {
           display: flex;
           flex-direction: column;
           justify-content: space-between;
+        }
+
+        .history-card {
+          padding: 18px;
+          background: rgba(255,255,255,0.07);
+          border: 1px solid rgba(255,255,255,0.1);
+          color: white;
+          cursor: pointer;
+          margin-bottom: 14px;
         }
 
         .profile-click-area {
@@ -319,11 +476,16 @@ function App() {
         .modal-btn:hover,
         .back-btn:hover,
         .delete-btn:hover,
-        .retry-btn:hover {
+        .retry-btn:hover,
+        .history-card:hover,
+        .filter-chip:hover,
+        .mini-back-btn:hover {
           transform: scale(1.02);
         }
 
         .add-card {
+          min-height: 220px;
+          padding: 20px;
           background: rgba(255,255,255,0.04);
           border: 2px dashed rgba(255,255,255,0.2);
           color: white;
@@ -367,7 +529,8 @@ function App() {
           color: rgba(255,255,255,0.6);
         }
 
-        .profile-select-tag {
+        .profile-select-tag,
+        .history-tag {
           display: inline-block;
           margin-top: 16px;
           padding: 8px 12px;
@@ -498,7 +661,9 @@ function App() {
           gap: 12px;
         }
 
-        .control-btn {
+        .control-btn,
+        .mini-back-btn,
+        .filter-chip {
           background: rgba(0,0,0,0.3);
           border: 1px solid rgba(255,255,255,0.12);
           color: white;
@@ -508,6 +673,10 @@ function App() {
           font-size: 14px;
           backdrop-filter: blur(8px);
           transition: 0.2s ease;
+        }
+
+        .mini-back-btn {
+          margin-top: 14px;
         }
 
         .guide-wrap {
@@ -560,7 +729,9 @@ function App() {
         .control-btn:disabled,
         .back-btn:disabled,
         .modal-btn:disabled,
-        .delete-btn:disabled {
+        .delete-btn:disabled,
+        .filter-chip:disabled,
+        .mini-back-btn:disabled {
           opacity: 0.55;
           cursor: not-allowed;
           transform: none !important;
@@ -665,6 +836,77 @@ function App() {
           color: #0f172a;
         }
 
+        .history-detail-top {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+
+        .history-detail-title {
+          color: white;
+          font-size: 24px;
+          font-weight: 700;
+          margin: 0;
+        }
+
+        .history-detail-sub {
+          color: rgba(255,255,255,0.65);
+          font-size: 14px;
+          line-height: 1.6;
+        }
+
+        .filter-row {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-top: 8px;
+        }
+
+        .filter-chip.active {
+          background: rgba(34, 211, 238, 0.16);
+          color: #a5f3fc;
+          border-color: rgba(34, 211, 238, 0.35);
+        }
+
+        .image-viewer {
+          margin-top: 18px;
+          border-radius: 24px;
+          overflow: hidden;
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.04);
+          min-height: 420px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 12px;
+        }
+
+        .history-image {
+          width: 100%;
+          max-height: 70vh;
+          object-fit: contain;
+          border-radius: 18px;
+          background: #000;
+        }
+
+        .history-empty-image {
+          color: rgba(255,255,255,0.7);
+          text-align: center;
+          line-height: 1.7;
+          padding: 30px 16px;
+        }
+
+        .history-card-time {
+          font-size: 18px;
+          font-weight: 700;
+        }
+
+        .history-card-sub {
+          margin-top: 8px;
+          color: rgba(255,255,255,0.65);
+          font-size: 14px;
+        }
+
         @media (max-width: 560px) {
           .mirror-frame {
             max-width: 100%;
@@ -689,6 +931,10 @@ function App() {
 
           .selected-profile {
             max-width: 55%;
+          }
+
+          .filter-row {
+            flex-direction: column;
           }
         }
       `}</style>
@@ -742,9 +988,9 @@ function App() {
                               e.stopPropagation();
                               deleteProfile(profile);
                             }}
-                            disabled={isDeletingProfile === profile.name}
+                            disabled={isDeletingProfile === profile.folderId}
                           >
-                            {isDeletingProfile === profile.name
+                            {isDeletingProfile === profile.folderId
                               ? "삭제 중..."
                               : "삭제"}
                           </button>
@@ -852,6 +1098,149 @@ function App() {
                 </button>
               </div>
             </div>
+          )}
+
+          {screen === "history" && (
+            <>
+              <div className="header">
+                <div>
+                  <h1 className="header-title">이전 기록</h1>
+                  <div className="header-subtitle">
+                    {selectedProfile?.name} 프로필의 촬영 날짜와 시간을 확인합니다.
+                    <br />
+                    원하는 기록을 누르면 필터별 사진을 볼 수 있습니다.
+                  </div>
+                </div>
+
+                <div className="time-badge">
+                  {new Intl.DateTimeFormat("ko-KR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  }).format(new Date())}
+                </div>
+              </div>
+
+              <div className="history-container">
+                <button className="mini-back-btn" onClick={backToCamera}>
+                  카메라로 돌아가기
+                </button>
+
+                {isLoadingHistory ? (
+                  <div className="loading-box">이전 기록 불러오는 중...</div>
+                ) : historyItems.length === 0 ? (
+                  <div className="empty-box">
+                    아직 저장된 촬영 기록이 없습니다.
+                    <br />
+                    먼저 촬영을 진행해 주세요.
+                  </div>
+                ) : (
+                  <>
+                    {historyItems.map((item) => (
+                      <div
+                        key={item.captureId}
+                        className="history-card"
+                        onClick={() => openHistoryDetail(item.captureId)}
+                      >
+                        <div className="history-card-time">{item.displayTime}</div>
+                        <div className="history-card-sub">
+                          captureId: {item.captureId}
+                        </div>
+                        <div className="history-tag">기록 열기</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
+          {screen === "historyDetail" && (
+            <>
+              <div className="header">
+                <div>
+                  <h1 className="header-title">촬영 기록 상세</h1>
+                  <div className="header-subtitle">
+                    필터를 선택하면 해당 촬영 이미지를 확인할 수 있습니다.
+                  </div>
+                </div>
+
+                <div className="time-badge">
+                  {new Intl.DateTimeFormat("ko-KR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  }).format(new Date())}
+                </div>
+              </div>
+
+              <div className="history-detail-container">
+                <button className="mini-back-btn" onClick={backToHistory}>
+                  기록 목록으로 돌아가기
+                </button>
+
+                {isLoadingHistoryDetail ? (
+                  <div className="loading-box">기록 상세 불러오는 중...</div>
+                ) : (
+                  <>
+                    <div className="history-detail-top">
+                      <h2 className="history-detail-title">
+                        {selectedHistory?.displayTime || "-"}
+                      </h2>
+
+                      <div className="history-detail-sub">
+                        프로필: {selectedHistory?.profileName || "-"}
+                        <br />
+                        선택한 필터: {currentImage?.display_name || "-"}
+                      </div>
+
+                      <div className="filter-row">
+                        <button
+                          className={`filter-chip ${
+                            selectedFilter === "no_filter" ? "active" : ""
+                          }`}
+                          onClick={() => setSelectedFilter("no_filter")}
+                        >
+                          No_Filter
+                        </button>
+
+                        <button
+                          className={`filter-chip ${
+                            selectedFilter === "405nm_filter" ? "active" : ""
+                          }`}
+                          onClick={() => setSelectedFilter("405nm_filter")}
+                        >
+                          405nm_Filter
+                        </button>
+
+                        <button
+                          className={`filter-chip ${
+                            selectedFilter === "660nm_filter" ? "active" : ""
+                          }`}
+                          onClick={() => setSelectedFilter("660nm_filter")}
+                        >
+                          660nm_Filter
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="image-viewer">
+                      {currentImage?.exists && currentImage?.image_url ? (
+                        <img
+                          className="history-image"
+                          src={getImageSrc(currentImage.image_url)}
+                          alt={currentImage.display_name}
+                        />
+                      ) : (
+                        <div className="history-empty-image">
+                          선택한 필터의 이미지가 없습니다.
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>
