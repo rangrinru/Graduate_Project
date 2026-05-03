@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Screen =
   | "profiles"
@@ -43,6 +43,11 @@ type HistoryDetail = {
   };
 };
 
+type Toast = {
+  message: string;
+  type: "success" | "error" | "info";
+};
+
 const API_BASE = "http://192.168.137.145:8000";
 
 function App() {
@@ -70,17 +75,42 @@ function App() {
     "no_filter" | "405nm_filter" | "660nm_filter"
   >("no_filter");
 
-  // =========================
-  // 현재 선택된 이미지 데이터
-  // =========================
+  const [toast, setToast] = useState<Toast | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
+  const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
+  const [historyDeleteTarget, setHistoryDeleteTarget] = useState<HistoryItem | null>(null);
+  const [isDeletingHistory, setIsDeletingHistory] = useState<string | null>(null);
+
   const currentImage = useMemo(() => {
     if (!selectedHistory) return null;
     return selectedHistory.images[selectedFilter] || null;
   }, [selectedHistory, selectedFilter]);
 
-  // =========================
-  // 프로필 목록 불러오기
-  // =========================
+  const showToast = (
+    message: string,
+    type: "success" | "error" | "info" = "info"
+  ) => {
+    setToast({ message, type });
+
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 2500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
   const fetchProfiles = async () => {
     try {
       setIsLoadingProfiles(true);
@@ -90,14 +120,14 @@ function App() {
 
       if (!data.ok) {
         console.error(data);
-        alert(data.error || "프로필 목록 불러오기 실패");
+        showToast(data.error || "프로필 목록 불러오기 실패", "error");
         return;
       }
 
       setProfiles(data.profiles || []);
     } catch (error) {
       console.error(error);
-      alert("프로필 목록 불러오기 실패");
+      showToast("프로필 목록 불러오기 실패", "error");
     } finally {
       setIsLoadingProfiles(false);
     }
@@ -107,14 +137,11 @@ function App() {
     fetchProfiles();
   }, []);
 
-  // =========================
-  // 프로필 생성
-  // =========================
   const createProfile = async () => {
     const trimmed = newProfileName.trim();
 
     if (!trimmed) {
-      alert("프로필 이름을 입력하세요.");
+      showToast("프로필 이름을 입력하세요.", "error");
       return;
     }
 
@@ -132,30 +159,30 @@ function App() {
       const data = await res.json();
 
       if (!data.ok) {
-        alert(data.error || "프로필 생성 실패");
+        showToast(data.error || "프로필 생성 실패", "error");
         return;
       }
 
       setProfiles((prev) => [...prev, data.profile]);
       setNewProfileName("");
       setShowCreateModal(false);
+      showToast("프로필이 생성되었습니다.", "success");
     } catch (error) {
       console.error(error);
-      alert("프로필 생성 실패");
+      showToast("프로필 생성 실패", "error");
     } finally {
       setIsCreatingProfile(false);
     }
   };
 
-  // =========================
-  // 프로필 삭제
-  // =========================
-  const deleteProfile = async (profile: Profile) => {
-    const ok = window.confirm(
-      `${profile.name} 프로필을 삭제할까요?\n프로필 폴더와 촬영 데이터가 모두 삭제됩니다.`
-    );
+  const requestDeleteProfile = (profile: Profile) => {
+    setDeleteTarget(profile);
+  };
 
-    if (!ok) return;
+  const deleteProfile = async () => {
+    if (!deleteTarget) return;
+
+    const profile = deleteTarget;
 
     try {
       setIsDeletingProfile(profile.folderId);
@@ -168,7 +195,7 @@ function App() {
       const data = await res.json();
 
       if (!data.ok) {
-        alert(data.error || "프로필 삭제 실패");
+        showToast(data.error || "프로필 삭제 실패", "error");
         return;
       }
 
@@ -178,17 +205,17 @@ function App() {
         setSelectedProfile(null);
         setScreen("profiles");
       }
+
+      setDeleteTarget(null);
+      showToast("프로필이 삭제되었습니다.", "success");
     } catch (error) {
       console.error(error);
-      alert("프로필 삭제 실패");
+      showToast("프로필 삭제 실패", "error");
     } finally {
       setIsDeletingProfile(null);
     }
   };
 
-  // =========================
-  // 프로필 선택
-  // =========================
   const selectProfile = (profile: Profile) => {
     setSelectedProfile(profile);
     setSelectedHistory(null);
@@ -196,9 +223,6 @@ function App() {
     setScreen("camera");
   };
 
-  // =========================
-  // 프로필 화면으로 이동
-  // =========================
   const goToProfiles = () => {
     setScreen("profiles");
     setSelectedProfile(null);
@@ -206,17 +230,15 @@ function App() {
     setHistoryItems([]);
   };
 
-  // =========================
-  // 촬영
-  // =========================
   const capturePhoto = async () => {
     if (!selectedProfile) {
-      alert("프로필을 먼저 선택하세요.");
+      showToast("프로필을 먼저 선택하세요.", "error");
       return;
     }
 
     try {
       setIsCapturing(true);
+      showToast("촬영을 시작합니다.", "info");
 
       const res = await fetch(`${API_BASE}/capture-all`, {
         method: "POST",
@@ -231,27 +253,24 @@ function App() {
       const data = await res.json();
 
       if (!data.ok) {
-        alert(data.error || "촬영 실패");
+        showToast(data.error || "촬영 실패", "error");
         console.error(data);
         return;
       }
 
-      alert(`${selectedProfile.name} 프로필에 저장 완료`);
+      showToast(`${selectedProfile.name} 프로필에 저장 완료`, "success");
       console.log(data);
     } catch (error) {
-      alert("촬영 실패");
       console.error(error);
+      showToast("촬영 실패", "error");
     } finally {
       setIsCapturing(false);
     }
   };
 
-  // =========================
-  // 이전 기록 목록 불러오기
-  // =========================
   const fetchHistory = async () => {
     if (!selectedProfile) {
-      alert("프로필을 먼저 선택하세요.");
+      showToast("프로필을 먼저 선택하세요.", "error");
       return;
     }
 
@@ -263,7 +282,7 @@ function App() {
       const data = await res.json();
 
       if (!data.ok) {
-        alert(data.error || "이전 기록 불러오기 실패");
+        showToast(data.error || "이전 기록 불러오기 실패", "error");
         return;
       }
 
@@ -271,18 +290,15 @@ function App() {
       setScreen("history");
     } catch (error) {
       console.error(error);
-      alert("이전 기록 불러오기 실패");
+      showToast("이전 기록 불러오기 실패", "error");
     } finally {
       setIsLoadingHistory(false);
     }
   };
 
-  // =========================
-  // 특정 기록 상세 조회
-  // =========================
   const openHistoryDetail = async (captureId: string) => {
     if (!selectedProfile) {
-      alert("프로필을 먼저 선택하세요.");
+      showToast("프로필을 먼저 선택하세요.", "error");
       return;
     }
 
@@ -298,7 +314,7 @@ function App() {
       const data = await res.json();
 
       if (!data.ok) {
-        alert(data.error || "기록 상세 불러오기 실패");
+        showToast(data.error || "기록 상세 불러오기 실패", "error");
         return;
       }
 
@@ -307,41 +323,79 @@ function App() {
       setScreen("historyDetail");
     } catch (error) {
       console.error(error);
-      alert("기록 상세 불러오기 실패");
+      showToast("기록 상세 불러오기 실패", "error");
     } finally {
       setIsLoadingHistoryDetail(false);
     }
   };
 
-  // =========================
-  // 이전 기록 확인 버튼
-  // =========================
+  const requestDeleteHistory = (item: HistoryItem) => {
+    setHistoryDeleteTarget(item);
+  };
+
+  const deleteHistory = async () => {
+    if (!selectedProfile || !historyDeleteTarget) return;
+
+    const target = historyDeleteTarget;
+
+    try {
+      setIsDeletingHistory(target.captureId);
+
+      const encodedProfileId = encodeURIComponent(selectedProfile.folderId);
+      const encodedCaptureId = encodeURIComponent(target.captureId);
+
+      const res = await fetch(
+        `${API_BASE}/profiles/${encodedProfileId}/history/${encodedCaptureId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        showToast(data.error || "기록 삭제 실패", "error");
+        return;
+      }
+
+      setHistoryItems((prev) =>
+        prev.filter((item) => item.captureId !== target.captureId)
+      );
+
+      if (selectedHistory?.captureId === target.captureId) {
+        setSelectedHistory(null);
+        setScreen("history");
+      }
+
+      setHistoryDeleteTarget(null);
+      showToast("촬영 기록이 삭제되었습니다.", "success");
+    } catch (error) {
+      console.error(error);
+      showToast("기록 삭제 실패", "error");
+    } finally {
+      setIsDeletingHistory(null);
+    }
+  };
+
   const openHistory = () => {
     fetchHistory();
   };
 
-  // =========================
-  // history -> camera
-  // =========================
   const backToCamera = () => {
     setScreen("camera");
   };
 
-  // =========================
-  // detail -> history
-  // =========================
   const backToHistory = () => {
     setScreen("history");
   };
 
-  // =========================
-  // 이미지 URL 만들기
-  // =========================
   const getImageSrc = (imageUrl: string | null | undefined) => {
     if (!imageUrl) return "";
+
     if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
       return imageUrl;
     }
+
     return `${API_BASE}${imageUrl}`;
   };
 
@@ -385,6 +439,50 @@ function App() {
           overflow: hidden;
           position: relative;
           box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+        }
+
+        .toast {
+          position: absolute;
+          left: 50%;
+          top: 24px;
+          transform: translateX(-50%);
+          z-index: 300;
+          min-width: 260px;
+          max-width: 86%;
+          padding: 14px 18px;
+          border-radius: 18px;
+          color: white;
+          font-size: 14px;
+          font-weight: 700;
+          text-align: center;
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255,255,255,0.14);
+          box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+          animation: toastFade 0.2s ease;
+          line-height: 1.5;
+        }
+
+        .toast.success {
+          background: rgba(34, 197, 94, 0.9);
+        }
+
+        .toast.error {
+          background: rgba(239, 68, 68, 0.92);
+        }
+
+        .toast.info {
+          background: rgba(14, 165, 233, 0.9);
+        }
+
+        @keyframes toastFade {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+          }
         }
 
         .header {
@@ -479,7 +577,8 @@ function App() {
         .retry-btn:hover,
         .history-card:hover,
         .filter-chip:hover,
-        .mini-back-btn:hover {
+        .mini-back-btn:hover,
+        .history-delete-btn:hover {
           transform: scale(1.02);
         }
 
@@ -547,7 +646,8 @@ function App() {
           justify-content: flex-end;
         }
 
-        .delete-btn {
+        .delete-btn,
+        .history-delete-btn {
           background: rgba(239, 68, 68, 0.18);
           border: 1px solid rgba(255,255,255,0.12);
           color: white;
@@ -556,6 +656,23 @@ function App() {
           cursor: pointer;
           font-size: 13px;
           transition: 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .history-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+        }
+
+        .history-delete-btn {
+          padding: 9px 12px;
+        }
+
+        .history-delete-btn:hover,
+        .delete-btn:hover {
+          background: rgba(239, 68, 68, 0.28);
         }
 
         .empty-box,
@@ -731,7 +848,8 @@ function App() {
         .modal-btn:disabled,
         .delete-btn:disabled,
         .filter-chip:disabled,
-        .mini-back-btn:disabled {
+        .mini-back-btn:disabled,
+        .history-delete-btn:disabled {
           opacity: 0.55;
           cursor: not-allowed;
           transform: none !important;
@@ -767,7 +885,7 @@ function App() {
           align-items: center;
           justify-content: center;
           padding: 20px;
-          z-index: 100;
+          z-index: 200;
         }
 
         .modal-box {
@@ -778,12 +896,31 @@ function App() {
           border-radius: 24px;
           padding: 24px;
           color: white;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.45);
         }
 
         .modal-title {
           margin: 0 0 18px 0;
           font-size: 22px;
           font-weight: 700;
+        }
+
+        .modal-text {
+          color: rgba(255,255,255,0.72);
+          font-size: 14px;
+          line-height: 1.7;
+          margin: 0;
+        }
+
+        .modal-warning {
+          margin-top: 12px;
+          padding: 12px 14px;
+          border-radius: 16px;
+          background: rgba(239, 68, 68, 0.13);
+          border: 1px solid rgba(239, 68, 68, 0.25);
+          color: rgba(255,255,255,0.86);
+          font-size: 13px;
+          line-height: 1.6;
         }
 
         .input-label {
@@ -834,6 +971,11 @@ function App() {
         .modal-btn.create {
           background: #22d3ee;
           color: #0f172a;
+        }
+
+        .modal-btn.danger {
+          background: #ef4444;
+          color: white;
         }
 
         .history-detail-top {
@@ -905,6 +1047,7 @@ function App() {
           margin-top: 8px;
           color: rgba(255,255,255,0.65);
           font-size: 14px;
+          word-break: break-all;
         }
 
         @media (max-width: 560px) {
@@ -941,6 +1084,12 @@ function App() {
 
       <div className="app-bg">
         <div className="mirror-frame">
+          {toast && (
+            <div className={`toast ${toast.type}`}>
+              {toast.message}
+            </div>
+          )}
+
           {screen === "profiles" && (
             <>
               <div className="header">
@@ -986,7 +1135,7 @@ function App() {
                             className="delete-btn"
                             onClick={(e) => {
                               e.stopPropagation();
-                              deleteProfile(profile);
+                              requestDeleteProfile(profile);
                             }}
                             disabled={isDeletingProfile === profile.folderId}
                           >
@@ -1142,10 +1291,26 @@ function App() {
                         className="history-card"
                         onClick={() => openHistoryDetail(item.captureId)}
                       >
-                        <div className="history-card-time">{item.displayTime}</div>
-                        <div className="history-card-sub">
-                          captureId: {item.captureId}
+                        <div className="history-card-header">
+                          <div>
+                            <div className="history-card-time">{item.displayTime}</div>
+                            <div className="history-card-sub">
+                              captureId: {item.captureId}
+                            </div>
+                          </div>
+
+                          <button
+                            className="history-delete-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestDeleteHistory(item);
+                            }}
+                            disabled={isDeletingHistory === item.captureId}
+                          >
+                            {isDeletingHistory === item.captureId ? "삭제 중..." : "삭제"}
+                          </button>
                         </div>
+
                         <div className="history-tag">기록 열기</div>
                       </div>
                     ))}
@@ -1284,6 +1449,87 @@ function App() {
                 disabled={isCreatingProfile}
               >
                 {isCreatingProfile ? "생성 중..." : "생성하기"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <h2 className="modal-title">프로필 삭제</h2>
+
+            <p className="modal-text">
+              <strong>{deleteTarget.name}</strong> 프로필을 삭제할까요?
+            </p>
+
+            <div className="modal-warning">
+              프로필 폴더와 촬영 데이터가 모두 삭제됩니다.
+              <br />
+              이 작업은 되돌릴 수 없습니다.
+            </div>
+
+            <div className="modal-actions">
+              <button
+                className="modal-btn cancel"
+                onClick={() => {
+                  if (isDeletingProfile) return;
+                  setDeleteTarget(null);
+                }}
+                disabled={isDeletingProfile !== null}
+              >
+                취소
+              </button>
+
+              <button
+                className="modal-btn danger"
+                onClick={deleteProfile}
+                disabled={isDeletingProfile !== null}
+              >
+                {isDeletingProfile ? "삭제 중..." : "삭제하기"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historyDeleteTarget && (
+        <div className="modal-overlay">
+          <div className="modal-box">
+            <h2 className="modal-title">촬영 기록 삭제</h2>
+
+            <p className="modal-text">
+              아래 촬영 기록을 삭제할까요?
+              <br />
+              <strong>{historyDeleteTarget.displayTime}</strong>
+            </p>
+
+            <div className="modal-warning">
+              이 기록에 저장된 No_Filter, 405nm_Filter, 660nm_Filter 이미지와
+              metadata.json 파일이 모두 삭제됩니다.
+              <br />
+              이 작업은 되돌릴 수 없습니다.
+            </div>
+
+            <div className="modal-actions">
+              <button
+                className="modal-btn cancel"
+                onClick={() => {
+                  if (isDeletingHistory) return;
+                  setHistoryDeleteTarget(null);
+                }}
+                disabled={isDeletingHistory !== null}
+              >
+                취소
+              </button>
+
+              <button
+                className="modal-btn danger"
+                onClick={deleteHistory}
+                disabled={isDeletingHistory !== null}
+              >
+                {isDeletingHistory ? "삭제 중..." : "삭제하기"}
               </button>
             </div>
           </div>
