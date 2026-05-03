@@ -2099,8 +2099,7 @@ function App() {
             </p>
 
             <div className="modal-warning">
-              이 기록에 저장된 No_Filter, 405nm_Filter, 660nm_Filter 이미지와
-              metadata.json 파일이 모두 삭제됩니다.
+              이 기록에 저장된 파일이 모두 삭제됩니다.
               <br />
               이 작업은 되돌릴 수 없습니다.
             </div>
