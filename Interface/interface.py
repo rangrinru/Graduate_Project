@@ -1,53 +1,88 @@
 import tkinter as tk
 from PIL import Image, ImageTk
 import cv2
+import time
 
 # -----------------------------
-# 카메라 설정
+# 카메라
 # -----------------------------
 cap = cv2.VideoCapture(0)
 
 # -----------------------------
-# 메인 윈도우
+# 윈도우
 # -----------------------------
 root = tk.Tk()
-root.title("Skin Mirror Display")
-root.attributes('-fullscreen', True)  # 전체화면
+root.attributes('-fullscreen', True)
+root.configure(bg='black')
+
+mode = "mirror"  # mirror / capture
+countdown = -1
+countdown_start = 0
 
 # -----------------------------
-# 상태 변수
+# 얼굴 검출
 # -----------------------------
-mode = "mirror"  # mirror / uv
+face_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+)
 
 # -----------------------------
-# 카메라 프레임 표시 함수
+# 화면 표시
 # -----------------------------
-def show_frame():
-    global mode
+def update_frame():
+    global mode, countdown, countdown_start
 
-    ret, frame = cap.read()
-    if not ret:
-        return
+    if mode == "mirror":
+        # 검정 화면
+        canvas.create_rectangle(0, 0, 1920, 1080, fill="black")
 
-    # 좌우 반전 (거울 효과)
-    frame = cv2.flip(frame, 1)
+    elif mode == "capture":
+        ret, frame = cap.read()
+        if not ret:
+            return
 
-    if mode == "uv":
-        # UV 느낌 효과 (대비 강화)
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        h, s, v = cv2.split(frame)
-        v = cv2.equalizeHist(v)
-        frame = cv2.merge((h, s, v))
-        frame = cv2.cvtColor(frame, cv2.COLOR_HSV2BGR)
+        frame = cv2.flip(frame, 1)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    # tkinter 이미지 변환
-    img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    img = Image.fromarray(img)
-    imgtk = ImageTk.PhotoImage(image=img)
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-    label.imgtk = imgtk
-    label.configure(image=imgtk)
-    label.after(10, show_frame)
+        # 얼굴 박스
+        for (x, y, w, h) in faces:
+            cv2.rectangle(frame, (x,y), (x+w,y+h), (0,255,0), 2)
+
+        # 얼굴 중앙 체크
+        if len(faces) > 0 and countdown == -1:
+            countdown = 4
+            countdown_start = time.time()
+
+        # 카운트다운
+        if countdown > 0:
+            elapsed = time.time() - countdown_start
+            if elapsed >= 1:
+                countdown -= 1
+                countdown_start = time.time()
+
+        # 촬영
+        if countdown == 0:
+            cv2.imwrite("capture.jpg", frame)
+            print("촬영 완료")
+            countdown = -1
+            mode = "mirror"
+
+        # 화면에 숫자 표시
+        if countdown > 0:
+            cv2.putText(frame, str(countdown), (300,300),
+                        cv2.FONT_HERSHEY_SIMPLEX, 5, (0,0,255), 5)
+
+        # tkinter 변환
+        img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(img)
+        imgtk = ImageTk.PhotoImage(image=img)
+
+        canvas.imgtk = imgtk
+        canvas.create_image(0, 0, anchor='nw', image=imgtk)
+
+    root.after(10, update_frame)
 
 # -----------------------------
 # 버튼 기능
@@ -56,44 +91,27 @@ def set_mirror():
     global mode
     mode = "mirror"
 
-def set_uv():
+def set_capture():
     global mode
-    mode = "uv"
-
-def capture_image():
-    ret, frame = cap.read()
-    if ret:
-        filename = "capture.jpg"
-        cv2.imwrite(filename, frame)
-        print("촬영 완료:", filename)
-
-def exit_app():
-    cap.release()
-    root.destroy()
+    mode = "capture"
 
 # -----------------------------
-# UI 구성
+# UI
 # -----------------------------
-label = tk.Label(root)
-label.pack()
+canvas = tk.Canvas(root, width=1920, height=1080, bg="black")
+canvas.pack()
 
 btn_frame = tk.Frame(root, bg="black")
-btn_frame.pack(side="bottom", fill="x")
+btn_frame.place(relx=0.5, rely=0.9, anchor='center')
 
-btn_mirror = tk.Button(btn_frame, text="거울 모드", command=set_mirror, height=3)
-btn_mirror.pack(side="left", expand=True, fill="x")
+btn_mirror = tk.Button(btn_frame, text="거울모드", command=set_mirror, width=15, height=2)
+btn_mirror.pack(side="left", padx=20)
 
-btn_uv = tk.Button(btn_frame, text="UV 모드", command=set_uv, height=3)
-btn_uv.pack(side="left", expand=True, fill="x")
-
-btn_capture = tk.Button(btn_frame, text="촬영", command=capture_image, height=3)
-btn_capture.pack(side="left", expand=True, fill="x")
-
-btn_exit = tk.Button(btn_frame, text="종료", command=exit_app, height=3)
-btn_exit.pack(side="left", expand=True, fill="x")
+btn_capture = tk.Button(btn_frame, text="촬영모드", command=set_capture, width=15, height=2)
+btn_capture.pack(side="left", padx=20)
 
 # -----------------------------
 # 실행
 # -----------------------------
-show_frame()
+update_frame()
 root.mainloop()
