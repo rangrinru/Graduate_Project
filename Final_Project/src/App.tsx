@@ -48,6 +48,148 @@ type Toast = {
   type: "success" | "error" | "info";
 };
 
+type KeyboardMode = "ko" | "en" | "num";
+
+type HangulBuffer = {
+  cho: string | null;
+  jung: string | null;
+  jong: string | null;
+};
+
+const EMPTY_HANGUL_BUFFER: HangulBuffer = {
+  cho: null,
+  jung: null,
+  jong: null,
+};
+
+const CHO_LIST = [
+  "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ",
+  "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ",
+];
+
+const JUNG_LIST = [
+  "ㅏ", "ㅐ", "ㅑ", "ㅒ", "ㅓ", "ㅔ", "ㅕ", "ㅖ", "ㅗ", "ㅘ",
+  "ㅙ", "ㅚ", "ㅛ", "ㅜ", "ㅝ", "ㅞ", "ㅟ", "ㅠ", "ㅡ", "ㅢ", "ㅣ",
+];
+
+const JONG_LIST = [
+  "", "ㄱ", "ㄲ", "ㄳ", "ㄴ", "ㄵ", "ㄶ", "ㄷ", "ㄹ", "ㄺ",
+  "ㄻ", "ㄼ", "ㄽ", "ㄾ", "ㄿ", "ㅀ", "ㅁ", "ㅂ", "ㅄ", "ㅅ",
+  "ㅆ", "ㅇ", "ㅈ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ",
+];
+
+const KOREAN_CONSONANTS = new Set([
+  "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ",
+  "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ",
+]);
+
+const KOREAN_VOWELS = new Set([
+  "ㅏ", "ㅐ", "ㅑ", "ㅒ", "ㅓ", "ㅔ", "ㅕ", "ㅖ", "ㅗ", "ㅛ",
+  "ㅜ", "ㅠ", "ㅡ", "ㅣ",
+]);
+
+const DOUBLE_CHO_MAP: Record<string, string> = {
+  "ㄱㄱ": "ㄲ",
+  "ㄷㄷ": "ㄸ",
+  "ㅂㅂ": "ㅃ",
+  "ㅅㅅ": "ㅆ",
+  "ㅈㅈ": "ㅉ",
+};
+
+const COMPOUND_JUNG_MAP: Record<string, string> = {
+  "ㅗㅏ": "ㅘ",
+  "ㅗㅐ": "ㅙ",
+  "ㅗㅣ": "ㅚ",
+  "ㅜㅓ": "ㅝ",
+  "ㅜㅔ": "ㅞ",
+  "ㅜㅣ": "ㅟ",
+  "ㅡㅣ": "ㅢ",
+};
+
+const COMPOUND_JONG_MAP: Record<string, string> = {
+  "ㄱㅅ": "ㄳ",
+  "ㄴㅈ": "ㄵ",
+  "ㄴㅎ": "ㄶ",
+  "ㄹㄱ": "ㄺ",
+  "ㄹㅁ": "ㄻ",
+  "ㄹㅂ": "ㄼ",
+  "ㄹㅅ": "ㄽ",
+  "ㄹㅌ": "ㄾ",
+  "ㄹㅍ": "ㄿ",
+  "ㄹㅎ": "ㅀ",
+  "ㅂㅅ": "ㅄ",
+};
+
+const SPLIT_JONG_MAP: Record<string, [string, string]> = {
+  "ㄳ": ["ㄱ", "ㅅ"],
+  "ㄵ": ["ㄴ", "ㅈ"],
+  "ㄶ": ["ㄴ", "ㅎ"],
+  "ㄺ": ["ㄹ", "ㄱ"],
+  "ㄻ": ["ㄹ", "ㅁ"],
+  "ㄼ": ["ㄹ", "ㅂ"],
+  "ㄽ": ["ㄹ", "ㅅ"],
+  "ㄾ": ["ㄹ", "ㅌ"],
+  "ㄿ": ["ㄹ", "ㅍ"],
+  "ㅀ": ["ㄹ", "ㅎ"],
+  "ㅄ": ["ㅂ", "ㅅ"],
+};
+
+const KOREAN_KEY_ROWS = [
+  ["ㄱ", "ㄴ", "ㄷ", "ㄹ", "ㅁ", "ㅂ", "ㅅ", "ㅇ", "ㅈ", "ㅎ"],
+  ["ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㄲ", "ㄸ", "ㅃ", "ㅆ", "ㅉ"],
+  ["ㅏ", "ㅑ", "ㅓ", "ㅕ", "ㅗ", "ㅛ", "ㅜ", "ㅠ", "ㅡ", "ㅣ"],
+  ["ㅐ", "ㅒ", "ㅔ", "ㅖ"],
+];
+
+const ENGLISH_KEY_ROWS = [
+  ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
+  ["a", "s", "d", "f", "g", "h", "j", "k", "l"],
+  ["z", "x", "c", "v", "b", "n", "m"],
+];
+
+const NUMBER_KEY_ROWS = [
+  ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
+  ["-", "_", ".", "(", ")", "/", "@"],
+];
+
+const composeHangul = (buffer: HangulBuffer) => {
+  if (!buffer.cho && !buffer.jung && !buffer.jong) {
+    return "";
+  }
+
+  if (buffer.cho && !buffer.jung) {
+    return buffer.cho;
+  }
+
+  if (!buffer.cho && buffer.jung) {
+    return buffer.jung;
+  }
+
+  if (!buffer.cho || !buffer.jung) {
+    return "";
+  }
+
+  const choIndex = CHO_LIST.indexOf(buffer.cho);
+  const jungIndex = JUNG_LIST.indexOf(buffer.jung);
+  const jongIndex = buffer.jong ? JONG_LIST.indexOf(buffer.jong) : 0;
+
+  if (choIndex < 0 || jungIndex < 0 || jongIndex < 0) {
+    return `${buffer.cho}${buffer.jung}${buffer.jong || ""}`;
+  }
+
+  const unicode = 0xac00 + choIndex * 588 + jungIndex * 28 + jongIndex;
+
+  return String.fromCharCode(unicode);
+};
+
+const composeHangulWithoutJong = (buffer: HangulBuffer) => {
+  return composeHangul({
+    cho: buffer.cho,
+    jung: buffer.jung,
+    jong: null,
+  });
+};
+
 const API_BASE = "http://192.168.137.145:8000";
 
 function App() {
@@ -58,7 +200,11 @@ function App() {
 
   const [showGuide, setShowGuide] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newProfileName, setNewProfileName] = useState("");
+
+  const [profileInputText, setProfileInputText] = useState("");
+  const [hangulBuffer, setHangulBuffer] = useState<HangulBuffer>(EMPTY_HANGUL_BUFFER);
+  const [showVirtualKeyboard, setShowVirtualKeyboard] = useState(false);
+  const [keyboardMode, setKeyboardMode] = useState<KeyboardMode>("ko");
 
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
@@ -86,6 +232,8 @@ function App() {
     if (!selectedHistory) return null;
     return selectedHistory.images[selectedFilter] || null;
   }, [selectedHistory, selectedFilter]);
+
+  const profileNameInputValue = profileInputText + composeHangul(hangulBuffer);
 
   const showToast = (
     message: string,
@@ -138,7 +286,7 @@ function App() {
   }, []);
 
   const createProfile = async () => {
-    const trimmed = newProfileName.trim();
+    const trimmed = profileNameInputValue.trim();
 
     if (!trimmed) {
       showToast("프로필 이름을 입력하세요.", "error");
@@ -164,7 +312,10 @@ function App() {
       }
 
       setProfiles((prev) => [...prev, data.profile]);
-      setNewProfileName("");
+      setProfileInputText("");
+      setHangulBuffer(EMPTY_HANGUL_BUFFER);
+      setShowVirtualKeyboard(false);
+      setKeyboardMode("ko");
       setShowCreateModal(false);
       showToast("프로필이 생성되었습니다.", "success");
     } catch (error) {
@@ -173,6 +324,256 @@ function App() {
     } finally {
       setIsCreatingProfile(false);
     }
+  };
+
+  const commitHangulBuffer = () => {
+    const composed = composeHangul(hangulBuffer);
+
+    if (composed) {
+      setProfileInputText((prev) => prev + composed);
+    }
+
+    setHangulBuffer(EMPTY_HANGUL_BUFFER);
+  };
+
+  const resetProfileInput = () => {
+    setProfileInputText("");
+    setHangulBuffer(EMPTY_HANGUL_BUFFER);
+    setShowVirtualKeyboard(false);
+    setKeyboardMode("ko");
+  };
+
+  const openCreateProfileModal = () => {
+    resetProfileInput();
+    setShowCreateModal(true);
+  };
+
+  const handleKoreanConsonant = (key: string) => {
+    const prev = hangulBuffer;
+
+    if (!prev.cho && !prev.jung && !prev.jong) {
+      setHangulBuffer({
+        cho: key,
+        jung: null,
+        jong: null,
+      });
+      return;
+    }
+
+    if (prev.cho && !prev.jung) {
+      const doubleCho = DOUBLE_CHO_MAP[`${prev.cho}${key}`];
+
+      if (doubleCho) {
+        setHangulBuffer({
+          cho: doubleCho,
+          jung: null,
+          jong: null,
+        });
+        return;
+      }
+
+      setProfileInputText((text) => text + composeHangul(prev));
+      setHangulBuffer({
+        cho: key,
+        jung: null,
+        jong: null,
+      });
+      return;
+    }
+
+    if (prev.cho && prev.jung && !prev.jong) {
+      if (JONG_LIST.includes(key)) {
+        setHangulBuffer({
+          ...prev,
+          jong: key,
+        });
+        return;
+      }
+
+      setProfileInputText((text) => text + composeHangul(prev));
+      setHangulBuffer({
+        cho: key,
+        jung: null,
+        jong: null,
+      });
+      return;
+    }
+
+    if (prev.cho && prev.jung && prev.jong) {
+      const compoundJong = COMPOUND_JONG_MAP[`${prev.jong}${key}`];
+
+      if (compoundJong) {
+        setHangulBuffer({
+          ...prev,
+          jong: compoundJong,
+        });
+        return;
+      }
+
+      setProfileInputText((text) => text + composeHangul(prev));
+      setHangulBuffer({
+        cho: key,
+        jung: null,
+        jong: null,
+      });
+      return;
+    }
+  };
+
+  const handleKoreanVowel = (key: string) => {
+    const prev = hangulBuffer;
+
+    if (!prev.cho && !prev.jung && !prev.jong) {
+      setHangulBuffer({
+        cho: "ㅇ",
+        jung: key,
+        jong: null,
+      });
+      return;
+    }
+
+    if (prev.cho && !prev.jung) {
+      setHangulBuffer({
+        ...prev,
+        jung: key,
+      });
+      return;
+    }
+
+    if (prev.cho && prev.jung && !prev.jong) {
+      const compoundJung = COMPOUND_JUNG_MAP[`${prev.jung}${key}`];
+
+      if (compoundJung) {
+        setHangulBuffer({
+          ...prev,
+          jung: compoundJung,
+        });
+        return;
+      }
+
+      setProfileInputText((text) => text + composeHangul(prev));
+      setHangulBuffer({
+        cho: "ㅇ",
+        jung: key,
+        jong: null,
+      });
+      return;
+    }
+
+    if (prev.cho && prev.jung && prev.jong) {
+      const splitJong = SPLIT_JONG_MAP[prev.jong];
+
+      if (splitJong) {
+        const [remainJong, nextCho] = splitJong;
+
+        setProfileInputText(
+          (text) =>
+            text +
+            composeHangul({
+              cho: prev.cho,
+              jung: prev.jung,
+              jong: remainJong,
+            })
+        );
+
+        setHangulBuffer({
+          cho: nextCho,
+          jung: key,
+          jong: null,
+        });
+        return;
+      }
+
+      setProfileInputText((text) => text + composeHangulWithoutJong(prev));
+      setHangulBuffer({
+        cho: prev.jong,
+        jung: key,
+        jong: null,
+      });
+      return;
+    }
+  };
+
+  const handleVirtualKey = (key: string) => {
+    if (KOREAN_CONSONANTS.has(key)) {
+      handleKoreanConsonant(key);
+      return;
+    }
+
+    if (KOREAN_VOWELS.has(key)) {
+      handleKoreanVowel(key);
+      return;
+    }
+
+    const composed = composeHangul(hangulBuffer);
+
+    if (composed) {
+      setProfileInputText((prev) => prev + composed + key);
+    } else {
+      setProfileInputText((prev) => prev + key);
+    }
+
+    setHangulBuffer(EMPTY_HANGUL_BUFFER);
+  };
+
+  const handleVirtualBackspace = () => {
+    const prev = hangulBuffer;
+
+    if (prev.jong) {
+      const splitJong = SPLIT_JONG_MAP[prev.jong];
+
+      if (splitJong) {
+        setHangulBuffer({
+          ...prev,
+          jong: splitJong[0],
+        });
+        return;
+      }
+
+      setHangulBuffer({
+        ...prev,
+        jong: null,
+      });
+      return;
+    }
+
+    if (prev.jung) {
+      setHangulBuffer({
+        ...prev,
+        jung: null,
+      });
+      return;
+    }
+
+    if (prev.cho) {
+      setHangulBuffer(EMPTY_HANGUL_BUFFER);
+      return;
+    }
+
+    setProfileInputText((prevText) => prevText.slice(0, -1));
+  };
+
+  const handleVirtualSpace = () => {
+    const composed = composeHangul(hangulBuffer);
+
+    if (composed) {
+      setProfileInputText((prev) => prev + composed + " ");
+    } else {
+      setProfileInputText((prev) => prev + " ");
+    }
+
+    setHangulBuffer(EMPTY_HANGUL_BUFFER);
+  };
+
+  const handleVirtualDone = () => {
+    const composed = composeHangul(hangulBuffer);
+
+    if (composed) {
+      setProfileInputText((prev) => prev + composed);
+    }
+
+    setHangulBuffer(EMPTY_HANGUL_BUFFER);
+    setShowVirtualKeyboard(false);
   };
 
   const requestDeleteProfile = (profile: Profile) => {
@@ -849,7 +1250,10 @@ function App() {
         .delete-btn:disabled,
         .filter-chip:disabled,
         .mini-back-btn:disabled,
-        .history-delete-btn:disabled {
+        .history-delete-btn:disabled,
+        .keyboard-key:disabled,
+        .keyboard-mode-btn:disabled,
+        .keyboard-control-key:disabled {
           opacity: 0.55;
           cursor: not-allowed;
           transform: none !important;
@@ -943,6 +1347,88 @@ function App() {
 
         .text-input::placeholder {
           color: rgba(255,255,255,0.35);
+        }
+
+        .virtual-keyboard {
+          margin-top: 18px;
+          padding: 14px;
+          border-radius: 20px;
+          background: rgba(255,255,255,0.06);
+          border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .keyboard-mode-row {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 12px;
+        }
+
+        .keyboard-mode-btn {
+          flex: 1;
+          border: none;
+          border-radius: 12px;
+          padding: 10px 0;
+          background: rgba(255,255,255,0.08);
+          color: white;
+          font-size: 13px;
+          cursor: pointer;
+        }
+
+        .keyboard-mode-btn.active {
+          background: #22d3ee;
+          color: #0f172a;
+          font-weight: 700;
+        }
+
+        .keyboard-row {
+          display: flex;
+          justify-content: center;
+          gap: 5px;
+          margin-bottom: 7px;
+        }
+
+        .keyboard-key {
+          min-width: 30px;
+          height: 38px;
+          border: none;
+          border-radius: 10px;
+          background: rgba(255,255,255,0.12);
+          color: white;
+          font-size: 15px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .keyboard-key:active,
+        .keyboard-control-key:active,
+        .keyboard-mode-btn:active {
+          transform: scale(0.96);
+        }
+
+        .keyboard-control-row {
+          display: flex;
+          gap: 8px;
+          margin-top: 10px;
+        }
+
+        .keyboard-control-key {
+          border: none;
+          border-radius: 12px;
+          padding: 12px 10px;
+          background: rgba(255,255,255,0.12);
+          color: white;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .keyboard-control-key.space {
+          flex: 1;
+        }
+
+        .keyboard-control-key.done {
+          background: #22d3ee;
+          color: #0f172a;
         }
 
         .modal-actions {
@@ -1149,7 +1635,7 @@ function App() {
 
                     <div
                       className="add-card"
-                      onClick={() => setShowCreateModal(true)}
+                      onClick={openCreateProfileModal}
                     >
                       <div className="add-icon">＋</div>
                       <div style={{ fontSize: "20px", fontWeight: 700 }}>
@@ -1420,15 +1906,122 @@ function App() {
               className="text-input"
               type="text"
               placeholder="이름을 입력하세요"
-              value={newProfileName}
-              onChange={(e) => setNewProfileName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !isCreatingProfile) {
-                  createProfile();
-                }
-              }}
+              value={profileNameInputValue}
+              readOnly
+              onFocus={() => setShowVirtualKeyboard(true)}
+              onClick={() => setShowVirtualKeyboard(true)}
               disabled={isCreatingProfile}
             />
+
+            {showVirtualKeyboard && (
+              <div className="virtual-keyboard">
+                <div className="keyboard-mode-row">
+                  <button
+                    className={`keyboard-mode-btn ${keyboardMode === "ko" ? "active" : ""}`}
+                    onClick={() => setKeyboardMode("ko")}
+                    disabled={isCreatingProfile}
+                  >
+                    한글
+                  </button>
+
+                  <button
+                    className={`keyboard-mode-btn ${keyboardMode === "en" ? "active" : ""}`}
+                    onClick={() => {
+                      commitHangulBuffer();
+                      setKeyboardMode("en");
+                    }}
+                    disabled={isCreatingProfile}
+                  >
+                    영어
+                  </button>
+
+                  <button
+                    className={`keyboard-mode-btn ${keyboardMode === "num" ? "active" : ""}`}
+                    onClick={() => {
+                      commitHangulBuffer();
+                      setKeyboardMode("num");
+                    }}
+                    disabled={isCreatingProfile}
+                  >
+                    숫자
+                  </button>
+                </div>
+
+                {keyboardMode === "ko" &&
+                  KOREAN_KEY_ROWS.map((row, rowIndex) => (
+                    <div className="keyboard-row" key={`ko-${rowIndex}`}>
+                      {row.map((key) => (
+                        <button
+                          className="keyboard-key"
+                          key={key}
+                          onClick={() => handleVirtualKey(key)}
+                          disabled={isCreatingProfile}
+                        >
+                          {key}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+
+                {keyboardMode === "en" &&
+                  ENGLISH_KEY_ROWS.map((row, rowIndex) => (
+                    <div className="keyboard-row" key={`en-${rowIndex}`}>
+                      {row.map((key) => (
+                        <button
+                          className="keyboard-key"
+                          key={key}
+                          onClick={() => handleVirtualKey(key)}
+                          disabled={isCreatingProfile}
+                        >
+                          {key}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+
+                {keyboardMode === "num" &&
+                  NUMBER_KEY_ROWS.map((row, rowIndex) => (
+                    <div className="keyboard-row" key={`num-${rowIndex}`}>
+                      {row.map((key) => (
+                        <button
+                          className="keyboard-key"
+                          key={key}
+                          onClick={() => handleVirtualKey(key)}
+                          disabled={isCreatingProfile}
+                        >
+                          {key}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+
+                <div className="keyboard-control-row">
+                  <button
+                    className="keyboard-control-key"
+                    onClick={handleVirtualBackspace}
+                    disabled={isCreatingProfile}
+                  >
+                    지우기
+                  </button>
+
+                  <button
+                    className="keyboard-control-key space"
+                    onClick={handleVirtualSpace}
+                    disabled={isCreatingProfile}
+                  >
+                    띄어쓰기
+                  </button>
+
+                  <button
+                    className="keyboard-control-key done"
+                    onClick={handleVirtualDone}
+                    disabled={isCreatingProfile}
+                  >
+                    완료
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="modal-actions">
               <button
@@ -1436,7 +2029,7 @@ function App() {
                 onClick={() => {
                   if (isCreatingProfile) return;
                   setShowCreateModal(false);
-                  setNewProfileName("");
+                  resetProfileInput();
                 }}
                 disabled={isCreatingProfile}
               >
