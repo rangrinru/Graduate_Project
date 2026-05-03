@@ -737,6 +737,28 @@ def get_capture_detail(profile_id: str, capture_id: str):
     }
 
 
+def delete_capture_history(profile_id: str, capture_id: str):
+    # 프로필 루트 경로 가져오기
+    profile_root = get_profile_root(profile_id)
+
+    # 하나라도 삭제되었는지 확인하기 위한 플래그
+    deleted_any = False
+
+    # cam2, cam3, cam4의 동일 capture_id 폴더를 모두 삭제
+    for cam_key, info in CAMERA_INFO.items():
+        # 삭제 대상 폴더 경로 생성
+        target_dir = profile_root / info["folder"] / capture_id
+
+        # 실제 폴더가 있으면 내부 이미지와 metadata.json까지 전체 삭제
+        if target_dir.exists() and target_dir.is_dir():
+            shutil.rmtree(target_dir)
+            deleted_any = True
+
+    # 하나도 삭제되지 않았으면 잘못된 기록으로 판단
+    if not deleted_any:
+        raise ValueError("삭제할 촬영 기록이 없습니다.")
+
+
 def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Path:
     # 프로필 루트 확인
     profile_root = get_profile_root(profile_id)
@@ -1067,6 +1089,29 @@ def get_history_detail_api(profile_id, capture_id):
         return jsonify({
             "ok": True,
             **detail
+        })
+
+    except Exception as e:
+        # 실패 응답
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 400
+
+
+# =========================
+# 특정 촬영 기록 삭제 API
+# =========================
+
+@app.route("/profiles/<profile_id>/history/<capture_id>", methods=["DELETE"])
+def delete_history_api(profile_id, capture_id):
+    try:
+        # 특정 촬영 기록 삭제
+        delete_capture_history(profile_id, capture_id)
+
+        # 성공 응답
+        return jsonify({
+            "ok": True
         })
 
     except Exception as e:
