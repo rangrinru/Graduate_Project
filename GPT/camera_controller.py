@@ -59,6 +59,29 @@ class ControllerConfig:
     min_face_ratio: float = 0.18
     max_face_ratio: float = 0.72
 
+def find_haarcascade_file(filename: str) -> str:
+    candidates = []
+
+    # OpenCV에 cv2.data가 있는 경우
+    if hasattr(cv2, "data"):
+        candidates.append(Path(cv2.data.haarcascades) / filename)
+
+    # 라즈베리파이/리눅스에서 자주 쓰이는 경로들
+    candidates.extend([
+        Path("/usr/share/opencv4/haarcascades") / filename,
+        Path("/usr/share/opencv/haarcascades") / filename,
+        Path("/usr/local/share/opencv4/haarcascades") / filename,
+        Path("/usr/local/share/opencv/haarcascades") / filename,
+    ])
+
+    for path in candidates:
+        if path.exists():
+            return str(path)
+
+    raise FileNotFoundError(
+        f"Haar cascade 파일을 찾을 수 없습니다: {filename}\\n"
+        f"확인한 경로: {[str(p) for p in candidates]}"
+    )
 
 class AutoCaptureController:
     def __init__(self, config: Optional[ControllerConfig] = None):
@@ -81,12 +104,17 @@ class AutoCaptureController:
         self.white_led = None
 
         # 스켈레톤: Haar Cascade 사용
-        self.face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
-        self.eye_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_eye.xml"
-        )
+        face_cascade_path = find_haarcascade_file("haarcascade_frontalface_default.xml")
+        eye_cascade_path = find_haarcascade_file("haarcascade_eye.xml")
+
+        self.face_cascade = cv2.CascadeClassifier(face_cascade_path)
+        self.eye_cascade = cv2.CascadeClassifier(eye_cascade_path)
+
+        if self.face_cascade.empty():
+            raise RuntimeError(f"얼굴 Cascade 로드 실패: {face_cascade_path}")
+
+        if self.eye_cascade.empty():
+            raise RuntimeError(f"눈 Cascade 로드 실패: {eye_cascade_path}")
 
     # -------------------------
     # GUI가 호출하는 공개 메서드
