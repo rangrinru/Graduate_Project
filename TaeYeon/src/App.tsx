@@ -48,6 +48,15 @@ type Toast = {
   type: "success" | "error" | "info";
 };
 
+type PorphyrinResult = {
+  porphyrin_count: number;
+  porphyrin_area: number;
+  threshold_value: number;
+  overlay_url: string;
+  mask_url: string;
+  compare_url: string;
+};
+
 type KeyboardMode = "ko" | "en" | "num";
 
 type HangulBuffer = {
@@ -227,6 +236,9 @@ function App() {
   const [deleteTarget, setDeleteTarget] = useState<Profile | null>(null);
   const [historyDeleteTarget, setHistoryDeleteTarget] = useState<HistoryItem | null>(null);
   const [isDeletingHistory, setIsDeletingHistory] = useState<string | null>(null);
+
+  const [isAnalyzingPorphyrin, setIsAnalyzingPorphyrin] = useState(false);
+  const [porphyrinResult, setPorphyrinResult] = useState<PorphyrinResult | null>(null);
 
   const currentImage = useMemo(() => {
     if (!selectedHistory) return null;
@@ -621,6 +633,7 @@ function App() {
     setSelectedProfile(profile);
     setSelectedHistory(null);
     setHistoryItems([]);
+    setPorphyrinResult(null);
     setScreen("camera");
   };
 
@@ -629,6 +642,7 @@ function App() {
     setSelectedProfile(null);
     setSelectedHistory(null);
     setHistoryItems([]);
+    setPorphyrinResult(null);
   };
 
   const capturePhoto = async () => {
@@ -721,6 +735,7 @@ function App() {
 
       setSelectedHistory(data);
       setSelectedFilter("no_filter");
+      setPorphyrinResult(null);
       setScreen("historyDetail");
     } catch (error) {
       console.error(error);
@@ -765,6 +780,7 @@ function App() {
 
       if (selectedHistory?.captureId === target.captureId) {
         setSelectedHistory(null);
+        setPorphyrinResult(null);
         setScreen("history");
       }
 
@@ -775,6 +791,52 @@ function App() {
       showToast("기록 삭제 실패", "error");
     } finally {
       setIsDeletingHistory(null);
+    }
+  };
+
+  const analyzePorphyrin = async () => {
+    if (!selectedProfile || !selectedHistory) {
+      showToast("분석할 촬영 기록이 없습니다.", "error");
+      return;
+    }
+
+    try {
+      setIsAnalyzingPorphyrin(true);
+      showToast("포르피린 분석을 시작합니다.", "info");
+
+      const encodedProfileId = encodeURIComponent(selectedProfile.folderId);
+      const encodedCaptureId = encodeURIComponent(selectedHistory.captureId);
+
+      const res = await fetch(
+        `${API_BASE}/profiles/${encodedProfileId}/history/${encodedCaptureId}/analyze-porphyrin`,
+        {
+          method: "POST",
+        }
+      );
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        showToast(data.error || "포르피린 분석 실패", "error");
+        return;
+      }
+
+      setPorphyrinResult({
+        porphyrin_count: data.porphyrin_count,
+        porphyrin_area: data.porphyrin_area,
+        threshold_value: data.threshold_value,
+        overlay_url: data.overlay_url,
+        mask_url: data.mask_url,
+        compare_url: data.compare_url,
+      });
+
+      setSelectedFilter("660nm_filter");
+      showToast(`분석 완료: ${data.porphyrin_count}개 검출`, "success");
+    } catch (error) {
+      console.error(error);
+      showToast("포르피린 분석 실패", "error");
+    } finally {
+      setIsAnalyzingPorphyrin(false);
     }
   };
 
@@ -979,7 +1041,8 @@ function App() {
         .history-card:hover,
         .filter-chip:hover,
         .mini-back-btn:hover,
-        .history-delete-btn:hover {
+        .history-delete-btn:hover,
+        .analysis-btn:hover {
           transform: scale(1.02);
         }
 
@@ -1253,7 +1316,8 @@ function App() {
         .history-delete-btn:disabled,
         .keyboard-key:disabled,
         .keyboard-mode-btn:disabled,
-        .keyboard-control-key:disabled {
+        .keyboard-control-key:disabled,
+        .analysis-btn:disabled {
           opacity: 0.55;
           cursor: not-allowed;
           transform: none !important;
@@ -1522,6 +1586,83 @@ function App() {
           text-align: center;
           line-height: 1.7;
           padding: 30px 16px;
+        }
+
+        .analysis-panel {
+          margin-top: 18px;
+          border-radius: 24px;
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.05);
+          padding: 16px;
+        }
+
+        .analysis-title {
+          color: white;
+          font-size: 18px;
+          font-weight: 800;
+          margin-bottom: 8px;
+        }
+
+        .analysis-description {
+          color: rgba(255,255,255,0.65);
+          font-size: 13px;
+          line-height: 1.6;
+          margin-bottom: 14px;
+        }
+
+        .analysis-btn {
+          width: 100%;
+          border: none;
+          border-radius: 18px;
+          padding: 15px 16px;
+          background: #ef4444;
+          color: white;
+          font-size: 16px;
+          font-weight: 800;
+          cursor: pointer;
+          transition: 0.2s ease;
+        }
+
+        .analysis-result-box {
+          margin-top: 16px;
+          border-radius: 18px;
+          background: rgba(0,0,0,0.25);
+          border: 1px solid rgba(255,255,255,0.08);
+          padding: 14px;
+        }
+
+        .analysis-result-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .analysis-stat {
+          border-radius: 16px;
+          background: rgba(255,255,255,0.07);
+          padding: 12px;
+          text-align: center;
+        }
+
+        .analysis-stat-label {
+          color: rgba(255,255,255,0.6);
+          font-size: 12px;
+          margin-bottom: 6px;
+        }
+
+        .analysis-stat-value {
+          color: white;
+          font-size: 18px;
+          font-weight: 800;
+        }
+
+        .analysis-image {
+          width: 100%;
+          max-height: 70vh;
+          object-fit: contain;
+          border-radius: 16px;
+          background: #000;
         }
 
         .history-card-time {
@@ -1885,6 +2026,55 @@ function App() {
                       ) : (
                         <div className="history-empty-image">
                           선택한 필터의 이미지가 없습니다.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="analysis-panel">
+                      <div className="analysis-title">포르피린 분석</div>
+                      <div className="analysis-description">
+                        660nm 필터 이미지에서 강한 형광 후보 영역을 검출합니다.
+                        분석 결과는 원본과 검출 결과를 나란히 보여줍니다.
+                      </div>
+
+                      <button
+                        className="analysis-btn"
+                        onClick={analyzePorphyrin}
+                        disabled={isAnalyzingPorphyrin || !selectedHistory}
+                      >
+                        {isAnalyzingPorphyrin ? "포르피린 분석 중..." : "포르피린 분석하기"}
+                      </button>
+
+                      {porphyrinResult && (
+                        <div className="analysis-result-box">
+                          <div className="analysis-result-grid">
+                            <div className="analysis-stat">
+                              <div className="analysis-stat-label">검출 개수</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_count}개
+                              </div>
+                            </div>
+
+                            <div className="analysis-stat">
+                              <div className="analysis-stat-label">검출 면적</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_area.toFixed(1)}
+                              </div>
+                            </div>
+
+                            <div className="analysis-stat">
+                              <div className="analysis-stat-label">임계값</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.threshold_value.toFixed(1)}
+                              </div>
+                            </div>
+                          </div>
+
+                          <img
+                            className="analysis-image"
+                            src={getImageSrc(porphyrinResult.compare_url)}
+                            alt="포르피린 분석 결과"
+                          />
                         </div>
                       )}
                     </div>
