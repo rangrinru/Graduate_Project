@@ -57,6 +57,48 @@ type PorphyrinResult = {
   compare_url: string;
 };
 
+type AutoCaptureChecks = {
+  face_found: boolean;
+  center_ok: boolean;
+  size_ok: boolean;
+  angle_ok: boolean;
+  eyes_closed: boolean;
+  stable_ok: boolean;
+};
+
+type AutoCaptureStatus = {
+  running: boolean;
+  captured: boolean;
+  profile_id: string | null;
+  capture_id: string | null;
+  status: string;
+  error: string | null;
+  checks: AutoCaptureChecks;
+  stable_face_count: number;
+  eyes_closed_count: number;
+  dynamic_eye_threshold: number;
+  white_led_is_on: boolean;
+  last_update: string | null;
+};
+
+const EMPTY_AUTO_CHECKS: AutoCaptureChecks = {
+  face_found: false,
+  center_ok: false,
+  size_ok: false,
+  angle_ok: false,
+  eyes_closed: false,
+  stable_ok: false,
+};
+
+const AUTO_CHECK_LABELS: Array<{ key: keyof AutoCaptureChecks; label: string }> = [
+  { key: "face_found", label: "얼굴 인식" },
+  { key: "center_ok", label: "얼굴 중앙 정렬" },
+  { key: "size_ok", label: "얼굴 크기" },
+  { key: "angle_ok", label: "얼굴 각도" },
+  { key: "eyes_closed", label: "눈 감음" },
+  { key: "stable_ok", label: "안정 유지" },
+];
+
 type KeyboardMode = "ko" | "en" | "num";
 
 type HangulBuffer = {
@@ -240,12 +282,21 @@ function App() {
   const [isAnalyzingPorphyrin, setIsAnalyzingPorphyrin] = useState(false);
   const [porphyrinResult, setPorphyrinResult] = useState<PorphyrinResult | null>(null);
 
+  const [whiteLedOn, setWhiteLedOn] = useState(false);
+  const [isChangingWhiteLed, setIsChangingWhiteLed] = useState(false);
+  const [isStartingAutoCapture, setIsStartingAutoCapture] = useState(false);
+  const [autoStatus, setAutoStatus] = useState<AutoCaptureStatus | null>(null);
+
   const currentImage = useMemo(() => {
     if (!selectedHistory) return null;
     return selectedHistory.images[selectedFilter] || null;
   }, [selectedHistory, selectedFilter]);
 
   const profileNameInputValue = profileInputText + composeHangul(hangulBuffer);
+
+  const autoChecks = autoStatus?.checks ?? EMPTY_AUTO_CHECKS;
+  const isAutoRunning = autoStatus?.running ?? false;
+  const showAutoPanel = Boolean(autoStatus && (autoStatus.running || autoStatus.captured || autoStatus.error));
 
   const showToast = (
     message: string,
@@ -296,6 +347,31 @@ function App() {
   useEffect(() => {
     fetchProfiles();
   }, []);
+
+  useEffect(() => {
+    if (screen !== "camera") {
+      return;
+    }
+
+    fetchWhiteLedStatus();
+    fetchAutoCaptureStatus(false);
+
+    const intervalId = window.setInterval(() => {
+      fetchAutoCaptureStatus(false);
+    }, 500);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [screen]);
+
+  useEffect(() => {
+    if (!autoStatus?.captured || !autoStatus.capture_id) {
+      return;
+    }
+
+    showToast("자동 촬영이 완료되었습니다.", "success");
+  }, [autoStatus?.captured, autoStatus?.capture_id]);
 
   const createProfile = async () => {
     const trimmed = profileNameInputValue.trim();
@@ -634,6 +710,7 @@ function App() {
     setSelectedHistory(null);
     setHistoryItems([]);
     setPorphyrinResult(null);
+    setAutoStatus(null);
     setScreen("camera");
   };
 
@@ -643,6 +720,7 @@ function App() {
     setSelectedHistory(null);
     setHistoryItems([]);
     setPorphyrinResult(null);
+    setAutoStatus(null);
   };
 
   const capturePhoto = async () => {
@@ -837,6 +915,155 @@ function App() {
       showToast("포르피린 분석 실패", "error");
     } finally {
       setIsAnalyzingPorphyrin(false);
+    }
+  };
+
+  const fetchWhiteLedStatus = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/white-led/status`);
+      const data = await res.json();
+
+      if (data.ok) {
+        setWhiteLedOn(Boolean(data.white_led_is_on));
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const toggleWhiteLed = async () => {
+    try {
+      setIsChangingWhiteLed(true);
+
+      const nextOn = !whiteLedOn;
+      const res = await fetch(`${API_BASE}/white-led/${nextOn ? "on" : "off"}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+
+      if (!data.ok) {
+        showToast(data.error || "백색 LED 제어 실패", "error");
+        return;
+      }
+
+      setWhiteLedOn(Boolean(data.white_led_is_on));
+      showToast(data.white_led_is_on ? "백색 LED 켜짐" : "백색 LED 꺼짐", "success");
+    } catch (error) {
+      console.error(error);
+      showToast("백색 LED 제어 실패", "error");
+    } finally {
+      setIsChangingWhiteLed(false);
+    }
+  };
+
+  const fetchAutoCaptureStatus = async (showError = false) => {
+    try {
+      const res = await fetch(`${API_BASE}/auto-capture/status`);
+      const data = await res.json();
+
+      if (!data.ok) {
+        if (showError) {
+          showToast(data.error || "자동 촬영 상태 확인 실패", "error");
+        }
+        return;
+      }
+
+      setAutoStatus({
+        running: Boolean(data.running),
+        captured: Boolean(data.captured),
+        profile_id: data.profile_id ?? null,
+        capture_id: data.capture_id ?? null,
+        status: data.status || "자동 촬영 대기 중",
+        error: data.error ?? null,
+        checks: data.checks || EMPTY_AUTO_CHECKS,
+        stable_face_count: Number(data.stable_face_count || 0),
+        eyes_closed_count: Number(data.eyes_closed_count || 0),
+        dynamic_eye_threshold: Number(data.dynamic_eye_threshold || 0),
+        white_led_is_on: Boolean(data.white_led_is_on),
+        last_update: data.last_update ?? null,
+      });
+
+      if (typeof data.white_led_is_on === "boolean") {
+        setWhiteLedOn(data.white_led_is_on);
+      }
+    } catch (error) {
+      console.error(error);
+      if (showError) {
+        showToast("자동 촬영 상태 확인 실패", "error");
+      }
+    }
+  };
+
+  const startAutoCapture = async () => {
+    if (!selectedProfile) {
+      showToast("프로필을 먼저 선택하세요.", "error");
+      return;
+    }
+
+    try {
+      setIsStartingAutoCapture(true);
+      setAutoStatus(null);
+      showToast("자동 촬영 조건 확인을 시작합니다.", "info");
+
+      const res = await fetch(`${API_BASE}/auto-capture/start`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          profileId: selectedProfile.folderId,
+        }),
+      });
+      const data = await res.json();
+
+      if (!data.ok) {
+        showToast(data.error || "자동 촬영 시작 실패", "error");
+        return;
+      }
+
+      setAutoStatus({
+        running: Boolean(data.running),
+        captured: Boolean(data.captured),
+        profile_id: data.profile_id ?? null,
+        capture_id: data.capture_id ?? null,
+        status: data.status || "자동 촬영 조건 확인 중",
+        error: data.error ?? null,
+        checks: data.checks || EMPTY_AUTO_CHECKS,
+        stable_face_count: Number(data.stable_face_count || 0),
+        eyes_closed_count: Number(data.eyes_closed_count || 0),
+        dynamic_eye_threshold: Number(data.dynamic_eye_threshold || 0),
+        white_led_is_on: Boolean(data.white_led_is_on),
+        last_update: data.last_update ?? null,
+      });
+
+      if (typeof data.white_led_is_on === "boolean") {
+        setWhiteLedOn(data.white_led_is_on);
+      }
+    } catch (error) {
+      console.error(error);
+      showToast("자동 촬영 시작 실패", "error");
+    } finally {
+      setIsStartingAutoCapture(false);
+    }
+  };
+
+  const cancelAutoCapture = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auto-capture/cancel`, {
+        method: "POST",
+      });
+      const data = await res.json();
+
+      if (!data.ok) {
+        showToast(data.error || "자동 촬영 취소 실패", "error");
+        return;
+      }
+
+      await fetchAutoCaptureStatus(false);
+      showToast("자동 촬영을 취소했습니다.", "info");
+    } catch (error) {
+      console.error(error);
+      showToast("자동 촬영 취소 실패", "error");
     }
   };
 
@@ -1259,8 +1486,151 @@ function App() {
           transition: 0.2s ease;
         }
 
+        .white-led-control.on {
+          background: rgba(255,255,255,0.92);
+          color: #0f172a;
+          border-color: rgba(255,255,255,0.95);
+        }
+
+        .auto-capture-control {
+          background: rgba(34, 197, 94, 0.34);
+          border-color: rgba(34, 197, 94, 0.55);
+          color: #dcfce7;
+          font-weight: 800;
+        }
+
+        .auto-cancel-control {
+          background: rgba(239, 68, 68, 0.32);
+          border-color: rgba(239, 68, 68, 0.58);
+          color: #fee2e2;
+          font-weight: 800;
+        }
+
         .mini-back-btn {
           margin-top: 14px;
+        }
+
+        .auto-check-panel {
+          position: absolute;
+          left: 18px;
+          right: 18px;
+          top: 102px;
+          z-index: 25;
+          padding: 16px;
+          border-radius: 22px;
+          background: rgba(0, 0, 0, 0.56);
+          border: 1px solid rgba(255,255,255,0.16);
+          color: white;
+          backdrop-filter: blur(12px);
+          box-shadow: 0 16px 40px rgba(0,0,0,0.28);
+        }
+
+        .auto-check-panel.done {
+          border-color: rgba(34, 197, 94, 0.65);
+        }
+
+        .auto-check-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+
+        .auto-check-title {
+          font-size: 20px;
+          font-weight: 900;
+          margin-bottom: 6px;
+        }
+
+        .auto-check-message {
+          min-height: 22px;
+          font-size: 15px;
+          font-weight: 700;
+          line-height: 1.4;
+          color: rgba(255,255,255,0.9);
+        }
+
+        .auto-check-state {
+          flex-shrink: 0;
+          padding: 8px 12px;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 900;
+          border: 1px solid rgba(255,255,255,0.16);
+        }
+
+        .auto-check-state.running {
+          background: rgba(59, 130, 246, 0.22);
+          color: #bfdbfe;
+        }
+
+        .auto-check-state.done {
+          background: rgba(34, 197, 94, 0.24);
+          color: #bbf7d0;
+        }
+
+        .auto-check-state.idle {
+          background: rgba(255,255,255,0.12);
+          color: rgba(255,255,255,0.8);
+        }
+
+        .auto-check-list {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+
+        .auto-check-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-height: 44px;
+          padding: 0 12px;
+          border-radius: 16px;
+          font-size: 14px;
+          font-weight: 900;
+          transition: 0.18s ease;
+        }
+
+        .auto-check-item.fail {
+          background: rgba(239, 68, 68, 0.25);
+          border: 1px solid rgba(239, 68, 68, 0.72);
+          color: #fecaca;
+        }
+
+        .auto-check-item.ok {
+          background: rgba(34, 197, 94, 0.25);
+          border: 1px solid rgba(34, 197, 94, 0.72);
+          color: #bbf7d0;
+        }
+
+        .auto-check-icon {
+          width: 24px;
+          height: 24px;
+          border-radius: 999px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          font-weight: 900;
+        }
+
+        .auto-check-item.fail .auto-check-icon {
+          background: #ef4444;
+          color: white;
+        }
+
+        .auto-check-item.ok .auto-check-icon {
+          background: #22c55e;
+          color: white;
+        }
+
+        .auto-capture-id {
+          margin-top: 12px;
+          font-size: 12px;
+          color: rgba(255,255,255,0.65);
+          word-break: break-all;
         }
 
         .guide-wrap {
@@ -1836,19 +2206,85 @@ function App() {
                 <button
                   className="control-btn"
                   onClick={() => setShowGuide((prev) => !prev)}
-                  disabled={isCapturing}
+                  disabled={isCapturing || isAutoRunning}
                 >
                   {showGuide ? "실루엣 끄기" : "실루엣 켜기"}
                 </button>
 
                 <button
+                  className={`control-btn white-led-control ${whiteLedOn ? "on" : ""}`}
+                  onClick={toggleWhiteLed}
+                  disabled={isCapturing || isChangingWhiteLed}
+                >
+                  {whiteLedOn ? "백색 LED 끄기" : "백색 LED 켜기"}
+                </button>
+
+                <button
+                  className="control-btn auto-capture-control"
+                  onClick={startAutoCapture}
+                  disabled={isCapturing || isAutoRunning || isStartingAutoCapture}
+                >
+                  {isStartingAutoCapture ? "자동 촬영 준비 중..." : "자동 얼굴 촬영"}
+                </button>
+
+                {isAutoRunning && (
+                  <button
+                    className="control-btn auto-cancel-control"
+                    onClick={cancelAutoCapture}
+                  >
+                    자동 촬영 취소
+                  </button>
+                )}
+
+                <button
                   className="control-btn"
                   onClick={openHistory}
-                  disabled={isCapturing}
+                  disabled={isCapturing || isAutoRunning}
                 >
                   이전 기록 확인
                 </button>
               </div>
+
+              {showAutoPanel && (
+                <div className={`auto-check-panel ${autoStatus?.captured ? "done" : ""}`}>
+                  <div className="auto-check-header">
+                    <div>
+                      <div className="auto-check-title">자동 촬영 조건 확인</div>
+                      <div className="auto-check-message">
+                        {autoStatus?.error || autoStatus?.status || "자동 촬영을 시작해 주세요."}
+                      </div>
+                    </div>
+
+                    <div className={`auto-check-state ${autoStatus?.captured ? "done" : isAutoRunning ? "running" : "idle"}`}>
+                      {autoStatus?.captured ? "완료" : isAutoRunning ? "확인 중" : "대기"}
+                    </div>
+                  </div>
+
+                  <div className="auto-check-list">
+                    {AUTO_CHECK_LABELS.map((item) => {
+                      const ok = Boolean(autoChecks[item.key]);
+
+                      return (
+                        <div
+                          key={item.key}
+                          className={`auto-check-item ${ok ? "ok" : "fail"}`}
+                        >
+                          <span className="auto-check-icon">
+                            {ok ? "✓" : "!"}
+                          </span>
+                          <span>{item.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {autoStatus?.capture_id && (
+                    <div className="auto-capture-id">
+                      저장된 captureId: {autoStatus.capture_id}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {showGuide && (
                 <div className="guide-wrap">
@@ -1859,20 +2295,22 @@ function App() {
               <button
                 className="back-btn"
                 onClick={goToProfiles}
-                disabled={isCapturing}
+                disabled={isCapturing || isAutoRunning}
               >
                 프로필로 돌아가기
               </button>
 
-              {isCapturing && (
-                <div className="capture-status">촬영 중...</div>
+              {(isCapturing || isAutoRunning) && (
+                <div className="capture-status">
+                  {isCapturing ? "촬영 중..." : autoStatus?.status || "자동 촬영 조건 확인 중..."}
+                </div>
               )}
 
               <div className="capture-area">
                 <button
                   className="capture-btn"
                   onClick={capturePhoto}
-                  disabled={isCapturing}
+                  disabled={isCapturing || isAutoRunning}
                 >
                   <div className="capture-inner"></div>
                 </button>

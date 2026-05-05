@@ -13,6 +13,9 @@ import numpy as np
 # JSON 파일 읽기/쓰기용 import
 import json
 
+# 얼굴 각도 계산을 위한 math import
+import math
+
 # 카메라 동기화용 스레드 락 import
 import threading
 
@@ -28,14 +31,23 @@ from pathlib import Path
 # 날짜/시간 처리용 import
 from datetime import datetime
 
-# 대기 시간용 import
-from time import sleep
+# 대기 시간과 경과 시간 측정용 import
+from time import sleep, monotonic
+
+# 눈 감음 기준값 누적용 deque import
+from collections import deque
 
 # 릴레이 제어용 GPIO import
 from gpiozero import LED
 
 # Picamera2 import
 from picamera2 import Picamera2
+
+# MediaPipe 얼굴 인식 모듈은 설치되어 있을 때만 사용
+try:
+    import mediapipe as mp
+except ImportError:
+    mp = None
 
 
 # Flask 앱 생성
@@ -59,7 +71,7 @@ CAPTURE_HEIGHT = 800
 SINGLE_WIDTH = CAPTURE_WIDTH // 4
 
 # 저장 루트 경로 설정
-SAVE_ROOT = Path.home() / "Graduate_Project" / "TaeYeon" / "captures"
+SAVE_ROOT = Path.home() / "Graduate_Project" / "Final_Project" / "captures"
 
 # 저장 루트 폴더가 없으면 생성
 SAVE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -88,6 +100,60 @@ RELAY_ACTIVE_HIGH = False
 # 릴레이 켠 후 안정화 대기 시간
 RELAY_WARMUP_SEC = 0.3
 
+# 백색 LED 연결 GPIO 번호
+WHITE_LED_PIN = 22
+
+# 백색 LED active_high 여부
+WHITE_LED_ACTIVE_HIGH = True
+
+# 자동 촬영 직전 백색 LED를 끈 뒤 대기하는 시간
+WHITE_LED_OFF_BEFORE_CAPTURE_SEC = 0.15
+
+# 얼굴 중앙 허용 오차 X축 비율
+FACE_CENTER_TOL_X = 0.18
+
+# 얼굴 중앙 허용 오차 Y축 비율
+FACE_CENTER_TOL_Y = 0.20
+
+# 얼굴이 너무 작은지 판단하는 최소 면적 비율
+FACE_MIN_AREA_RATIO = 0.08
+
+# 얼굴이 너무 큰지 판단하는 최대 면적 비율
+FACE_MAX_AREA_RATIO = 0.70
+
+# 얼굴 좌우 기울기 허용 각도
+MAX_ABS_ROLL_DEG = 8.0
+
+# 얼굴 좌우 회전 점수 허용값
+MAX_ABS_YAW_SCORE = 0.12
+
+# 얼굴 위아래 회전 점수 허용값
+MAX_ABS_PITCH_SCORE = 0.12
+
+# 기본 눈 감음 EAR 기준값
+DEFAULT_EYE_AR_THRESHOLD = 0.18
+
+# 자동 보정 EAR 최소값
+MIN_DYNAMIC_EYE_AR_THRESHOLD = 0.14
+
+# 자동 보정 EAR 최대값
+MAX_DYNAMIC_EYE_AR_THRESHOLD = 0.26
+
+# 열린 눈 평균값에 곱할 비율
+EYE_THRESHOLD_RATIO = 0.72
+
+# 얼굴 정렬이 유지되어야 하는 프레임 수
+STABLE_FACE_HOLD_FRAMES = 6
+
+# 열린 눈 기준값을 계산할 샘플 수
+OPEN_EYE_BASELINE_SAMPLES = 15
+
+# 눈 감음이 유지되어야 하는 프레임 수
+EYES_CLOSED_HOLD_FRAMES = 4
+
+# 자동 촬영 상태 갱신 주기
+AUTO_CAPTURE_INTERVAL_SEC = 0.12
+
 
 # =========================
 # 릴레이 객체 생성
@@ -95,6 +161,12 @@ RELAY_WARMUP_SEC = 0.3
 
 # 릴레이 LED 객체 생성
 relay = LED(RELAY_PIN, active_high=RELAY_ACTIVE_HIGH, initial_value=False)
+
+# 백색 LED 객체 생성
+white_led = LED(WHITE_LED_PIN, active_high=WHITE_LED_ACTIVE_HIGH, initial_value=False)
+
+# 백색 LED 상태값
+white_led_is_on = False
 
 
 # =========================
@@ -151,6 +223,89 @@ preview_config = None
 # 스틸 캡처 설정
 still_config = None
 
+# 자동 촬영 스레드 객체
+auto_capture_thread = None
+
+# 자동 촬영 상태 동기화용 락
+auto_state_lock = threading.Lock()
+
+# 열린 눈 EAR 기준값 누적 배열
+OPEN_EYE_EAR_HISTORY = deque(maxlen=OPEN_EYE_BASELINE_SAMPLES)
+
+# MediaPipe 얼굴 메시 객체 생성
+if mp is not None:
+    mp_face_mesh = mp.solutions.face_mesh
+    face_mesh = mp_face_mesh.FaceMesh(
+        static_image_mode=False,
+        max_num_faces=1,
+        refine_landmarks=False,
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5,
+    )
+else:
+    face_mesh = None
+
+# 왼쪽 눈 랜드마크 인덱스
+LEFT_EYE = [33, 160, 158, 133, 153, 144]
+
+# 오른쪽 눈 랜드마크 인덱스
+RIGHT_EYE = [362, 385, 387, 263, 373, 380]
+
+# 코 끝 랜드마크 인덱스
+NOSE_TIP_IDX = 1
+
+# 왼쪽 눈 바깥쪽 랜드마크 인덱스
+LEFT_EYE_OUTER_IDX = 33
+
+# 오른쪽 눈 바깥쪽 랜드마크 인덱스
+RIGHT_EYE_OUTER_IDX = 263
+
+# 얼굴 왼쪽 끝 랜드마크 인덱스
+LEFT_FACE_IDX = 234
+
+# 얼굴 오른쪽 끝 랜드마크 인덱스
+RIGHT_FACE_IDX = 454
+
+# 얼굴 위쪽 랜드마크 인덱스
+UPPER_FACE_IDX = 10
+
+# 얼굴 아래쪽 랜드마크 인덱스
+LOWER_FACE_IDX = 152
+
+# 입 왼쪽 랜드마크 인덱스
+MOUTH_LEFT_IDX = 61
+
+# 입 오른쪽 랜드마크 인덱스
+MOUTH_RIGHT_IDX = 291
+
+
+def make_default_auto_checks():
+    # 자동 촬영 조건 기본값 생성
+    return {
+        "face_found": False,
+        "center_ok": False,
+        "size_ok": False,
+        "angle_ok": False,
+        "eyes_closed": False,
+        "stable_ok": False,
+    }
+
+
+# 자동 촬영 상태값
+AUTO_STATE = {
+    "running": False,
+    "captured": False,
+    "profile_id": None,
+    "capture_id": None,
+    "status": "자동 촬영 대기 중",
+    "error": None,
+    "checks": make_default_auto_checks(),
+    "stable_face_count": 0,
+    "eyes_closed_count": 0,
+    "dynamic_eye_threshold": DEFAULT_EYE_AR_THRESHOLD,
+    "last_update": None,
+}
+
 
 # =========================
 # 릴레이 제어 함수
@@ -164,6 +319,28 @@ def relay_on():
 def relay_off():
     # 릴레이 끄기
     relay.off()
+
+
+def white_led_on():
+    # 전역 백색 LED 상태값 사용 선언
+    global white_led_is_on
+
+    # 백색 LED 켜기
+    white_led.on()
+
+    # 백색 LED 상태값 갱신
+    white_led_is_on = True
+
+
+def white_led_off():
+    # 전역 백색 LED 상태값 사용 선언
+    global white_led_is_on
+
+    # 백색 LED 끄기
+    white_led.off()
+
+    # 백색 LED 상태값 갱신
+    white_led_is_on = False
 
 
 # =========================
@@ -802,6 +979,583 @@ def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Pa
 
 
 # =========================
+# 자동 얼굴 촬영 유틸 함수
+# =========================
+
+def _euclidean(p1, p2):
+    # 두 점 사이의 유클리드 거리 계산
+    return ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5
+
+
+def _eye_aspect_ratio(eye_pts):
+    # 눈 위아래 거리 1 계산
+    a = _euclidean(eye_pts[1], eye_pts[5])
+
+    # 눈 위아래 거리 2 계산
+    b = _euclidean(eye_pts[2], eye_pts[4])
+
+    # 눈 좌우 거리 계산
+    c = _euclidean(eye_pts[0], eye_pts[3])
+
+    # 0으로 나누는 상황 방지
+    if c == 0:
+        return 1.0
+
+    # EAR 값 반환
+    return (a + b) / (2.0 * c)
+
+
+def update_dynamic_eye_threshold(avg_ear):
+    # 열린 눈 EAR 값을 누적
+    OPEN_EYE_EAR_HISTORY.append(avg_ear)
+
+    # 충분한 샘플이 쌓이면 동적 기준값 계산
+    if len(OPEN_EYE_EAR_HISTORY) >= max(8, OPEN_EYE_BASELINE_SAMPLES // 2):
+        # 열린 눈 평균값 계산
+        baseline = sum(OPEN_EYE_EAR_HISTORY) / len(OPEN_EYE_EAR_HISTORY)
+
+        # 열린 눈 평균값에 비율을 곱해 눈 감음 기준값 계산
+        dynamic = baseline * EYE_THRESHOLD_RATIO
+
+        # 너무 낮거나 높은 값으로 튀지 않게 제한
+        dynamic = max(MIN_DYNAMIC_EYE_AR_THRESHOLD, min(MAX_DYNAMIC_EYE_AR_THRESHOLD, dynamic))
+
+        # 자동 촬영 상태에 동적 기준값 저장
+        with auto_state_lock:
+            AUTO_STATE["dynamic_eye_threshold"] = dynamic
+
+
+def analyze_face_for_auto(cam2_bgr):
+    # 이미지 높이와 폭 읽기
+    h, w = cam2_bgr.shape[:2]
+
+    # 기본 분석 결과 구성
+    result = {
+        "face_found": False,
+        "center_ok": False,
+        "size_ok": False,
+        "eyes_closed": False,
+        "roll_ok": False,
+        "yaw_ok": False,
+        "pitch_ok": False,
+        "angles_ok": False,
+        "ear_left": 1.0,
+        "ear_right": 1.0,
+        "avg_ear": 1.0,
+        "roll_deg": 0.0,
+        "yaw_score": 0.0,
+        "pitch_score": 0.0,
+        "bbox": None,
+        "guide_text": "얼굴을 화면에 맞춰주세요",
+    }
+
+    # MediaPipe가 설치되어 있지 않으면 분석 불가 처리
+    if face_mesh is None:
+        result["guide_text"] = "mediapipe가 설치되어 있지 않습니다"
+        return result
+
+    # BGR 이미지를 RGB로 변환
+    rgb = cv2.cvtColor(cam2_bgr, cv2.COLOR_BGR2RGB)
+
+    # MediaPipe 얼굴 메시 분석 실행
+    mesh_result = face_mesh.process(rgb)
+
+    # 얼굴이 감지되지 않으면 반환
+    if not mesh_result.multi_face_landmarks:
+        result["guide_text"] = "얼굴이 감지되지 않습니다"
+        return result
+
+    # 랜드마크 좌표 배열 생성
+    pts = []
+
+    # 첫 번째 얼굴의 모든 랜드마크 순회
+    for lm in mesh_result.multi_face_landmarks[0].landmark:
+        # 정규화 좌표를 픽셀 좌표로 변환하여 저장
+        pts.append((int(lm.x * w), int(lm.y * h)))
+
+    # 얼굴 전체 x 좌표 배열 생성
+    xs = [p[0] for p in pts]
+
+    # 얼굴 전체 y 좌표 배열 생성
+    ys = [p[1] for p in pts]
+
+    # 얼굴 박스 왼쪽 좌표 계산
+    x1 = max(0, min(xs))
+
+    # 얼굴 박스 오른쪽 좌표 계산
+    x2 = min(w - 1, max(xs))
+
+    # 얼굴 박스 위쪽 좌표 계산
+    y1 = max(0, min(ys))
+
+    # 얼굴 박스 아래쪽 좌표 계산
+    y2 = min(h - 1, max(ys))
+
+    # 얼굴 박스 폭 계산
+    bw = max(1, x2 - x1)
+
+    # 얼굴 박스 높이 계산
+    bh = max(1, y2 - y1)
+
+    # 얼굴 면적 비율 계산
+    area_ratio = (bw * bh) / float(w * h)
+
+    # 얼굴 중심 x 좌표 계산
+    cx = (x1 + x2) / 2.0
+
+    # 얼굴 중심 y 좌표 계산
+    cy = (y1 + y2) / 2.0
+
+    # 중앙에서 벗어난 x 비율 계산
+    norm_dx = abs(cx - (w / 2.0)) / w
+
+    # 중앙에서 벗어난 y 비율 계산
+    norm_dy = abs(cy - (h / 2.0)) / h
+
+    # 왼쪽 눈 좌표 배열 생성
+    left_eye_pts = [pts[i] for i in LEFT_EYE]
+
+    # 오른쪽 눈 좌표 배열 생성
+    right_eye_pts = [pts[i] for i in RIGHT_EYE]
+
+    # 왼쪽 눈 EAR 계산
+    ear_left = _eye_aspect_ratio(left_eye_pts)
+
+    # 오른쪽 눈 EAR 계산
+    ear_right = _eye_aspect_ratio(right_eye_pts)
+
+    # 양쪽 눈 평균 EAR 계산
+    avg_ear = (ear_left + ear_right) / 2.0
+
+    # 얼굴 중앙 정렬 여부 계산
+    center_ok = (norm_dx <= FACE_CENTER_TOL_X) and (norm_dy <= FACE_CENTER_TOL_Y)
+
+    # 얼굴 크기 적정 여부 계산
+    size_ok = (FACE_MIN_AREA_RATIO <= area_ratio <= FACE_MAX_AREA_RATIO)
+
+    # 코 끝 좌표 읽기
+    nose = pts[NOSE_TIP_IDX]
+
+    # 왼쪽 눈 바깥쪽 좌표 읽기
+    le = pts[LEFT_EYE_OUTER_IDX]
+
+    # 오른쪽 눈 바깥쪽 좌표 읽기
+    re = pts[RIGHT_EYE_OUTER_IDX]
+
+    # 얼굴 왼쪽 끝 좌표 읽기
+    lf = pts[LEFT_FACE_IDX]
+
+    # 얼굴 오른쪽 끝 좌표 읽기
+    rf = pts[RIGHT_FACE_IDX]
+
+    # 얼굴 위쪽 좌표 읽기
+    upper = pts[UPPER_FACE_IDX]
+
+    # 얼굴 아래쪽 좌표 읽기
+    lower = pts[LOWER_FACE_IDX]
+
+    # 입 왼쪽 좌표 읽기
+    ml = pts[MOUTH_LEFT_IDX]
+
+    # 입 오른쪽 좌표 읽기
+    mr = pts[MOUTH_RIGHT_IDX]
+
+    # 양쪽 눈 중심 좌표 계산
+    eye_mid = ((le[0] + re[0]) / 2.0, (le[1] + re[1]) / 2.0)
+
+    # 입 중심 좌표 계산
+    mouth_mid = ((ml[0] + mr[0]) / 2.0, (ml[1] + mr[1]) / 2.0)
+
+    # 얼굴 중심 x 좌표 계산
+    face_mid_x = (lf[0] + rf[0]) / 2.0
+
+    # 얼굴 폭 계산
+    face_width = max(1.0, float(rf[0] - lf[0]))
+
+    # 얼굴 높이 계산
+    face_height = max(1.0, float(lower[1] - upper[1]))
+
+    # 얼굴 좌우 기울기 각도 계산
+    roll_deg = math.degrees(math.atan2(re[1] - le[1], re[0] - le[0]))
+
+    # 좌우 회전 점수 계산
+    yaw_score = abs(nose[0] - face_mid_x) / face_width
+
+    # 위아래 회전 점수 계산
+    pitch_score = abs(nose[1] - ((eye_mid[1] + mouth_mid[1]) / 2.0)) / face_height
+
+    # 좌우 기울기 허용 여부 계산
+    roll_ok = abs(roll_deg) <= MAX_ABS_ROLL_DEG
+
+    # 좌우 회전 허용 여부 계산
+    yaw_ok = yaw_score <= MAX_ABS_YAW_SCORE
+
+    # 위아래 회전 허용 여부 계산
+    pitch_ok = pitch_score <= MAX_ABS_PITCH_SCORE
+
+    # 전체 각도 허용 여부 계산
+    angles_ok = roll_ok and yaw_ok and pitch_ok
+
+    # 현재 눈 감음 기준값 읽기
+    with auto_state_lock:
+        threshold = AUTO_STATE["dynamic_eye_threshold"]
+
+    # 양쪽 눈이 모두 기준값보다 낮으면 눈 감음 처리
+    eyes_closed = (ear_left < threshold) and (ear_right < threshold)
+
+    # 분석 결과 갱신
+    result.update({
+        "face_found": True,
+        "center_ok": center_ok,
+        "size_ok": size_ok,
+        "eyes_closed": eyes_closed,
+        "roll_ok": roll_ok,
+        "yaw_ok": yaw_ok,
+        "pitch_ok": pitch_ok,
+        "angles_ok": angles_ok,
+        "ear_left": ear_left,
+        "ear_right": ear_right,
+        "avg_ear": avg_ear,
+        "roll_deg": roll_deg,
+        "yaw_score": yaw_score,
+        "pitch_score": pitch_score,
+        "bbox": (x1, y1, x2, y2),
+    })
+
+    # 얼굴 위치가 틀어진 경우 안내 문구 설정
+    if not center_ok:
+        result["guide_text"] = "얼굴을 화면 중앙에 맞춰주세요"
+
+    # 얼굴 크기가 부적절한 경우 안내 문구 설정
+    elif not size_ok:
+        result["guide_text"] = "얼굴 거리를 조정해주세요"
+
+    # 얼굴 각도가 부적절한 경우 안내 문구 설정
+    elif not angles_ok:
+        result["guide_text"] = "얼굴 각도를 정면으로 맞춰주세요"
+
+    # 눈을 아직 감지 않은 경우 안내 문구 설정
+    elif not eyes_closed:
+        result["guide_text"] = "눈을 감아주세요"
+
+    # 모든 기본 조건이 충족된 경우 안내 문구 설정
+    else:
+        result["guide_text"] = "조건 충족"
+
+    # 분석 결과 반환
+    return result
+
+
+def build_auto_checks(detection):
+    # 자동 촬영 체크 결과 구성
+    return {
+        "face_found": bool(detection.get("face_found")),
+        "center_ok": bool(detection.get("center_ok")),
+        "size_ok": bool(detection.get("size_ok")),
+        "angle_ok": bool(detection.get("angles_ok")),
+        "eyes_closed": bool(detection.get("eyes_closed")),
+        "stable_ok": False,
+    }
+
+
+def update_auto_state_from_detection(detection):
+    # 현재 검사 결과 생성
+    checks = build_auto_checks(detection)
+
+    # 기본 안정 조건 계산
+    stable_face_ok = (
+        checks["face_found"]
+        and checks["center_ok"]
+        and checks["size_ok"]
+        and checks["angle_ok"]
+    )
+
+    # 자동 촬영 상태 갱신을 위해 락 획득
+    with auto_state_lock:
+        # 얼굴 기본 조건이 안정적이면 카운트 증가
+        if stable_face_ok:
+            AUTO_STATE["stable_face_count"] += 1
+
+        # 얼굴 기본 조건이 불안정하면 카운트 초기화
+        else:
+            AUTO_STATE["stable_face_count"] = 0
+            AUTO_STATE["eyes_closed_count"] = 0
+
+        # 안정 유지 조건 갱신
+        checks["stable_ok"] = AUTO_STATE["stable_face_count"] >= STABLE_FACE_HOLD_FRAMES
+
+        # 얼굴을 못 찾은 경우 상태 문구 설정
+        if not checks["face_found"]:
+            AUTO_STATE["status"] = "얼굴이 감지되지 않습니다"
+
+        # 중앙 정렬이 안 된 경우 상태 문구 설정
+        elif not checks["center_ok"]:
+            AUTO_STATE["status"] = "얼굴을 화면 중앙에 맞춰주세요"
+
+        # 얼굴 크기가 안 맞는 경우 상태 문구 설정
+        elif not checks["size_ok"]:
+            AUTO_STATE["status"] = "얼굴 거리를 조정해주세요"
+
+        # 얼굴 각도가 안 맞는 경우 상태 문구 설정
+        elif not checks["angle_ok"]:
+            AUTO_STATE["status"] = "얼굴 각도를 정면으로 맞춰주세요"
+
+        # 얼굴 안정 유지 프레임이 부족한 경우 상태 문구 설정
+        elif not checks["stable_ok"]:
+            AUTO_STATE["status"] = f"얼굴 고정 중 {AUTO_STATE['stable_face_count']}/{STABLE_FACE_HOLD_FRAMES}"
+
+        # 눈을 아직 감지 않은 경우 상태 문구 설정
+        elif not checks["eyes_closed"]:
+            AUTO_STATE["eyes_closed_count"] = 0
+            AUTO_STATE["status"] = "얼굴을 유지한 채 눈을 감아주세요"
+
+        # 눈 감음이 확인된 경우 상태 문구 설정
+        else:
+            AUTO_STATE["eyes_closed_count"] += 1
+            AUTO_STATE["status"] = f"눈감음 확인 중 {AUTO_STATE['eyes_closed_count']}/{EYES_CLOSED_HOLD_FRAMES}"
+
+        # 검사 결과 저장
+        AUTO_STATE["checks"] = checks
+
+        # 최근 갱신 시각 저장
+        AUTO_STATE["last_update"] = datetime.now().isoformat()
+
+        # 눈 감음 유지 여부 반환
+        return AUTO_STATE["eyes_closed_count"] >= EYES_CLOSED_HOLD_FRAMES
+
+
+def snapshot_detection_for_metadata(detection):
+    # 메타데이터 저장용 감지 결과 생성
+    return {
+        "bbox": list(detection["bbox"]) if detection.get("bbox") is not None else None,
+        "roll_deg": float(detection.get("roll_deg", 0.0)),
+        "yaw_score": float(detection.get("yaw_score", 0.0)),
+        "pitch_score": float(detection.get("pitch_score", 0.0)),
+        "dynamic_eye_threshold": float(AUTO_STATE.get("dynamic_eye_threshold", DEFAULT_EYE_AR_THRESHOLD)),
+    }
+
+
+def perform_capture_for_profile(profile_id: str):
+    # profileId가 비어 있으면 예외 발생
+    if not str(profile_id).strip():
+        raise ValueError("profileId가 필요합니다.")
+
+    # 프로필 정보 조회
+    profile = find_profile_by_id(profile_id)
+
+    # 프로필이 없으면 예외 발생
+    if profile is None:
+        raise ValueError("존재하지 않는 프로필입니다.")
+
+    # 표시용 프로필 이름 읽기
+    profile_name = profile["name"]
+
+    # 폴더용 프로필 ID 읽기
+    folder_id = profile["folderId"]
+
+    # 프로필 루트 경로 생성
+    profile_root = SAVE_ROOT / folder_id
+
+    # 프로필 폴더가 없으면 예외 발생
+    if not profile_root.exists():
+        raise ValueError("프로필 폴더가 존재하지 않습니다.")
+
+    # 촬영 노출 시간 설정
+    exposure_ms = INITIAL_EXPOSURE_MS
+
+    # 촬영 gain 설정
+    gain = CURRENT_GAIN
+
+    # 저장 확장자 결정
+    ext = "png" if SAVE_AS_PNG else "jpg"
+
+    # 카메라 락을 잡고 고화질 전체 프레임 촬영
+    with camera_lock:
+        full_frame_bgr = capture_high_quality_full_frame(
+            exposure_ms=exposure_ms,
+            gain=gain
+        )
+
+    # 촬영 시각 기록
+    capture_timestamp = datetime.now()
+
+    # 캡처 ID 생성
+    capture_id = capture_timestamp.strftime("%Y%m%d_%H%M%S_%f")[:-3]
+
+    # 저장 파일 목록 초기화
+    saved_files = []
+
+    # cam2, cam3, cam4 순서대로 저장
+    for cam_key in ["cam2", "cam3", "cam4"]:
+        # 개별 카메라 영역 추출
+        target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
+
+        # 개별 이미지 저장
+        result = save_one_camera_image(
+            cam_key=cam_key,
+            frame_bgr=target_frame,
+            profile_root=profile_root,
+            capture_id=capture_id,
+            timestamp=capture_timestamp,
+            exposure_ms=exposure_ms,
+            gain=gain,
+            ext=ext,
+            profile_name=profile_name,
+            folder_id=folder_id
+        )
+
+        # 저장 파일 목록에 추가
+        saved_files.append(result)
+
+    # 촬영 결과 반환
+    return {
+        "ok": True,
+        "captured_at": capture_timestamp.isoformat(),
+        "profile_name": profile_name,
+        "profile_id": folder_id,
+        "capture_id": capture_id,
+        "files": saved_files
+    }
+
+
+def get_auto_state_copy():
+    # 자동 촬영 상태를 안전하게 복사하기 위해 락 획득
+    with auto_state_lock:
+        # 응답용 상태 복사본 반환
+        return {
+            "running": AUTO_STATE["running"],
+            "captured": AUTO_STATE["captured"],
+            "profile_id": AUTO_STATE["profile_id"],
+            "capture_id": AUTO_STATE["capture_id"],
+            "status": AUTO_STATE["status"],
+            "error": AUTO_STATE["error"],
+            "checks": dict(AUTO_STATE["checks"]),
+            "stable_face_count": AUTO_STATE["stable_face_count"],
+            "eyes_closed_count": AUTO_STATE["eyes_closed_count"],
+            "dynamic_eye_threshold": AUTO_STATE["dynamic_eye_threshold"],
+            "white_led_is_on": white_led_is_on,
+            "last_update": AUTO_STATE["last_update"],
+        }
+
+
+def reset_auto_state(profile_id=None, running=False):
+    # 자동 촬영 상태 초기화를 위해 락 획득
+    with auto_state_lock:
+        # 실행 여부 설정
+        AUTO_STATE["running"] = running
+
+        # 촬영 완료 여부 초기화
+        AUTO_STATE["captured"] = False
+
+        # 프로필 ID 저장
+        AUTO_STATE["profile_id"] = profile_id
+
+        # 촬영 ID 초기화
+        AUTO_STATE["capture_id"] = None
+
+        # 오류 메시지 초기화
+        AUTO_STATE["error"] = None
+
+        # 검사 상태 초기화
+        AUTO_STATE["checks"] = make_default_auto_checks()
+
+        # 얼굴 안정 카운트 초기화
+        AUTO_STATE["stable_face_count"] = 0
+
+        # 눈 감음 카운트 초기화
+        AUTO_STATE["eyes_closed_count"] = 0
+
+        # 상태 문구 초기화
+        AUTO_STATE["status"] = "자동 촬영 조건 확인 중" if running else "자동 촬영 대기 중"
+
+        # 최근 갱신 시각 저장
+        AUTO_STATE["last_update"] = datetime.now().isoformat()
+
+
+def auto_capture_worker(profile_id: str):
+    # 자동 촬영 백그라운드 작업 실행
+    try:
+        # 자동 촬영 루프 시작
+        while True:
+            # 현재 실행 여부 확인
+            with auto_state_lock:
+                running = AUTO_STATE["running"]
+
+            # 실행 중이 아니면 종료
+            if not running:
+                break
+
+            # 카메라가 준비되지 않았으면 상태 표시 후 대기
+            if not camera_ready:
+                with auto_state_lock:
+                    AUTO_STATE["status"] = "카메라가 아직 준비되지 않았습니다"
+                    AUTO_STATE["checks"] = make_default_auto_checks()
+                sleep(0.3)
+                continue
+
+            # 카메라 락을 잡고 프리뷰 프레임 읽기
+            with camera_lock:
+                full_frame_bgr = read_preview_frame()
+
+            # cam2 영역을 얼굴 인식용으로 사용
+            cam2_bgr = extract_cam_frame(full_frame_bgr, "cam2").copy()
+
+            # 얼굴 상태 분석
+            detection = analyze_face_for_auto(cam2_bgr)
+
+            # 얼굴이 안정적이고 눈을 뜬 상태라면 열린 눈 기준값 갱신
+            if detection["face_found"] and detection["center_ok"] and detection["size_ok"] and detection["angles_ok"] and not detection["eyes_closed"]:
+                update_dynamic_eye_threshold(detection["avg_ear"])
+
+            # 자동 촬영 조건 갱신 후 촬영 여부 판단
+            should_capture = update_auto_state_from_detection(detection)
+
+            # 조건이 충족되면 촬영 실행
+            if should_capture:
+                # 촬영 직전 백색 LED 자동 OFF
+                white_led_off()
+
+                # 백색 LED가 꺼질 시간을 잠시 확보
+                sleep(WHITE_LED_OFF_BEFORE_CAPTURE_SEC)
+
+                # 촬영 중 상태 표시
+                with auto_state_lock:
+                    AUTO_STATE["status"] = "조건 충족: 자동 촬영 중"
+
+                # 기존 프로필 저장 구조에 맞춰 촬영 실행
+                capture_result = perform_capture_for_profile(profile_id)
+
+                # 촬영 완료 상태 저장
+                with auto_state_lock:
+                    AUTO_STATE["running"] = False
+                    AUTO_STATE["captured"] = True
+                    AUTO_STATE["capture_id"] = capture_result["capture_id"]
+                    AUTO_STATE["status"] = "자동 촬영 완료"
+                    AUTO_STATE["checks"] = {
+                        "face_found": True,
+                        "center_ok": True,
+                        "size_ok": True,
+                        "angle_ok": True,
+                        "eyes_closed": True,
+                        "stable_ok": True,
+                    }
+                    AUTO_STATE["last_update"] = datetime.now().isoformat()
+                break
+
+            # 다음 검사 전 짧게 대기
+            sleep(AUTO_CAPTURE_INTERVAL_SEC)
+
+    except Exception as e:
+        # 오류 발생 시 자동 촬영 상태에 오류 저장
+        with auto_state_lock:
+            AUTO_STATE["running"] = False
+            AUTO_STATE["captured"] = False
+            AUTO_STATE["error"] = str(e)
+            AUTO_STATE["status"] = f"자동 촬영 오류: {e}"
+            AUTO_STATE["last_update"] = datetime.now().isoformat()
+
+
+# =========================
 # 포르피린 분석 함수
 # =========================
 
@@ -1137,95 +1891,11 @@ def capture_all():
         # 선택된 profileId 읽기
         profile_id = body.get("profileId", "")
 
-        # 비어 있으면 에러
-        if not str(profile_id).strip():
-            return jsonify({
-                "ok": False,
-                "error": "profileId가 필요합니다."
-            }), 400
+        # 기존 저장 구조에 맞춰 촬영 실행
+        result = perform_capture_for_profile(profile_id)
 
-        # 프로필 찾기
-        profile = find_profile_by_id(profile_id)
-
-        # 존재하지 않으면 에러
-        if profile is None:
-            return jsonify({
-                "ok": False,
-                "error": "존재하지 않는 프로필입니다."
-            }), 400
-
-        # 표시용 이름
-        profile_name = profile["name"]
-
-        # 폴더용 ID
-        folder_id = profile["folderId"]
-
-        # 프로필 루트 경로
-        profile_root = SAVE_ROOT / folder_id
-
-        # 프로필 폴더가 없으면 에러
-        if not profile_root.exists():
-            return jsonify({
-                "ok": False,
-                "error": "프로필 폴더가 존재하지 않습니다."
-            }), 400
-
-        # 촬영 노출 시간 설정
-        exposure_ms = INITIAL_EXPOSURE_MS
-
-        # 촬영 게인 설정
-        gain = CURRENT_GAIN
-
-        # 저장 확장자 결정
-        ext = "png" if SAVE_AS_PNG else "jpg"
-
-        # 카메라 락 걸고 전체 프레임 촬영
-        with camera_lock:
-            full_frame_bgr = capture_high_quality_full_frame(
-                exposure_ms=exposure_ms,
-                gain=gain
-            )
-
-        # 촬영 시각 기록
-        capture_timestamp = datetime.now()
-
-        # 캡처 ID 생성
-        capture_id = capture_timestamp.strftime("%Y%m%d_%H%M%S_%f")[:-3]
-
-        # 저장 파일 목록
-        saved_files = []
-
-        # cam2, cam3, cam4 순서대로 저장
-        for cam_key in ["cam2", "cam3", "cam4"]:
-            # 개별 영역 잘라내기
-            target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
-
-            # 개별 이미지 저장
-            result = save_one_camera_image(
-                cam_key=cam_key,
-                frame_bgr=target_frame,
-                profile_root=profile_root,
-                capture_id=capture_id,
-                timestamp=capture_timestamp,
-                exposure_ms=exposure_ms,
-                gain=gain,
-                ext=ext,
-                profile_name=profile_name,
-                folder_id=folder_id
-            )
-
-            # 저장 결과 목록에 추가
-            saved_files.append(result)
-
-        # 촬영 성공 응답
-        return jsonify({
-            "ok": True,
-            "captured_at": capture_timestamp.isoformat(),
-            "profile_name": profile_name,
-            "profile_id": folder_id,
-            "capture_id": capture_id,
-            "files": saved_files
-        })
+        # 촬영 성공 응답 반환
+        return jsonify(result)
 
     except Exception as e:
         # 서버 콘솔에 오류 출력
@@ -1236,6 +1906,164 @@ def capture_all():
             "ok": False,
             "error": str(e)
         }), 500
+
+
+# =========================
+# 백색 LED 제어 API
+# =========================
+
+@app.route("/white-led/on", methods=["POST"])
+def white_led_on_api():
+    try:
+        # 백색 LED 켜기
+        white_led_on()
+
+        # 성공 응답 반환
+        return jsonify({
+            "ok": True,
+            "white_led_is_on": True
+        })
+
+    except Exception as e:
+        # 실패 응답 반환
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route("/white-led/off", methods=["POST"])
+def white_led_off_api():
+    try:
+        # 백색 LED 끄기
+        white_led_off()
+
+        # 성공 응답 반환
+        return jsonify({
+            "ok": True,
+            "white_led_is_on": False
+        })
+
+    except Exception as e:
+        # 실패 응답 반환
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route("/white-led/status", methods=["GET"])
+def white_led_status_api():
+    # 현재 백색 LED 상태 반환
+    return jsonify({
+        "ok": True,
+        "white_led_is_on": white_led_is_on
+    })
+
+
+# =========================
+# 자동 얼굴 촬영 API
+# =========================
+
+@app.route("/auto-capture/start", methods=["POST"])
+def auto_capture_start_api():
+    global auto_capture_thread
+
+    try:
+        # JSON 바디 읽기
+        body = request.get_json(silent=True) or {}
+
+        # 선택된 profileId 읽기
+        profile_id = body.get("profileId", "")
+
+        # profileId가 비어 있으면 에러
+        if not str(profile_id).strip():
+            return jsonify({
+                "ok": False,
+                "error": "profileId가 필요합니다."
+            }), 400
+
+        # 프로필 존재 여부 확인
+        if find_profile_by_id(profile_id) is None:
+            return jsonify({
+                "ok": False,
+                "error": "존재하지 않는 프로필입니다."
+            }), 400
+
+        # MediaPipe 설치 여부 확인
+        if face_mesh is None:
+            return jsonify({
+                "ok": False,
+                "error": "mediapipe가 설치되어 있지 않아 자동 촬영을 사용할 수 없습니다."
+            }), 400
+
+        # 카메라 준비 여부 확인
+        if not camera_ready:
+            return jsonify({
+                "ok": False,
+                "error": "카메라가 아직 준비되지 않았습니다."
+            }), 400
+
+        # 이미 자동 촬영 중인지 확인
+        with auto_state_lock:
+            already_running = AUTO_STATE["running"]
+
+        # 이미 실행 중이면 현재 상태 반환
+        if already_running:
+            return jsonify({
+                "ok": True,
+                **get_auto_state_copy()
+            })
+
+        # 자동 촬영 상태 초기화
+        reset_auto_state(profile_id=profile_id, running=True)
+
+        # 자동 촬영 스레드 생성
+        auto_capture_thread = threading.Thread(
+            target=auto_capture_worker,
+            args=(profile_id,),
+            daemon=True
+        )
+
+        # 자동 촬영 스레드 시작
+        auto_capture_thread.start()
+
+        # 현재 상태 반환
+        return jsonify({
+            "ok": True,
+            **get_auto_state_copy()
+        })
+
+    except Exception as e:
+        # 실패 응답 반환
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route("/auto-capture/status", methods=["GET"])
+def auto_capture_status_api():
+    # 현재 자동 촬영 상태 반환
+    return jsonify({
+        "ok": True,
+        **get_auto_state_copy()
+    })
+
+
+@app.route("/auto-capture/cancel", methods=["POST"])
+def auto_capture_cancel_api():
+    # 자동 촬영 상태를 중지로 변경
+    with auto_state_lock:
+        AUTO_STATE["running"] = False
+        AUTO_STATE["status"] = "자동 촬영 취소"
+        AUTO_STATE["last_update"] = datetime.now().isoformat()
+
+    # 취소 후 현재 상태 반환
+    return jsonify({
+        "ok": True,
+        **get_auto_state_copy()
+    })
 
 
 # =========================
@@ -1409,6 +2237,9 @@ def get_history_image_api(profile_id, capture_id, filter_type):
 if __name__ == "__main__":
     # 서버 시작 전에 릴레이 OFF 보장
     relay_off()
+
+    # 서버 시작 전에 백색 LED OFF 보장
+    white_led_off()
 
     # 카메라 초기화
     init_camera()
