@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import cv2
@@ -45,6 +44,11 @@ class CaptureService:
     DEFAULT_EXPOSURE_MS = 8
     CURRENT_GAIN = 1.0
     SAVE_AS_PNG = True
+
+    # 저장 이미지를 세로 기준으로 회전
+    ROTATE_SAVED_IMAGES = True
+    SAVED_IMAGE_ROTATE_CODE = cv2.ROTATE_90_CLOCKWISE
+    SAVED_IMAGE_ROTATION_LABEL = "ROTATE_90_CLOCKWISE"
 
     RELAY_WARMUP_SEC = 0.3
     WHITE_LED_OFF_BEFORE_CAPTURE_SEC = 0.15
@@ -244,6 +248,37 @@ class CaptureService:
     def extract_cam_frame(self, full_frame_bgr, cam_key: str):
         info = self.CAMERA_INFO[cam_key]
         return full_frame_bgr[:, info["x_start"]:info["x_end"]]
+
+    # ---------- rotation helpers ----------
+    def rotate_saved_image(self, frame_bgr):
+        if not self.ROTATE_SAVED_IMAGES:
+            return frame_bgr
+        return cv2.rotate(frame_bgr, self.SAVED_IMAGE_ROTATE_CODE)
+
+    def rotate_bbox_for_saved_image(self, bbox, original_width: int, original_height: int):
+        if bbox is None or not self.ROTATE_SAVED_IMAGES:
+            return bbox
+
+        x1, y1, x2, y2 = bbox
+        corners = [
+            (x1, y1),
+            (x2, y1),
+            (x1, y2),
+            (x2, y2),
+        ]
+
+        if self.SAVED_IMAGE_ROTATE_CODE == cv2.ROTATE_90_CLOCKWISE:
+            rotated = [(original_height - 1 - y, x) for (x, y) in corners]
+        elif self.SAVED_IMAGE_ROTATE_CODE == cv2.ROTATE_90_COUNTERCLOCKWISE:
+            rotated = [(y, original_width - 1 - x) for (x, y) in corners]
+        elif self.SAVED_IMAGE_ROTATE_CODE == cv2.ROTATE_180:
+            rotated = [(original_width - 1 - x, original_height - 1 - y) for (x, y) in corners]
+        else:
+            return bbox
+
+        xs = [p[0] for p in rotated]
+        ys = [p[1] for p in rotated]
+        return [int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))]
 
     # ---------- detection ----------
     def _euclidean(self, p1, p2):
@@ -481,9 +516,14 @@ class CaptureService:
         folder_id: str,
     ):
         info = self.CAMERA_INFO[cam_key]
+        original_h, original_w = frame_bgr.shape[:2]
+        frame_to_save = self.rotate_saved_image(frame_bgr)
+
         image_path = session_dir / f"{cam_key}.{ext}"
         meta_path = session_dir / f"{cam_key}_metadata.json"
-        frame_bgr = cv2.rotate(frame_bgr, cv2.ROTATE_90_CLOCKWISE)
+        self.save_image(image_path, frame_to_save)
+
+        saved_h, saved_w = frame_to_save.shape[:2]
         metadata = {
             "captured_at": timestamp.isoformat(),
             "profile_name": profile_name,
@@ -500,6 +540,15 @@ class CaptureService:
                 "ExposureTime_us": exposure_ms * 1000,
                 "AnalogueGain": gain,
             },
+            "image_shape_before_save": {
+                "height": original_h,
+                "width": original_w,
+            },
+            "image_shape_saved": {
+                "height": saved_h,
+                "width": saved_w,
+            },
+            "rotation_applied": self.SAVED_IMAGE_ROTATION_LABEL if self.ROTATE_SAVED_IMAGES else None,
             "saved_file": str(image_path),
         }
         with open(meta_path, "w", encoding="utf-8") as f:
@@ -517,6 +566,18 @@ class CaptureService:
         detection_snapshot: Optional[Dict[str, Any]],
         ext: str,
     ) -> Path:
+        rotated_detection = detection_snapshot
+        if detection_snapshot is not None and detection_snapshot.get("bbox") is not None:
+            rotated_bbox = self.rotate_bbox_for_saved_image(
+                detection_snapshot["bbox"],
+                original_width=self.SINGLE_WIDTH,
+                original_height=self.CAPTURE_HEIGHT,
+            )
+            rotated_detection = dict(detection_snapshot)
+            rotated_detection["bbox_before_rotation"] = detection_snapshot["bbox"]
+            rotated_detection["bbox"] = rotated_bbox
+            rotated_detection["rotation_applied"] = self.SAVED_IMAGE_ROTATION_LABEL if self.ROTATE_SAVED_IMAGES else None
+
         session_meta_path = session_dir / "session_metadata.json"
         data = {
             "captured_at": timestamp.isoformat(),
@@ -526,7 +587,12 @@ class CaptureService:
             "gain": gain,
             "dynamic_eye_threshold": self.state["dynamic_eye_threshold"],
             "open_eye_baseline_samples": list(self.open_eye_ear_history),
-            "trigger_detection": detection_snapshot,
+            "rotation_applied_to_saved_images": self.SAVED_IMAGE_ROTATION_LABEL if self.ROTATE_SAVED_IMAGES else None,
+            "saved_image_shape": {
+                "height": self.SINGLE_WIDTH if self.ROTATE_SAVED_IMAGES else self.CAPTURE_HEIGHT,
+                "width": self.CAPTURE_HEIGHT if self.ROTATE_SAVED_IMAGES else self.SINGLE_WIDTH,
+            },
+            "trigger_detection": rotated_detection,
             "files": {
                 key: str(session_dir / f"{key}.{ext}") for key in ["cam2", "cam3", "cam4"]
             },
