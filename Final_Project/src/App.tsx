@@ -811,6 +811,8 @@ function App() {
           margin: 0;
           width: 100%;
           height: 100%;
+          min-height: 100%;
+          overflow: hidden;
           font-family: Arial, Helvetica, sans-serif;
           background: #0b1220;
         }
@@ -820,26 +822,30 @@ function App() {
         }
 
         .app-bg {
+          width: 100vw;
+          height: 100vh;
+          height: 100dvh;
           min-height: 100vh;
-          width: 100%;
           background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
           display: flex;
           justify-content: center;
           align-items: center;
-          padding: 16px;
+          padding: 0;
+          overflow: hidden;
         }
 
         .mirror-frame {
-          width: 100%;
-          max-width: 520px;
-          height: 95vh;
-          min-height: 760px;
+          width: 100vw;
+          height: 100vh;
+          height: 100dvh;
+          max-width: none;
+          min-height: 0;
           background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-          border: 1px solid rgba(255,255,255,0.12);
-          border-radius: 32px;
+          border: none;
+          border-radius: 0;
           overflow: hidden;
           position: relative;
-          box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+          box-shadow: none;
         }
 
         .toast {
@@ -1538,9 +1544,11 @@ function App() {
 
         @media (max-width: 560px) {
           .mirror-frame {
-            max-width: 100%;
-            min-height: 100vh;
+            width: 100vw;
             height: 100vh;
+            height: 100dvh;
+            max-width: none;
+            min-height: 0;
             border-radius: 0;
           }
 
