@@ -12,7 +12,7 @@ from time import sleep
 from flask import Flask, jsonify, Response, request, send_file
 from flask_cors import CORS
 
-from rpicam_03_white_led_auto_v5 import CaptureService
+from rpicam_03_white_led_auto_v5_vertical_save import CaptureService
 from porphyrin_analysis import (
     analyze_session_dir,
     load_analysis_report,
