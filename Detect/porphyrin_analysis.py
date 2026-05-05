@@ -1,100 +1,118 @@
 import cv2
 import numpy as np
+import os
 
-def analyze_porhyrin(image_path):
+# -----------------------------
+# 최신 이미지 찾기
+# -----------------------------
+def get_latest_image(base_path):
+    folders = [f for f in os.listdir(base_path)
+               if os.path.isdir(os.path.join(base_path, f))]
+
+    latest_folder = sorted(folders)[-1]
+    latest_path = os.path.join(base_path, latest_folder)
+
+    files = [f for f in os.listdir(latest_path)
+             if f.lower().endswith(('.jpg', '.png'))]
+
+    latest_file = sorted(files)[-1]
+    image_path = os.path.join(latest_path, latest_file)
+
+    print("사용 이미지:", image_path)
+    return image_path
+
+
+# -----------------------------
+# 포르피린 검출 (강한 형광만)
+# -----------------------------
+def detect_porhyrin(image_path):
     img = cv2.imread(image_path)
 
     if img is None:
         print("이미지 로드 실패")
         return
 
+    output = img.copy()
+
     # -----------------------------
-    # 전처리
+    # 그레이 + 대비 강화
     # -----------------------------
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5,5), 0)
+
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    enhanced = clahe.apply(gray)
+
+    blur = cv2.GaussianBlur(enhanced, (5,5), 0)
 
     # -----------------------------
-    # 포르피린 (밝은 점) 추출
+    # 상위 밝기만 추출 (핵심)
     # -----------------------------
-    _, thresh = cv2.threshold(blur, 200, 255, cv2.THRESH_BINARY)
+    threshold_value = np.percentile(blur, 97)   # 👈 강한 것만
 
+    _, thresh = cv2.threshold(blur, threshold_value, 255, cv2.THRESH_BINARY)
+
+    # -----------------------------
     # 노이즈 제거
+    # -----------------------------
     kernel = np.ones((3,3), np.uint8)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
 
     # -----------------------------
-    # 전체 비율 계산
+    # 컨투어 검출
     # -----------------------------
-    total_pixels = thresh.size
-    bright_pixels = np.sum(thresh == 255)
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    ratio = bright_pixels / total_pixels
+    count = 0
 
-    # -----------------------------
-    # 점수화 (0~100)
-    # -----------------------------
-    score = int((1 - ratio) * 100)
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
 
-    # -----------------------------
-    # 영역 분할
-    # -----------------------------
-    h, w = thresh.shape
+        if area < 10:
+            continue
 
-    regions = {
-        "이마": thresh[0:h//3, :],
-        "코": thresh[h//3:2*h//3, w//3:2*w//3],
-        "왼쪽볼": thresh[h//3:2*h//3, 0:w//3],
-        "오른쪽볼": thresh[h//3:2*h//3, 2*w//3:w],
-        "턱": thresh[2*h//3:h, :]
-    }
+        (x, y), radius = cv2.minEnclosingCircle(cnt)
 
-    region_result = {}
+        if 3 < radius < 15:
+            center = (int(x), int(y))
+            cv2.circle(output, center, int(radius), (0, 0, 255), 2)
+            count += 1
 
-    for name, region in regions.items():
-        r_total = region.size
-        r_bright = np.sum(region == 255)
-        r_ratio = r_bright / r_total
-
-        if r_ratio > 0.05:
-            level = "높음"
-        elif r_ratio > 0.02:
-            level = "보통"
-        else:
-            level = "낮음"
-
-        region_result[name] = {
-            "ratio": round(r_ratio, 4),
-            "level": level
-        }
+    print("검출 개수:", count)
 
     # -----------------------------
-    # 결과 출력
+    # 결과 저장
     # -----------------------------
-    print("\n===== 피부 분석 결과 =====")
-    print(f"전체 포르피린 비율: {round(ratio,4)}")
-    print(f"피부 점수: {score} / 100")
-
-    print("\n[부위별 상태]")
-    for k, v in region_result.items():
-        print(f"{k}: {v['level']} ({v['ratio']})")
+    cv2.imwrite("porphyrin_detect_result.jpg", output)
 
     # -----------------------------
-    # 시각화 이미지 생성
+    # 비교 화면 생성
     # -----------------------------
-    result_img = img.copy()
-    result_img[thresh == 255] = [0,0,255]  # 빨간색 표시
+    h, w = img.shape[:2]
+    output_resized = cv2.resize(output, (w, h))
 
-    cv2.imwrite("porphyrin_result.jpg", result_img)
-    print("\n결과 이미지 저장: porphyrin_result.jpg")
+    combined = np.hstack((img, output_resized))
 
-    return {
-        "score": score,
-        "total_ratio": ratio,
-        "regions": region_result
-    }
+    cv2.putText(combined, "Original", (20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+
+    cv2.putText(combined, "Detection", (w + 20, 40),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
+
+    cv2.imwrite("compare_result.jpg", combined)
+
+    # -----------------------------
+    # 화면 출력
+    # -----------------------------
+    cv2.imshow("Porphyrin Compare", combined)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 
-# 테스트 실행
+# -----------------------------
+# 실행
+# -----------------------------
 if __name__ == "__main__":
-    analyze_porhyrin("capture.jpg")
+    base_path = "../captures/cam4_660nm"
+
+    img_path = get_latest_image(base_path)
+    detect_porhyrin(img_path)
