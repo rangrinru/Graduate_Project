@@ -103,7 +103,8 @@ def detect_porhyrin(image_path):
     # -----------------------------
     # 화면 출력
     # -----------------------------
-    cv2.imshow("Porphyrin Compare", combined)
+    display = cv2.resize(combined, (1200, 400))
+    cv2.imshow("Porphyrin Compare", display)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
