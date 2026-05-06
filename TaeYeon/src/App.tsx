@@ -281,6 +281,7 @@ function App() {
 
   const [isAnalyzingPorphyrin, setIsAnalyzingPorphyrin] = useState(false);
   const [porphyrinResult, setPorphyrinResult] = useState<PorphyrinResult | null>(null);
+  const [showAnalysisResultModal, setShowAnalysisResultModal] = useState(false);
 
   const [whiteLedOn, setWhiteLedOn] = useState(false);
   const [isChangingWhiteLed, setIsChangingWhiteLed] = useState(false);
@@ -710,6 +711,7 @@ function App() {
     setSelectedHistory(null);
     setHistoryItems([]);
     setPorphyrinResult(null);
+    setShowAnalysisResultModal(false);
     setAutoStatus(null);
     setScreen("camera");
   };
@@ -720,6 +722,7 @@ function App() {
     setSelectedHistory(null);
     setHistoryItems([]);
     setPorphyrinResult(null);
+    setShowAnalysisResultModal(false);
     setAutoStatus(null);
   };
 
@@ -814,6 +817,7 @@ function App() {
       setSelectedHistory(data);
       setSelectedFilter("no_filter");
       setPorphyrinResult(null);
+    setShowAnalysisResultModal(false);
       setScreen("historyDetail");
     } catch (error) {
       console.error(error);
@@ -859,6 +863,7 @@ function App() {
       if (selectedHistory?.captureId === target.captureId) {
         setSelectedHistory(null);
         setPorphyrinResult(null);
+    setShowAnalysisResultModal(false);
         setScreen("history");
       }
 
@@ -907,6 +912,7 @@ function App() {
         mask_url: data.mask_url,
         compare_url: data.compare_url,
       });
+      setShowAnalysisResultModal(true);
 
       setSelectedFilter("660nm_filter");
       showToast(`분석 완료: ${data.porphyrin_count}개 검출`, "success");
@@ -1215,11 +1221,18 @@ function App() {
         }
 
         .profiles-container,
-        .history-container,
-        .history-detail-container {
+        .history-container {
           height: 100%;
           padding: 110px 20px 20px 20px;
           overflow-y: auto;
+        }
+
+        .history-detail-container {
+          height: 100vh;
+          padding: 86px 14px 10px 14px;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
         }
 
         .profiles-grid {
@@ -1466,7 +1479,7 @@ function App() {
           position: absolute;
           right: 16px;
           top: 16px;
-          z-index: 20;
+          z-index: 80;
           display: flex;
           flex-direction: column;
           gap: 12px;
@@ -1507,15 +1520,19 @@ function App() {
         }
 
         .mini-back-btn {
-          margin-top: 14px;
+          margin-top: 4px;
+          margin-bottom: 6px;
+          padding: 9px 13px;
+          font-size: 12px;
+          flex-shrink: 0;
         }
 
         .auto-check-panel {
           position: absolute;
           left: 18px;
-          right: 18px;
           top: 102px;
-          z-index: 25;
+          width: min(390px, calc(100vw - 190px));
+          z-index: 30;
           padding: 16px;
           border-radius: 22px;
           background: rgba(0, 0, 0, 0.56);
@@ -1904,27 +1921,31 @@ function App() {
         .history-detail-top {
           display: flex;
           flex-direction: column;
-          gap: 14px;
+          gap: 6px;
+          align-items: center;
+          text-align: center;
+          flex-shrink: 0;
         }
 
         .history-detail-title {
           color: white;
-          font-size: 24px;
+          font-size: 20px;
           font-weight: 700;
           margin: 0;
         }
 
         .history-detail-sub {
           color: rgba(255,255,255,0.65);
-          font-size: 14px;
-          line-height: 1.6;
+          font-size: 12px;
+          line-height: 1.4;
         }
 
         .filter-row {
           display: flex;
-          gap: 10px;
+          gap: 8px;
           flex-wrap: wrap;
-          margin-top: 8px;
+          margin-top: 6px;
+          flex-shrink: 0;
         }
 
         .filter-chip.active {
@@ -1933,24 +1954,32 @@ function App() {
           border-color: rgba(34, 211, 238, 0.35);
         }
 
+        .history-detail-container .filter-chip {
+          border-radius: 14px;
+          padding: 9px 12px;
+          font-size: 12px;
+        }
+
         .image-viewer {
-          margin-top: 18px;
-          border-radius: 24px;
+          margin-top: 10px;
+          border-radius: 20px;
           overflow: hidden;
           border: 1px solid rgba(255,255,255,0.1);
           background: rgba(255,255,255,0.04);
-          min-height: 420px;
+          flex: 1;
+          min-height: 0;
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 12px;
+          padding: 8px;
         }
 
         .history-image {
           width: 100%;
-          max-height: 70vh;
+          height: 100%;
+          max-height: none;
           object-fit: contain;
-          border-radius: 18px;
+          border-radius: 16px;
           background: #000;
         }
 
@@ -1962,35 +1991,33 @@ function App() {
         }
 
         .analysis-panel {
-          margin-top: 18px;
-          border-radius: 24px;
+          margin-top: 8px;
+          border-radius: 18px;
           border: 1px solid rgba(255,255,255,0.1);
           background: rgba(255,255,255,0.05);
-          padding: 16px;
+          padding: 10px 12px;
+          flex-shrink: 0;
         }
 
         .analysis-title {
           color: white;
-          font-size: 18px;
+          font-size: 15px;
           font-weight: 800;
-          margin-bottom: 8px;
+          margin-bottom: 4px;
         }
 
         .analysis-description {
-          color: rgba(255,255,255,0.65);
-          font-size: 13px;
-          line-height: 1.6;
-          margin-bottom: 14px;
+          display: none;
         }
 
         .analysis-btn {
           width: 100%;
           border: none;
-          border-radius: 18px;
-          padding: 15px 16px;
+          border-radius: 14px;
+          padding: 12px 14px;
           background: #ef4444;
           color: white;
-          font-size: 16px;
+          font-size: 14px;
           font-weight: 800;
           cursor: pointer;
           transition: 0.2s ease;
@@ -2038,6 +2065,125 @@ function App() {
           background: #000;
         }
 
+        .analysis-result-compact {
+          margin-top: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 14px;
+          border-radius: 18px;
+          background: rgba(0,0,0,0.28);
+          border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .analysis-compact-text {
+          color: white;
+          font-size: 15px;
+          font-weight: 800;
+        }
+
+        .analysis-view-btn {
+          flex-shrink: 0;
+          border: none;
+          border-radius: 16px;
+          padding: 12px 16px;
+          background: #22d3ee;
+          color: #0f172a;
+          font-size: 14px;
+          font-weight: 900;
+          cursor: pointer;
+        }
+
+        .analysis-full-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 260;
+          background: rgba(0, 0, 0, 0.88);
+          display: flex;
+          flex-direction: column;
+          padding: 18px;
+          color: white;
+        }
+
+        .analysis-full-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .analysis-full-title {
+          font-size: 24px;
+          font-weight: 900;
+          margin-bottom: 6px;
+        }
+
+        .analysis-full-subtitle {
+          color: rgba(255,255,255,0.68);
+          font-size: 13px;
+          line-height: 1.5;
+        }
+
+        .analysis-full-close {
+          flex-shrink: 0;
+          border: none;
+          border-radius: 16px;
+          padding: 13px 18px;
+          background: rgba(255,255,255,0.14);
+          color: white;
+          font-size: 15px;
+          font-weight: 900;
+          cursor: pointer;
+        }
+
+        .analysis-full-stats {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .analysis-full-stat {
+          border-radius: 18px;
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.1);
+          padding: 12px;
+          text-align: center;
+        }
+
+        .analysis-full-stat-label {
+          color: rgba(255,255,255,0.62);
+          font-size: 12px;
+          margin-bottom: 6px;
+        }
+
+        .analysis-full-stat-value {
+          color: white;
+          font-size: 20px;
+          font-weight: 900;
+        }
+
+        .analysis-full-image-wrap {
+          flex: 1;
+          min-height: 0;
+          border-radius: 22px;
+          background: #000;
+          border: 1px solid rgba(255,255,255,0.12);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+        }
+
+        .analysis-full-image {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          background: #000;
+        }
+
         .history-card-time {
           font-size: 18px;
           font-weight: 700;
@@ -2078,7 +2224,11 @@ function App() {
           }
 
           .filter-row {
-            flex-direction: column;
+            flex-direction: row;
+          }
+
+          .auto-check-panel {
+            width: min(360px, calc(100vw - 180px));
           }
         }
       `}</style>
@@ -2488,35 +2638,17 @@ function App() {
                       </button>
 
                       {porphyrinResult && (
-                        <div className="analysis-result-box">
-                          <div className="analysis-result-grid">
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">검출 개수</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.porphyrin_count}개
-                              </div>
-                            </div>
-
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">검출 면적</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.porphyrin_area.toFixed(1)}
-                              </div>
-                            </div>
-
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">임계값</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.threshold_value.toFixed(1)}
-                              </div>
-                            </div>
+                        <div className="analysis-result-compact">
+                          <div className="analysis-compact-text">
+                            분석 완료: {porphyrinResult.porphyrin_count}개 검출
                           </div>
 
-                          <img
-                            className="analysis-image"
-                            src={getImageSrc(porphyrinResult.compare_url)}
-                            alt="포르피린 분석 결과"
-                          />
+                          <button
+                            className="analysis-view-btn"
+                            onClick={() => setShowAnalysisResultModal(true)}
+                          >
+                            분석 결과 크게 보기
+                          </button>
                         </div>
                       )}
                     </div>
@@ -2527,6 +2659,57 @@ function App() {
           )}
         </div>
       </div>
+
+      {showAnalysisResultModal && porphyrinResult && (
+        <div className="analysis-full-overlay">
+          <div className="analysis-full-header">
+            <div>
+              <div className="analysis-full-title">포르피린 분석 결과</div>
+              <div className="analysis-full-subtitle">
+                원본 이미지와 검출 결과를 한 화면에서 확인합니다.
+              </div>
+            </div>
+
+            <button
+              className="analysis-full-close"
+              onClick={() => setShowAnalysisResultModal(false)}
+            >
+              닫기
+            </button>
+          </div>
+
+          <div className="analysis-full-stats">
+            <div className="analysis-full-stat">
+              <div className="analysis-full-stat-label">검출 개수</div>
+              <div className="analysis-full-stat-value">
+                {porphyrinResult.porphyrin_count}개
+              </div>
+            </div>
+
+            <div className="analysis-full-stat">
+              <div className="analysis-full-stat-label">검출 면적</div>
+              <div className="analysis-full-stat-value">
+                {porphyrinResult.porphyrin_area.toFixed(1)}
+              </div>
+            </div>
+
+            <div className="analysis-full-stat">
+              <div className="analysis-full-stat-label">임계값</div>
+              <div className="analysis-full-stat-value">
+                {porphyrinResult.threshold_value.toFixed(1)}
+              </div>
+            </div>
+          </div>
+
+          <div className="analysis-full-image-wrap">
+            <img
+              className="analysis-full-image"
+              src={getImageSrc(porphyrinResult.compare_url)}
+              alt="포르피린 분석 결과"
+            />
+          </div>
+        </div>
+      )}
 
       {showCreateModal && (
         <div className="modal-overlay">

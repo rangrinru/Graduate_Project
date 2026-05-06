@@ -1,0 +1,9 @@
+{
+  "porphyrin_count": 53,
+  "porphyrin_area": 3073.0,
+  "threshold_value": 85.0,
+  "overlay_path": "/home/park/Graduate_Project/TaeYeon/captures/profile_1778054799364/cam4_660nm/20260506_172553_243/analysis/porphyrin_overlay.jpg",
+  "mask_path": "/home/park/Graduate_Project/TaeYeon/captures/profile_1778054799364/cam4_660nm/20260506_172553_243/analysis/porphyrin_mask.jpg",
+  "compare_path": "/home/park/Graduate_Project/TaeYeon/captures/profile_1778054799364/cam4_660nm/20260506_172553_243/analysis/porphyrin_compare.jpg",
+  "report_path": "/home/park/Graduate_Project/TaeYeon/captures/profile_1778054799364/cam4_660nm/20260506_172553_243/analysis/porphyrin_report.json"
+}

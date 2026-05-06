@@ -43,11 +43,8 @@ from gpiozero import LED
 # Picamera2 import
 from picamera2 import Picamera2
 
-# MediaPipe 얼굴 인식 모듈은 설치되어 있을 때만 사용
-try:
-    import mediapipe as mp
-except ImportError:
-    mp = None
+# MediaPipe 대신 OpenCV Haar Cascade로 얼굴/눈 검출을 수행합니다.
+# 따라서 mediapipe 설치 없이 자동 촬영 조건 확인이 가능합니다.
 
 
 # Flask 앱 생성
@@ -71,7 +68,7 @@ CAPTURE_HEIGHT = 800
 SINGLE_WIDTH = CAPTURE_WIDTH // 4
 
 # 저장 루트 경로 설정
-SAVE_ROOT = Path.home() / "Graduate_Project" / "Final_Project" / "captures"
+SAVE_ROOT = Path.home() / "Graduate_Project" / "TaeYeon" / "captures"
 
 # 저장 루트 폴더가 없으면 생성
 SAVE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -229,54 +226,63 @@ auto_capture_thread = None
 # 자동 촬영 상태 동기화용 락
 auto_state_lock = threading.Lock()
 
-# 열린 눈 EAR 기준값 누적 배열
-OPEN_EYE_EAR_HISTORY = deque(maxlen=OPEN_EYE_BASELINE_SAMPLES)
+# =========================
+# OpenCV Haar Cascade 경로 설정
+# =========================
 
-# MediaPipe 얼굴 메시 객체 생성
-if mp is not None:
-    mp_face_mesh = mp.solutions.face_mesh
-    face_mesh = mp_face_mesh.FaceMesh(
-        static_image_mode=False,
-        max_num_faces=1,
-        refine_landmarks=False,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5,
+def find_haar_file(filename: str) -> Path:
+    # OpenCV 패키지에서 haarcascades 경로를 제공하는 경우 먼저 확인
+    if hasattr(cv2, "data") and hasattr(cv2.data, "haarcascades"):
+        candidate = Path(cv2.data.haarcascades) / filename
+
+        if candidate.exists():
+            return candidate
+
+    # Raspberry Pi OS에서 opencv-data 설치 시 흔한 경로들을 순서대로 확인
+    candidates = [
+        Path("/usr/share/opencv4/haarcascades") / filename,
+        Path("/usr/share/opencv/haarcascades") / filename,
+        Path("/usr/local/share/opencv4/haarcascades") / filename,
+        Path(__file__).resolve().parent / "haarcascades" / filename,
+    ]
+
+    # 후보 경로 중 실제 존재하는 파일 반환
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    # 어디에도 없으면 오류 발생
+    raise RuntimeError(
+        f"Haar Cascade 파일을 찾을 수 없습니다: {filename}. "
+        f"sudo apt install opencv-data -y 명령으로 설치해 주세요."
     )
-else:
-    face_mesh = None
 
-# 왼쪽 눈 랜드마크 인덱스
-LEFT_EYE = [33, 160, 158, 133, 153, 144]
 
-# 오른쪽 눈 랜드마크 인덱스
-RIGHT_EYE = [362, 385, 387, 263, 373, 380]
+# 얼굴 검출용 분류기 경로
+FACE_CASCADE_PATH = find_haar_file("haarcascade_frontalface_default.xml")
 
-# 코 끝 랜드마크 인덱스
-NOSE_TIP_IDX = 1
+# 눈 검출용 분류기 경로
+EYE_CASCADE_PATH = find_haar_file("haarcascade_eye_tree_eyeglasses.xml")
 
-# 왼쪽 눈 바깥쪽 랜드마크 인덱스
-LEFT_EYE_OUTER_IDX = 33
+# 얼굴 검출용 분류기 객체
+face_cascade = cv2.CascadeClassifier(str(FACE_CASCADE_PATH))
 
-# 오른쪽 눈 바깥쪽 랜드마크 인덱스
-RIGHT_EYE_OUTER_IDX = 263
+# 눈 검출용 분류기 객체
+eye_cascade = cv2.CascadeClassifier(str(EYE_CASCADE_PATH))
 
-# 얼굴 왼쪽 끝 랜드마크 인덱스
-LEFT_FACE_IDX = 234
+# OpenCV 얼굴/눈 검출 준비 여부
+opencv_face_ready = (not face_cascade.empty()) and (not eye_cascade.empty())
 
-# 얼굴 오른쪽 끝 랜드마크 인덱스
-RIGHT_FACE_IDX = 454
+# 얼굴/눈 검출기 로드 실패 시 서버 시작 단계에서 바로 원인을 출력
+if face_cascade.empty():
+    raise RuntimeError(f"얼굴 Haar Cascade 로드 실패: {FACE_CASCADE_PATH}")
 
-# 얼굴 위쪽 랜드마크 인덱스
-UPPER_FACE_IDX = 10
+if eye_cascade.empty():
+    raise RuntimeError(f"눈 Haar Cascade 로드 실패: {EYE_CASCADE_PATH}")
 
-# 얼굴 아래쪽 랜드마크 인덱스
-LOWER_FACE_IDX = 152
-
-# 입 왼쪽 랜드마크 인덱스
-MOUTH_LEFT_IDX = 61
-
-# 입 오른쪽 랜드마크 인덱스
-MOUTH_RIGHT_IDX = 291
+# 눈 2개가 보이는 상태에서 얼굴 기울기를 확인할 수 있습니다.
+# 눈을 감으면 눈 검출이 사라지므로, 얼굴 안정 조건을 먼저 만족한 뒤에는
+# 눈이 안 보이는 상태를 눈 감음으로 판단합니다.
 
 
 def make_default_auto_checks():
@@ -979,50 +985,62 @@ def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Pa
 
 
 # =========================
-# 자동 얼굴 촬영 유틸 함수
+# 자동 얼굴 촬영 유틸 함수 - OpenCV Haar Cascade 방식
 # =========================
 
-def _euclidean(p1, p2):
-    # 두 점 사이의 유클리드 거리 계산
-    return ((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5
+def largest_rect(rects):
+    # 검출된 사각형이 없으면 None 반환
+    if len(rects) == 0:
+        return None
+
+    # 면적이 가장 큰 사각형 반환
+    return max(rects, key=lambda r: int(r[2]) * int(r[3]))
 
 
-def _eye_aspect_ratio(eye_pts):
-    # 눈 위아래 거리 1 계산
-    a = _euclidean(eye_pts[1], eye_pts[5])
+def pick_two_eyes(eyes_abs):
+    # 눈 후보가 2개 미만이면 None 반환
+    if len(eyes_abs) < 2:
+        return None
 
-    # 눈 위아래 거리 2 계산
-    b = _euclidean(eye_pts[2], eye_pts[4])
+    # 면적이 큰 눈 후보를 우선 사용
+    sorted_eyes = sorted(
+        eyes_abs,
+        key=lambda e: int(e[2]) * int(e[3]),
+        reverse=True
+    )
 
-    # 눈 좌우 거리 계산
-    c = _euclidean(eye_pts[0], eye_pts[3])
+    # 후보 중 x 위치가 충분히 떨어진 두 개를 선택
+    for i in range(len(sorted_eyes)):
+        for j in range(i + 1, len(sorted_eyes)):
+            e1 = sorted_eyes[i]
+            e2 = sorted_eyes[j]
 
-    # 0으로 나누는 상황 방지
-    if c == 0:
-        return 1.0
+            # 각 눈 중심점 계산
+            c1x = e1[0] + e1[2] / 2.0
+            c2x = e2[0] + e2[2] / 2.0
 
-    # EAR 값 반환
-    return (a + b) / (2.0 * c)
+            # 너무 가까운 후보는 같은 눈으로 보고 제외
+            if abs(c1x - c2x) < 30:
+                continue
+
+            # 왼쪽/오른쪽 순서로 정렬해서 반환
+            return sorted([e1, e2], key=lambda e: e[0])
+
+    # 적절한 두 눈을 못 찾으면 None 반환
+    return None
+
+
+def get_latched_angle_ok():
+    # 얼굴 안정 유지가 이미 완료된 상태인지 확인
+    with auto_state_lock:
+        return AUTO_STATE["stable_face_count"] >= STABLE_FACE_HOLD_FRAMES
 
 
 def update_dynamic_eye_threshold(avg_ear):
-    # 열린 눈 EAR 값을 누적
-    OPEN_EYE_EAR_HISTORY.append(avg_ear)
-
-    # 충분한 샘플이 쌓이면 동적 기준값 계산
-    if len(OPEN_EYE_EAR_HISTORY) >= max(8, OPEN_EYE_BASELINE_SAMPLES // 2):
-        # 열린 눈 평균값 계산
-        baseline = sum(OPEN_EYE_EAR_HISTORY) / len(OPEN_EYE_EAR_HISTORY)
-
-        # 열린 눈 평균값에 비율을 곱해 눈 감음 기준값 계산
-        dynamic = baseline * EYE_THRESHOLD_RATIO
-
-        # 너무 낮거나 높은 값으로 튀지 않게 제한
-        dynamic = max(MIN_DYNAMIC_EYE_AR_THRESHOLD, min(MAX_DYNAMIC_EYE_AR_THRESHOLD, dynamic))
-
-        # 자동 촬영 상태에 동적 기준값 저장
-        with auto_state_lock:
-            AUTO_STATE["dynamic_eye_threshold"] = dynamic
+    # OpenCV Haar 방식은 EAR 값을 계산하지 않습니다.
+    # React 상태 호환을 위해 함수만 유지합니다.
+    with auto_state_lock:
+        AUTO_STATE["dynamic_eye_threshold"] = 0.0
 
 
 def analyze_face_for_auto(cam2_bgr):
@@ -1036,9 +1054,11 @@ def analyze_face_for_auto(cam2_bgr):
         "size_ok": False,
         "eyes_closed": False,
         "roll_ok": False,
-        "yaw_ok": False,
-        "pitch_ok": False,
+        "yaw_ok": True,
+        "pitch_ok": True,
         "angles_ok": False,
+        "eyes_visible": False,
+        "eye_count": 0,
         "ear_left": 1.0,
         "ear_right": 1.0,
         "avg_ear": 1.0,
@@ -1049,83 +1069,56 @@ def analyze_face_for_auto(cam2_bgr):
         "guide_text": "얼굴을 화면에 맞춰주세요",
     }
 
-    # MediaPipe가 설치되어 있지 않으면 분석 불가 처리
-    if face_mesh is None:
-        result["guide_text"] = "mediapipe가 설치되어 있지 않습니다"
+    # Haar Cascade 파일을 못 읽었으면 분석 불가 처리
+    if not opencv_face_ready:
+        result["guide_text"] = "OpenCV 얼굴/눈 검출 파일을 불러오지 못했습니다"
         return result
 
-    # BGR 이미지를 RGB로 변환
-    rgb = cv2.cvtColor(cam2_bgr, cv2.COLOR_BGR2RGB)
+    # BGR 이미지를 그레이스케일로 변환
+    gray = cv2.cvtColor(cam2_bgr, cv2.COLOR_BGR2GRAY)
 
-    # MediaPipe 얼굴 메시 분석 실행
-    mesh_result = face_mesh.process(rgb)
+    # 조명 변화에 조금 더 강하게 만들기 위해 히스토그램 평활화 적용
+    gray = cv2.equalizeHist(gray)
 
-    # 얼굴이 감지되지 않으면 반환
-    if not mesh_result.multi_face_landmarks:
+    # 얼굴 검출
+    faces = face_cascade.detectMultiScale(
+        gray,
+        scaleFactor=1.1,
+        minNeighbors=5,
+        minSize=(120, 120)
+    )
+
+    # 가장 큰 얼굴 하나 선택
+    face = largest_rect(faces)
+
+    # 얼굴이 없으면 반환
+    if face is None:
         result["guide_text"] = "얼굴이 감지되지 않습니다"
         return result
 
-    # 랜드마크 좌표 배열 생성
-    pts = []
+    # 얼굴 박스 좌표 읽기
+    x, y, bw, bh = [int(v) for v in face]
 
-    # 첫 번째 얼굴의 모든 랜드마크 순회
-    for lm in mesh_result.multi_face_landmarks[0].landmark:
-        # 정규화 좌표를 픽셀 좌표로 변환하여 저장
-        pts.append((int(lm.x * w), int(lm.y * h)))
+    # 얼굴 박스 좌표 보정
+    x1 = max(0, x)
+    y1 = max(0, y)
+    x2 = min(w - 1, x + bw)
+    y2 = min(h - 1, y + bh)
 
-    # 얼굴 전체 x 좌표 배열 생성
-    xs = [p[0] for p in pts]
-
-    # 얼굴 전체 y 좌표 배열 생성
-    ys = [p[1] for p in pts]
-
-    # 얼굴 박스 왼쪽 좌표 계산
-    x1 = max(0, min(xs))
-
-    # 얼굴 박스 오른쪽 좌표 계산
-    x2 = min(w - 1, max(xs))
-
-    # 얼굴 박스 위쪽 좌표 계산
-    y1 = max(0, min(ys))
-
-    # 얼굴 박스 아래쪽 좌표 계산
-    y2 = min(h - 1, max(ys))
-
-    # 얼굴 박스 폭 계산
+    # 실제 박스 폭/높이 계산
     bw = max(1, x2 - x1)
-
-    # 얼굴 박스 높이 계산
     bh = max(1, y2 - y1)
 
     # 얼굴 면적 비율 계산
     area_ratio = (bw * bh) / float(w * h)
 
-    # 얼굴 중심 x 좌표 계산
+    # 얼굴 중심 좌표 계산
     cx = (x1 + x2) / 2.0
-
-    # 얼굴 중심 y 좌표 계산
     cy = (y1 + y2) / 2.0
 
-    # 중앙에서 벗어난 x 비율 계산
+    # 화면 중앙에서 벗어난 정도 계산
     norm_dx = abs(cx - (w / 2.0)) / w
-
-    # 중앙에서 벗어난 y 비율 계산
     norm_dy = abs(cy - (h / 2.0)) / h
-
-    # 왼쪽 눈 좌표 배열 생성
-    left_eye_pts = [pts[i] for i in LEFT_EYE]
-
-    # 오른쪽 눈 좌표 배열 생성
-    right_eye_pts = [pts[i] for i in RIGHT_EYE]
-
-    # 왼쪽 눈 EAR 계산
-    ear_left = _eye_aspect_ratio(left_eye_pts)
-
-    # 오른쪽 눈 EAR 계산
-    ear_right = _eye_aspect_ratio(right_eye_pts)
-
-    # 양쪽 눈 평균 EAR 계산
-    avg_ear = (ear_left + ear_right) / 2.0
 
     # 얼굴 중앙 정렬 여부 계산
     center_ok = (norm_dx <= FACE_CENTER_TOL_X) and (norm_dy <= FACE_CENTER_TOL_Y)
@@ -1133,75 +1126,83 @@ def analyze_face_for_auto(cam2_bgr):
     # 얼굴 크기 적정 여부 계산
     size_ok = (FACE_MIN_AREA_RATIO <= area_ratio <= FACE_MAX_AREA_RATIO)
 
-    # 코 끝 좌표 읽기
-    nose = pts[NOSE_TIP_IDX]
+    # 얼굴 상단 영역에서 눈 검출
+    eye_roi_y1 = y1
+    eye_roi_y2 = y1 + int(bh * 0.62)
+    eye_roi_x1 = x1
+    eye_roi_x2 = x2
 
-    # 왼쪽 눈 바깥쪽 좌표 읽기
-    le = pts[LEFT_EYE_OUTER_IDX]
+    # ROI 좌표 보정
+    eye_roi_y2 = min(h, max(eye_roi_y1 + 1, eye_roi_y2))
+    eye_roi_x2 = min(w, max(eye_roi_x1 + 1, eye_roi_x2))
 
-    # 오른쪽 눈 바깥쪽 좌표 읽기
-    re = pts[RIGHT_EYE_OUTER_IDX]
+    # 눈 검출용 ROI 생성
+    eye_roi_gray = gray[eye_roi_y1:eye_roi_y2, eye_roi_x1:eye_roi_x2]
 
-    # 얼굴 왼쪽 끝 좌표 읽기
-    lf = pts[LEFT_FACE_IDX]
+    # 눈 검출
+    eyes = eye_cascade.detectMultiScale(
+        eye_roi_gray,
+        scaleFactor=1.08,
+        minNeighbors=4,
+        minSize=(24, 18)
+    )
 
-    # 얼굴 오른쪽 끝 좌표 읽기
-    rf = pts[RIGHT_FACE_IDX]
+    # ROI 기준 눈 좌표를 원본 이미지 좌표로 변환
+    eyes_abs = []
+    for ex, ey, ew, eh in eyes:
+        eyes_abs.append((
+            int(eye_roi_x1 + ex),
+            int(eye_roi_y1 + ey),
+            int(ew),
+            int(eh),
+        ))
 
-    # 얼굴 위쪽 좌표 읽기
-    upper = pts[UPPER_FACE_IDX]
+    # 적절한 두 눈 선택
+    two_eyes = pick_two_eyes(eyes_abs)
 
-    # 얼굴 아래쪽 좌표 읽기
-    lower = pts[LOWER_FACE_IDX]
+    # 눈 2개가 보이는지 여부
+    eyes_visible = two_eyes is not None
 
-    # 입 왼쪽 좌표 읽기
-    ml = pts[MOUTH_LEFT_IDX]
+    # 얼굴 기울기 기본값
+    roll_deg = 0.0
 
-    # 입 오른쪽 좌표 읽기
-    mr = pts[MOUTH_RIGHT_IDX]
+    # 눈이 보이면 기울기 계산
+    if eyes_visible:
+        left_eye, right_eye = two_eyes
 
-    # 양쪽 눈 중심 좌표 계산
-    eye_mid = ((le[0] + re[0]) / 2.0, (le[1] + re[1]) / 2.0)
+        # 왼쪽 눈 중심
+        lx = left_eye[0] + left_eye[2] / 2.0
+        ly = left_eye[1] + left_eye[3] / 2.0
 
-    # 입 중심 좌표 계산
-    mouth_mid = ((ml[0] + mr[0]) / 2.0, (ml[1] + mr[1]) / 2.0)
+        # 오른쪽 눈 중심
+        rx = right_eye[0] + right_eye[2] / 2.0
+        ry = right_eye[1] + right_eye[3] / 2.0
 
-    # 얼굴 중심 x 좌표 계산
-    face_mid_x = (lf[0] + rf[0]) / 2.0
+        # 양쪽 눈 중심선으로 얼굴 좌우 기울기 계산
+        roll_deg = math.degrees(math.atan2(ry - ly, rx - lx))
 
-    # 얼굴 폭 계산
-    face_width = max(1.0, float(rf[0] - lf[0]))
+        # 기울기 허용 여부 계산
+        roll_ok = abs(roll_deg) <= MAX_ABS_ROLL_DEG
 
-    # 얼굴 높이 계산
-    face_height = max(1.0, float(lower[1] - upper[1]))
+        # 눈이 보이면 아직 눈을 감은 상태가 아님
+        eyes_closed = False
 
-    # 얼굴 좌우 기울기 각도 계산
-    roll_deg = math.degrees(math.atan2(re[1] - le[1], re[0] - le[0]))
+        # 각도는 roll만 간단히 판단
+        angles_ok = roll_ok
 
-    # 좌우 회전 점수 계산
-    yaw_score = abs(nose[0] - face_mid_x) / face_width
+    # 눈이 안 보이는 경우
+    else:
+        # 안정 단계가 완료된 이후에는 눈이 안 보이는 것을 눈 감음으로 판단
+        latched = get_latched_angle_ok()
 
-    # 위아래 회전 점수 계산
-    pitch_score = abs(nose[1] - ((eye_mid[1] + mouth_mid[1]) / 2.0)) / face_height
+        # 안정 단계 이전에는 눈이 보이지 않으면 각도 확인 불가
+        roll_ok = latched
 
-    # 좌우 기울기 허용 여부 계산
-    roll_ok = abs(roll_deg) <= MAX_ABS_ROLL_DEG
+        # 안정 단계 이후에만 눈 감음으로 인정
+        eyes_closed = latched
 
-    # 좌우 회전 허용 여부 계산
-    yaw_ok = yaw_score <= MAX_ABS_YAW_SCORE
-
-    # 위아래 회전 허용 여부 계산
-    pitch_ok = pitch_score <= MAX_ABS_PITCH_SCORE
-
-    # 전체 각도 허용 여부 계산
-    angles_ok = roll_ok and yaw_ok and pitch_ok
-
-    # 현재 눈 감음 기준값 읽기
-    with auto_state_lock:
-        threshold = AUTO_STATE["dynamic_eye_threshold"]
-
-    # 양쪽 눈이 모두 기준값보다 낮으면 눈 감음 처리
-    eyes_closed = (ear_left < threshold) and (ear_right < threshold)
+        # 안정 단계 이후에는 직전 정렬 상태를 유지한 것으로 판단
+        angles_ok = latched
 
     # 분석 결과 갱신
     result.update({
@@ -1210,35 +1211,24 @@ def analyze_face_for_auto(cam2_bgr):
         "size_ok": size_ok,
         "eyes_closed": eyes_closed,
         "roll_ok": roll_ok,
-        "yaw_ok": yaw_ok,
-        "pitch_ok": pitch_ok,
+        "yaw_ok": True,
+        "pitch_ok": True,
         "angles_ok": angles_ok,
-        "ear_left": ear_left,
-        "ear_right": ear_right,
-        "avg_ear": avg_ear,
+        "eyes_visible": eyes_visible,
+        "eye_count": len(eyes_abs),
         "roll_deg": roll_deg,
-        "yaw_score": yaw_score,
-        "pitch_score": pitch_score,
         "bbox": (x1, y1, x2, y2),
     })
 
-    # 얼굴 위치가 틀어진 경우 안내 문구 설정
+    # 안내 문구 결정
     if not center_ok:
         result["guide_text"] = "얼굴을 화면 중앙에 맞춰주세요"
-
-    # 얼굴 크기가 부적절한 경우 안내 문구 설정
     elif not size_ok:
         result["guide_text"] = "얼굴 거리를 조정해주세요"
-
-    # 얼굴 각도가 부적절한 경우 안내 문구 설정
     elif not angles_ok:
-        result["guide_text"] = "얼굴 각도를 정면으로 맞춰주세요"
-
-    # 눈을 아직 감지 않은 경우 안내 문구 설정
+        result["guide_text"] = "눈을 뜬 상태로 정면을 맞춰주세요"
     elif not eyes_closed:
-        result["guide_text"] = "눈을 감아주세요"
-
-    # 모든 기본 조건이 충족된 경우 안내 문구 설정
+        result["guide_text"] = "얼굴을 고정한 뒤 눈을 감아주세요"
     else:
         result["guide_text"] = "조건 충족"
 
@@ -1298,7 +1288,7 @@ def update_auto_state_from_detection(detection):
 
         # 얼굴 각도가 안 맞는 경우 상태 문구 설정
         elif not checks["angle_ok"]:
-            AUTO_STATE["status"] = "얼굴 각도를 정면으로 맞춰주세요"
+            AUTO_STATE["status"] = "눈을 뜬 상태로 정면을 맞춰주세요"
 
         # 얼굴 안정 유지 프레임이 부족한 경우 상태 문구 설정
         elif not checks["stable_ok"]:
@@ -1331,7 +1321,9 @@ def snapshot_detection_for_metadata(detection):
         "roll_deg": float(detection.get("roll_deg", 0.0)),
         "yaw_score": float(detection.get("yaw_score", 0.0)),
         "pitch_score": float(detection.get("pitch_score", 0.0)),
-        "dynamic_eye_threshold": float(AUTO_STATE.get("dynamic_eye_threshold", DEFAULT_EYE_AR_THRESHOLD)),
+        "opencv_eye_count": int(detection.get("eye_count", 0)),
+        "opencv_eyes_visible": bool(detection.get("eyes_visible", False)),
+        "dynamic_eye_threshold": 0.0,
     }
 
 
@@ -1465,6 +1457,9 @@ def reset_auto_state(profile_id=None, running=False):
         # 눈 감음 카운트 초기화
         AUTO_STATE["eyes_closed_count"] = 0
 
+        # OpenCV 방식에서는 동적 EAR 기준값을 사용하지 않음
+        AUTO_STATE["dynamic_eye_threshold"] = 0.0
+
         # 상태 문구 초기화
         AUTO_STATE["status"] = "자동 촬영 조건 확인 중" if running else "자동 촬영 대기 중"
 
@@ -1503,9 +1498,8 @@ def auto_capture_worker(profile_id: str):
             # 얼굴 상태 분석
             detection = analyze_face_for_auto(cam2_bgr)
 
-            # 얼굴이 안정적이고 눈을 뜬 상태라면 열린 눈 기준값 갱신
-            if detection["face_found"] and detection["center_ok"] and detection["size_ok"] and detection["angles_ok"] and not detection["eyes_closed"]:
-                update_dynamic_eye_threshold(detection["avg_ear"])
+            # OpenCV 방식은 눈이 보이면 각도를 확인하고, 안정 이후 눈이 안 보이면 눈 감음으로 판단
+            update_dynamic_eye_threshold(detection.get("avg_ear", 1.0))
 
             # 자동 촬영 조건 갱신 후 촬영 여부 판단
             should_capture = update_auto_state_from_detection(detection)
@@ -1990,11 +1984,11 @@ def auto_capture_start_api():
                 "error": "존재하지 않는 프로필입니다."
             }), 400
 
-        # MediaPipe 설치 여부 확인
-        if face_mesh is None:
+        # OpenCV 얼굴/눈 검출 분류기 준비 여부 확인
+        if not opencv_face_ready:
             return jsonify({
                 "ok": False,
-                "error": "mediapipe가 설치되어 있지 않아 자동 촬영을 사용할 수 없습니다."
+                "error": "OpenCV 얼굴/눈 검출 파일을 불러오지 못해 자동 촬영을 사용할 수 없습니다."
             }), 400
 
         # 카메라 준비 여부 확인
