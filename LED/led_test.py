@@ -1,7 +1,7 @@
 from gpiozero import LED
 from time import sleep
 
-relay = LED(17, active_high=False)
+relay = LED(22, active_high=False)
 
 while True:
 	relay.on()
