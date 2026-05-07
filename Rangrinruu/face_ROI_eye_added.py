@@ -290,13 +290,13 @@ def estimate_eye_state_and_motion(pts):
 
 
 def draw_eye_info(display: np.ndarray, eye_result):
-    for p in eye_result["left_eye_pts"]:
-        cv2.circle(display, p, 2, (255, 255, 0), -1)
-    for p in eye_result["right_eye_pts"]:
-        cv2.circle(display, p, 2, (255, 255, 0), -1)
+   # for p in eye_result["left_eye_pts"]:
+   #     cv2.circle(display, p, 2, (255, 255, 0), -1)
+   # for p in eye_result["right_eye_pts"]:
+   #     cv2.circle(display, p, 2, (255, 255, 0), -1)
 
-    cv2.circle(display, eye_result["left_iris_center"], 3, (0, 0, 255), -1)
-    cv2.circle(display, eye_result["right_iris_center"], 3, (0, 0, 255), -1)
+   # cv2.circle(display, eye_result["left_iris_center"], 3, (0, 0, 255), -1)
+   # cv2.circle(display, eye_result["right_iris_center"], 3, (0, 0, 255), -1)
 
     cv2.putText(
         display,
@@ -366,16 +366,16 @@ def main():
             if bbox is not None:
                 x1, y1, x2, y2 = bbox
 
-                cv2.rectangle(display, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(
-                    display,
-                    "Face ROI",
-                    (x1, max(30, y1 - 10)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    (0, 255, 0),
-                    2
-                )
+                #cv2.rectangle(display, (x1, y1), (x2, y2), (0, 255, 0), 2) #얼굴 네모 그리기
+               # cv2.putText(
+                 #   display,
+                 #   "Face ROI",
+                 #   (x1, max(30, y1 - 10)),
+                 #   cv2.FONT_HERSHEY_SIMPLEX,
+                  #  0.8,
+                  #  (0, 255, 0),
+                  #  2
+                #)
             else:
                 cv2.putText(
                     display,
@@ -390,7 +390,7 @@ def main():
             pts = extract_face_landmarks(frame)
             if pts is not None:
                 eye_result = estimate_eye_state_and_motion(pts)
-                draw_eye_info(display, eye_result)
+                draw_eye_info(display, eye_result) # 눈 그리기
 
             combined = np.hstack((display, masked))
             combined = cv2.resize(combined, (1400, 600))
