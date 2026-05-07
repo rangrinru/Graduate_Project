@@ -1,0 +1,25 @@
+{
+    "captured_at": "2026-05-06T17:25:53.243162",
+    "profile_name": "김태연",
+    "profile_folder_id": "profile_1778054799364",
+    "camera_name": "cam3",
+    "camera_label": "CAM 3 - 405nm FILTER",
+    "filter_type": "405nm_filter",
+    "display_name": "405nm_Filter",
+    "sequence_order": 2,
+    "capture_type": "high_quality_still_fullframe_then_crop",
+    "file_format": "png",
+    "camera_mode": {
+        "capture_width": 5120,
+        "capture_height": 800,
+        "single_width": 1280
+    },
+    "camera_control": {
+        "AeEnable": false,
+        "ExposureTime_ms": 100,
+        "ExposureTime_us": 100000,
+        "AnalogueGain": 1.0
+    },
+    "saved_file": "/home/park/Graduate_Project/TaeYeon/captures/profile_1778054799364/cam3_405nm/20260506_172553_243/cam3.png",
+    "rotation_applied": "ROTATE_90_CLOCKWISE"
+}
