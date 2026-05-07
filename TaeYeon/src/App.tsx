@@ -2231,6 +2231,324 @@ function App() {
             width: min(360px, calc(100vw - 180px));
           }
         }
+
+
+        /* =========================
+           15.6인치 세로 터치화면용 확대 설정
+           버튼, 모달, 가상 키보드 터치 영역 확대
+        ========================= */
+
+        button {
+          touch-action: manipulation;
+          min-height: 56px;
+        }
+
+        .control-btn,
+        .back-btn,
+        .mini-back-btn,
+        .filter-chip,
+        .delete-btn,
+        .history-delete-btn,
+        .retry-btn,
+        .analysis-btn {
+          min-height: 66px;
+          min-width: 154px;
+          padding: 18px 22px;
+          border-radius: 22px;
+          font-size: 18px;
+          font-weight: 800;
+        }
+
+        .controls {
+          right: 22px;
+          top: 22px;
+          gap: 16px;
+          z-index: 90;
+        }
+
+        .selected-profile {
+          left: 22px;
+          top: 22px;
+          padding: 18px 20px;
+          border-radius: 24px;
+          max-width: 58%;
+        }
+
+        .selected-profile small {
+          font-size: 15px;
+        }
+
+        .selected-profile strong {
+          font-size: 22px;
+        }
+
+        .back-btn {
+          left: 22px;
+          bottom: 22px;
+        }
+
+        .capture-area {
+          bottom: 34px;
+        }
+
+        .capture-btn {
+          width: 140px;
+          height: 140px;
+          border-width: 8px;
+        }
+
+        .capture-inner {
+          width: 92px;
+          height: 92px;
+        }
+
+        .capture-status {
+          bottom: 190px;
+          padding: 16px 22px;
+          border-radius: 22px;
+          font-size: 18px;
+          font-weight: 800;
+        }
+
+        .guide-circle {
+          width: 290px;
+          height: 290px;
+          border-width: 4px;
+          font-size: 20px;
+        }
+
+        .auto-check-panel {
+          left: 24px;
+          top: 125px;
+          width: min(520px, calc(100vw - 230px));
+          padding: 22px;
+          border-radius: 28px;
+        }
+
+        .auto-check-title {
+          font-size: 25px;
+        }
+
+        .auto-check-message {
+          font-size: 19px;
+        }
+
+        .auto-check-state {
+          font-size: 15px;
+          padding: 10px 14px;
+        }
+
+        .auto-check-list {
+          gap: 12px;
+        }
+
+        .auto-check-item {
+          min-height: 58px;
+          font-size: 17px;
+          border-radius: 20px;
+        }
+
+        .auto-check-icon {
+          width: 32px;
+          height: 32px;
+          font-size: 18px;
+        }
+
+        .profiles-container,
+        .history-container {
+          padding: 130px 28px 28px 28px;
+        }
+
+        .profiles-grid {
+          gap: 22px;
+        }
+
+        .profile-card,
+        .add-card {
+          min-height: 280px;
+          padding: 28px;
+          border-radius: 30px;
+        }
+
+        .profile-icon,
+        .add-icon {
+          width: 78px;
+          height: 78px;
+          border-radius: 22px;
+          font-size: 38px;
+        }
+
+        .profile-name {
+          font-size: 28px;
+        }
+
+        .profile-date {
+          font-size: 18px;
+        }
+
+        .profile-select-tag,
+        .history-tag {
+          font-size: 16px;
+          padding: 12px 18px;
+        }
+
+        .history-card {
+          padding: 24px;
+          border-radius: 28px;
+          margin-bottom: 18px;
+        }
+
+        .history-detail-title {
+          font-size: 26px;
+        }
+
+        .history-detail-sub {
+          font-size: 16px;
+        }
+
+        .modal-box {
+          max-width: 760px;
+          padding: 34px;
+          border-radius: 32px;
+        }
+
+        .modal-title {
+          font-size: 30px;
+          margin-bottom: 24px;
+        }
+
+        .modal-text {
+          font-size: 20px;
+        }
+
+        .modal-warning {
+          font-size: 18px;
+          padding: 18px 20px;
+          border-radius: 22px;
+        }
+
+        .input-label {
+          font-size: 19px;
+          margin-bottom: 12px;
+        }
+
+        .text-input {
+          height: 72px;
+          padding: 18px 22px;
+          border-radius: 22px;
+          font-size: 24px;
+        }
+
+        .modal-actions {
+          gap: 16px;
+          margin-top: 24px;
+        }
+
+        .modal-btn {
+          min-width: 140px;
+          min-height: 64px;
+          padding: 18px 26px;
+          border-radius: 22px;
+          font-size: 20px;
+          font-weight: 800;
+        }
+
+        .virtual-keyboard {
+          margin-top: 22px;
+          padding: 20px;
+          border-radius: 26px;
+        }
+
+        .keyboard-mode-row {
+          gap: 12px;
+          margin-bottom: 18px;
+        }
+
+        .keyboard-mode-btn {
+          min-height: 60px;
+          border-radius: 18px;
+          font-size: 20px;
+          font-weight: 800;
+        }
+
+        .keyboard-row {
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+
+        .keyboard-key {
+          flex: 1;
+          min-width: 0;
+          height: 64px;
+          border-radius: 18px;
+          font-size: 24px;
+          font-weight: 900;
+        }
+
+        .keyboard-control-row {
+          gap: 12px;
+          margin-top: 16px;
+        }
+
+        .keyboard-control-key {
+          min-height: 66px;
+          padding: 16px 18px;
+          border-radius: 20px;
+          font-size: 20px;
+          font-weight: 900;
+        }
+
+        .keyboard-control-key.space {
+          flex: 1.5;
+        }
+
+        .keyboard-control-key.done {
+          min-width: 120px;
+        }
+
+        .toast {
+          top: 28px;
+          min-width: 360px;
+          padding: 20px 26px;
+          border-radius: 24px;
+          font-size: 20px;
+        }
+
+        @media (max-width: 700px) {
+          .modal-box {
+            max-width: 96vw;
+            padding: 24px;
+          }
+
+          .keyboard-key {
+            height: 58px;
+            font-size: 21px;
+            border-radius: 16px;
+          }
+
+          .keyboard-row {
+            gap: 6px;
+          }
+
+          .control-btn,
+          .back-btn,
+          .mini-back-btn,
+          .filter-chip {
+            min-width: 130px;
+            font-size: 16px;
+          }
+
+          .capture-btn {
+            width: 128px;
+            height: 128px;
+          }
+
+          .capture-inner {
+            width: 84px;
+            height: 84px;
+          }
+        }
+
       `}</style>
 
       <div className="app-bg">
