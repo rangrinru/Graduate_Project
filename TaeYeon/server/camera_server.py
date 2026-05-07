@@ -83,10 +83,19 @@ CURRENT_GAIN = 1.0
 SAVE_AS_PNG = True
 
 # 초기 노출 시간(ms)
-INITIAL_EXPOSURE_MS = 100
+INITIAL_EXPOSURE_MS = 20
 
 # 스트리밍 FPS
-STREAM_FPS = 12
+STREAM_FPS = 20
+
+# 스트리밍용 화면 가로 크기
+STREAM_WIDTH = 640
+
+# 스트리밍용 화면 세로 크기
+STREAM_HEIGHT = 400
+
+# 스트리밍용 JPEG 품질
+STREAM_JPEG_QUALITY = 60
 
 # 릴레이 연결 GPIO 번호
 RELAY_PIN = 17
@@ -1811,16 +1820,20 @@ def delete_profile_api(profile_id):
 # =========================
 
 def generate_cam4_stream():
-    # 프레임 간 지연 시간 계산
+    # 목표 프레임 간격 계산
     frame_delay = 1.0 / STREAM_FPS
 
     # 무한 스트리밍 루프
     while True:
+        # 이번 프레임 처리 시작 시간 기록
+        start_time = monotonic()
+
         try:
+            # 카메라 접근 구간은 최대한 짧게 유지
             with camera_lock:
                 # 카메라 준비 안 되었으면 잠시 대기
                 if not camera_ready:
-                    sleep(0.2)
+                    sleep(0.05)
                     continue
 
                 # 전체 프레임 읽기
@@ -1829,12 +1842,24 @@ def generate_cam4_stream():
                 # cam4 부분만 잘라 복사
                 cam4_frame = extract_cam_frame(full_frame_bgr, "cam4").copy()
 
-                # JPEG 인코딩
-                ok, buffer = cv2.imencode(".jpg", cam4_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            # 스트리밍용으로만 크기 축소
+            # 저장 촬영 이미지는 이 resize의 영향을 받지 않습니다.
+            cam4_frame = cv2.resize(
+                cam4_frame,
+                (STREAM_WIDTH, STREAM_HEIGHT),
+                interpolation=cv2.INTER_AREA
+            )
 
-            # 인코딩 실패 시 다음 루프로
+            # JPEG 품질을 낮춰서 실시간 송출 부담을 줄임
+            ok, buffer = cv2.imencode(
+                ".jpg",
+                cam4_frame,
+                [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY]
+            )
+
+            # 인코딩 실패 시 다음 프레임으로 넘어감
             if not ok:
-                sleep(frame_delay)
+                sleep(0.01)
                 continue
 
             # 바이트 변환
@@ -1843,20 +1868,30 @@ def generate_cam4_stream():
             # multipart 응답 데이터 yield
             yield (
                 b"--frame\r\n"
-                b"Content-Type: image/jpeg\r\n\r\n" +
+                b"Content-Type: image/jpeg\r\n"
+                b"Cache-Control: no-cache\r\n\r\n" +
                 jpg_bytes +
                 b"\r\n"
             )
 
-            # FPS 맞추기 위한 대기
-            sleep(frame_delay)
+            # 처리 시간을 뺀 만큼만 대기해서 실제 FPS를 최대한 일정하게 유지
+            elapsed = monotonic() - start_time
+            remain = frame_delay - elapsed
+
+            # 남은 시간이 있을 때만 대기
+            if remain > 0:
+                sleep(remain)
+
+        except GeneratorExit:
+            # 브라우저가 스트림 연결을 끊으면 조용히 종료
+            break
 
         except Exception as e:
             # 스트리밍 오류 출력
             print("[스트림 오류]", e)
 
             # 잠시 쉬고 재시도
-            sleep(0.3)
+            sleep(0.1)
 
 
 # =========================
