@@ -47,7 +47,7 @@ def resolve_analysis_function() -> Callable[[str | Path], Dict[str, Any]]:
     2) analyze_porphyrin_session
     3) run_analysis_for_session
     """
-    import porphyrin_analysis as pa
+    import porphyrin_analysis_connected as pa
 
     candidate_names = [
         "analyze_session_dir",
