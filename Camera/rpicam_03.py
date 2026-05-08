@@ -284,6 +284,7 @@ def capture_high_quality_full_frame(cam, preview_config, still_config, exposure_
         set_manual_controls(cam, exposure_ms, gain)
 
         still_frame = cam.capture_array()   # RGB888 예상
+        print("FRAME INFO:", frame.shape, frame.dtype)
         full_frame_bgr = cv2.cvtColor(still_frame, cv2.COLOR_RGB2BGR)
 
     finally:

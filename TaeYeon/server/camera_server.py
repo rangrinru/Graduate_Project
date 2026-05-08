@@ -155,7 +155,7 @@ STABLE_FACE_HOLD_FRAMES = 6
 OPEN_EYE_BASELINE_SAMPLES = 15
 
 # 눈 감음이 유지되어야 하는 프레임 수
-EYES_CLOSED_HOLD_FRAMES = 4
+EYES_CLOSED_HOLD_FRAMES = 2
 
 # 자동 촬영 상태 갱신 주기
 AUTO_CAPTURE_INTERVAL_SEC = 0.12
@@ -1152,7 +1152,7 @@ def analyze_face_for_auto(cam2_bgr):
     eyes = eye_cascade.detectMultiScale(
         eye_roi_gray,
         scaleFactor=1.08,
-        minNeighbors=4,
+        minNeighbors=2,
         minSize=(24, 18)
     )
 
@@ -1169,8 +1169,18 @@ def analyze_face_for_auto(cam2_bgr):
     # 적절한 두 눈 선택
     two_eyes = pick_two_eyes(eyes_abs)
 
-    # 눈 2개가 보이는지 여부
-    eyes_visible = two_eyes is not None
+    # 검출된 눈 개수
+    eye_count = len(eyes_abs)
+
+    # 기본값
+    eyes_visible = False
+
+    # 눈이 2개 이상 제대로 검출될 때만 눈 뜬 상태로 판단
+    if two_eyes is not None and eye_count >= 2:
+        eyes_visible = True
+
+    # 디버깅용 출력
+    print("eye_count =", eye_count)
 
     # 얼굴 기울기 기본값
     roll_deg = 0.0
