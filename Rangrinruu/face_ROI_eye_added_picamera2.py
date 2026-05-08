@@ -318,6 +318,15 @@ def init_picamera2():
     )
     picam2.configure(config)
     picam2.start()
+
+    # 자동 노출 끄고 수동값 설정
+    picam2.set_controls({
+        "AeEnable": False,
+        "AwbEnable": False,
+        "ExposureTime": 3000,
+        "AnalogueGain": 1.0,
+    })
+
     time.sleep(1.5)
     return picam2
 
