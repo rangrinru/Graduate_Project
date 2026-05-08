@@ -18,12 +18,29 @@ try:
 except ImportError:
     raise ImportError("picamera2가 필요합니다. sudo apt install -y python3-picamera2 후 실행하세요.")
 
+BRIGHTNESS_ALPHA = 4.0
+BRIGHTNESS_BETA = 20
 
+def convert_picam_frame_for_display(frame_raw):
+    # 2차원 MONO 프레임이면
+    if frame_raw.ndim == 2:
+        gray8 = cv2.normalize(frame_raw, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        gray8 = cv2.convertScaleAbs(gray8, alpha=BRIGHTNESS_ALPHA, beta=BRIGHTNESS_BETA)
+        return cv2.cvtColor(gray8, cv2.COLOR_GRAY2BGR)
+
+    # 3채널이어도 실제론 매우 어두운 MONO일 수 있으니 gray로 바꿔서 밝게 만듦
+    if frame_raw.ndim == 3 and frame_raw.shape[2] == 3:
+        gray = cv2.cvtColor(frame_raw, cv2.COLOR_RGB2GRAY)
+        gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        gray = cv2.convertScaleAbs(gray, alpha=BRIGHTNESS_ALPHA, beta=BRIGHTNESS_BETA)
+        return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
+    return frame_raw
 WINDOW_NAME = "Picamera2 Face ROI + Eye State"
 CAMERA_FULL_SIZE = (5120, 800)
 CAMERA_FORMAT = "RGB888"
 
-ENABLE_QUAD_SPLIT = True
+ENABLE_QUAD_SPLIT = False
 TARGET_VIEW_INDEX = 0  # 0=cam1, 1=cam2, 2=cam3, 3=cam4
 PROCESS_VIEW_WIDTH = 960
 
@@ -313,12 +330,12 @@ def main():
 
     try:
         while True:
-            frame_rgb = picam2.capture_array()
-            if frame_rgb is None:
+            frame_raw = picam2.capture_array()
+            if frame_raw is None:
                 print("프레임 읽기 실패")
                 break
 
-            frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+            frame_bgr = convert_picam_frame_for_display(frame_raw)
             selected_view, view_name = split_quad_frame(frame_bgr)
             frame = resize_for_processing(selected_view)
 
