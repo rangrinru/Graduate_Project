@@ -313,19 +313,32 @@ def draw_eye_info(display: np.ndarray, eye_result):
 
 def init_picamera2():
     picam2 = Picamera2()
+
     config = picam2.create_preview_configuration(
         main={"size": CAMERA_FULL_SIZE, "format": CAMERA_FORMAT}
     )
     picam2.configure(config)
     picam2.start()
+    time.sleep(1.5)
 
-    # 자동 노출 끄고 수동값 설정
-    picam2.set_controls({
-        "AeEnable": False,
-        "AwbEnable": False,
-        "ExposureTime": 3000,
-        "AnalogueGain": 1.0,
-    })
+    supported = picam2.camera_controls.keys()
+    controls = {}
+
+    if "AeEnable" in supported:
+        controls["AeEnable"] = False
+    if "AwbEnable" in supported:
+        controls["AwbEnable"] = False
+    if "ExposureTime" in supported:
+        controls["ExposureTime"] = 3000
+    if "AnalogueGain" in supported:
+        controls["AnalogueGain"] = 1.0
+
+    if controls:
+        picam2.set_controls(controls)
+
+    return picam2
+
+    return picam2
 
     time.sleep(1.5)
     return picam2
