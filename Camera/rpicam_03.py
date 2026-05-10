@@ -55,6 +55,12 @@ RELAY_WARMUP_SEC = 0.3      # LED 켠 뒤 안정화 대기 시간(초)
 relay = LED(RELAY_PIN, active_high=RELAY_ACTIVE_HIGH, initial_value=False)
 
 
+# =========================
+# 저장 회전 설정
+# True면 저장 이미지도 90도 회전
+# =========================
+ROTATE_SAVE = True
+SAVE_ROTATE_CODE = cv2.ROTATE_90_CLOCKWISE
 
 CAMERA_INFO = {
     "cam2": {
@@ -289,7 +295,10 @@ def capture_high_quality_full_frame(cam, preview_config, still_config, exposure_
 
     return full_frame_bgr
 
-
+def rotate_for_save(img):
+    if ROTATE_SAVE:
+        return cv2.rotate(img, SAVE_ROTATE_CODE)
+    return img
 # =========================
 # 순차 촬영
 # Cam2 -> Cam3 -> Cam4
@@ -319,13 +328,13 @@ def capture_sequence(cam, preview_config, still_config, exposure_ms, gain, save_
         for cam_key in ["cam2", "cam3", "cam4"]:
             target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
 
-            # 단독 표시
             show_single_camera(WINDOW_NAME, target_frame, cam_key, exposure_ms, hold_ms=700)
 
-            # 개별 저장 (원본 방향 그대로 저장)
+            save_frame = rotate_for_save(target_frame)
+
             save_one_camera_image(
                 cam_key=cam_key,
-                frame_bgr=target_frame,
+                frame_bgr=save_frame,
                 timestamp=capture_timestamp,
                 exposure_ms=exposure_ms,
                 gain=gain,
