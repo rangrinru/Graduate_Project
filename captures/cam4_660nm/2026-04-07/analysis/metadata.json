@@ -1,0 +1,240 @@
+{
+    "captured_at": "2026-05-10T16:17:40.701749",
+    "camera_name": "cam4",
+    "camera_label": "CAM 4 - 660nm FILTER",
+    "filter_type": "660nm_filter",
+    "analysis_type": "porphyrin_detection",
+    "saved_file": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\captures\\cam4_660nm\\2026-04-07\\20260407_233614_041_cam4.png",
+    "analysis_result": {
+        "porphyrin_count": 53,
+        "average_brightness": 92.75471698113208,
+        "max_brightness": 105,
+        "distribution": {
+            "left_cheek": 4,
+            "right_cheek": 9,
+            "forehead": 0,
+            "nose": 31,
+            "chin": 9
+        },
+        "threshold_percentile": 97,
+        "detected_points": [
+            [
+                388,
+                1019
+            ],
+            [
+                497,
+                1011
+            ],
+            [
+                415,
+                1008
+            ],
+            [
+                511,
+                1001
+            ],
+            [
+                454,
+                987
+            ],
+            [
+                366,
+                981
+            ],
+            [
+                420,
+                983
+            ],
+            [
+                506,
+                982
+            ],
+            [
+                380,
+                982
+            ],
+            [
+                538,
+                930
+            ],
+            [
+                359,
+                914
+            ],
+            [
+                298,
+                843
+            ],
+            [
+                280,
+                817
+            ],
+            [
+                573,
+                802
+            ],
+            [
+                279,
+                805
+            ],
+            [
+                611,
+                762
+            ],
+            [
+                292,
+                759
+            ],
+            [
+                262,
+                752
+            ],
+            [
+                583,
+                738
+            ],
+            [
+                361,
+                738
+            ],
+            [
+                577,
+                713
+            ],
+            [
+                345,
+                716
+            ],
+            [
+                440,
+                707
+            ],
+            [
+                256,
+                705
+            ],
+            [
+                350,
+                701
+            ],
+            [
+                497,
+                689
+            ],
+            [
+                334,
+                695
+            ],
+            [
+                562,
+                674
+            ],
+            [
+                276,
+                664
+            ],
+            [
+                556,
+                665
+            ],
+            [
+                326,
+                654
+            ],
+            [
+                294,
+                655
+            ],
+            [
+                287,
+                648
+            ],
+            [
+                629,
+                642
+            ],
+            [
+                630,
+                632
+            ],
+            [
+                314,
+                629
+            ],
+            [
+                342,
+                630
+            ],
+            [
+                345,
+                588
+            ],
+            [
+                419,
+                521
+            ],
+            [
+                356,
+                480
+            ],
+            [
+                493,
+                466
+            ],
+            [
+                383,
+                457
+            ],
+            [
+                428,
+                455
+            ],
+            [
+                449,
+                452
+            ],
+            [
+                391,
+                449
+            ],
+            [
+                443,
+                444
+            ],
+            [
+                434,
+                436
+            ],
+            [
+                387,
+                434
+            ],
+            [
+                427,
+                422
+            ],
+            [
+                462,
+                421
+            ],
+            [
+                417,
+                415
+            ],
+            [
+                408,
+                408
+            ],
+            [
+                397,
+                407
+            ]
+        ]
+    },
+    "analysis_files": {
+        "detect_image": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\captures\\cam4_660nm\\2026-04-07\\analysis\\porphyrin_detect_result.jpg",
+        "compare_image": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\captures\\cam4_660nm\\2026-04-07\\analysis\\compare_result.jpg",
+        "distribution_map": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\captures\\cam4_660nm\\2026-04-07\\analysis\\distribution_map.jpg"
+    }
+}
