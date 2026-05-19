@@ -1,0 +1,2787 @@
+# Flask 서버와 JSON 응답을 위한 모듈 import
+from flask import Flask, jsonify, Response, request, send_file
+
+# CORS 허용을 위한 모듈 import
+from flask_cors import CORS
+
+# 이미지 저장/변환을 위한 OpenCV import
+import cv2
+
+# 포르피린 분석을 위한 NumPy import
+import numpy as np
+
+# JSON 파일 읽기/쓰기용 import
+import json
+
+# 얼굴 각도 계산을 위한 math import
+import math
+
+# 카메라 동기화용 스레드 락 import
+import threading
+
+# 문자열 정리용 정규식 모듈 import
+import re
+
+# 폴더 삭제용 모듈 import
+import shutil
+
+# 외부 Python 파일을 모듈처럼 불러오기 위한 import
+import sys
+import importlib.util
+
+# 경로 처리를 위한 Path import
+from pathlib import Path
+
+# 날짜/시간 처리용 import
+from datetime import datetime
+
+# 대기 시간과 경과 시간 측정용 import
+from time import sleep, monotonic
+
+# 눈 감음 기준값 누적용 deque import
+from collections import deque
+
+# 릴레이 제어용 GPIO import
+from gpiozero import LED
+
+# Picamera2 import
+from picamera2 import Picamera2
+
+# face_ROI_eye_added.py가 있으면 MediaPipe 기반 얼굴/눈 인식을 우선 사용합니다.
+# 해당 모듈을 불러오지 못하면 OpenCV Haar Cascade 방식으로 자동 fallback 합니다.
+
+
+# Flask 앱 생성
+app = Flask(__name__)
+
+# 다른 포트의 프론트엔드에서도 접근 가능하도록 CORS 허용
+CORS(app)
+
+
+# =========================
+# 기본 설정값
+# =========================
+
+# 전체 캡처 이미지 가로 해상도
+CAPTURE_WIDTH = 5120
+
+# 전체 캡처 이미지 세로 해상도
+CAPTURE_HEIGHT = 800
+
+# 전체 이미지가 4분할 구조라고 가정하고 단일 폭 계산
+SINGLE_WIDTH = CAPTURE_WIDTH // 4
+
+# 저장 루트 경로 설정
+SAVE_ROOT = Path.home() / "Graduate_Project" / "TaeYeon" / "captures"
+
+# 저장 루트 폴더가 없으면 생성
+SAVE_ROOT.mkdir(parents=True, exist_ok=True)
+
+# 프로필 목록을 저장하는 JSON 파일 경로
+PROFILES_FILE = SAVE_ROOT / "profiles.json"
+
+# 현재 고정 gain 값
+CURRENT_GAIN = 1.0
+
+# PNG 저장 여부
+SAVE_AS_PNG = True
+
+# 초기 노출 시간(ms)
+INITIAL_EXPOSURE_MS = 20
+
+# 스트리밍 FPS
+STREAM_FPS = 20
+
+# 스트리밍용 화면 가로 크기
+STREAM_WIDTH = 640
+
+# 스트리밍용 화면 세로 크기
+STREAM_HEIGHT = 400
+
+# 스트리밍용 JPEG 품질
+STREAM_JPEG_QUALITY = 60
+
+# 릴레이 연결 GPIO 번호
+RELAY_PIN = 17
+
+# active_high 여부
+RELAY_ACTIVE_HIGH = False
+
+# 릴레이 켠 후 안정화 대기 시간
+RELAY_WARMUP_SEC = 0.3
+
+# 백색 LED 연결 GPIO 번호
+WHITE_LED_PIN = 22
+
+# 백색 LED active_high 여부
+WHITE_LED_ACTIVE_HIGH = True
+
+# 자동 촬영 직전 백색 LED를 끈 뒤 대기하는 시간
+WHITE_LED_OFF_BEFORE_CAPTURE_SEC = 0.15
+
+# 얼굴 중앙 허용 오차 X축 비율
+FACE_CENTER_TOL_X = 0.18
+
+# 얼굴 중앙 허용 오차 Y축 비율
+FACE_CENTER_TOL_Y = 0.20
+
+# 얼굴이 너무 작은지 판단하는 최소 면적 비율
+FACE_MIN_AREA_RATIO = 0.08
+
+# 얼굴이 너무 큰지 판단하는 최대 면적 비율
+FACE_MAX_AREA_RATIO = 0.70
+
+# 얼굴 좌우 기울기 허용 각도
+MAX_ABS_ROLL_DEG = 8.0
+
+# 얼굴 좌우 회전 점수 허용값
+MAX_ABS_YAW_SCORE = 0.12
+
+# 얼굴 위아래 회전 점수 허용값
+MAX_ABS_PITCH_SCORE = 0.12
+
+# 기본 눈 감음 EAR 기준값
+DEFAULT_EYE_AR_THRESHOLD = 0.18
+
+# 자동 보정 EAR 최소값
+MIN_DYNAMIC_EYE_AR_THRESHOLD = 0.14
+
+# 자동 보정 EAR 최대값
+MAX_DYNAMIC_EYE_AR_THRESHOLD = 0.26
+
+# 열린 눈 평균값에 곱할 비율
+EYE_THRESHOLD_RATIO = 0.72
+
+# 얼굴 정렬이 유지되어야 하는 프레임 수
+STABLE_FACE_HOLD_FRAMES = 6
+
+# 열린 눈 기준값을 계산할 샘플 수
+OPEN_EYE_BASELINE_SAMPLES = 15
+
+# 눈 감음이 유지되어야 하는 프레임 수
+EYES_CLOSED_HOLD_FRAMES = 4
+
+# 자동 촬영 상태 갱신 주기
+AUTO_CAPTURE_INTERVAL_SEC = 0.12
+
+
+# =========================
+# 외부 모듈 연동 경로
+# =========================
+# camera_server.py 위치가 /Graduate_Project/TaeYeon/server 라고 가정
+SERVER_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SERVER_DIR.parents[1] if len(SERVER_DIR.parents) >= 2 else Path.home() / "Graduate_Project"
+
+FACE_ROI_MODULE_PATH = PROJECT_ROOT / "Rangrinruu" / "face_ROI_eye_added.py"
+PORPHYRIN_MODULE_PATH = PROJECT_ROOT / "GDH" / "Detect" / "porphyrin_analysis.py"
+
+# 얼굴 가이드용 실루엣 영역 비율
+SILHOUETTE_X1_RATIO = 0.22
+SILHOUETTE_Y1_RATIO = 0.08
+SILHOUETTE_X2_RATIO = 0.78
+SILHOUETTE_Y2_RATIO = 0.92
+
+
+
+# =========================
+# 외부 코드 모듈 로더
+# =========================
+
+def load_python_module(module_name: str, module_path: Path):
+    # 지정 경로의 Python 파일을 import 가능한 모듈로 로드합니다.
+    if not module_path.exists():
+        print(f"[외부 모듈 없음] {module_path}")
+        return None
+
+    try:
+        spec = importlib.util.spec_from_file_location(module_name, str(module_path))
+
+        if spec is None or spec.loader is None:
+            print(f"[외부 모듈 로드 실패] spec 생성 실패: {module_path}")
+            return None
+
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+
+        print(f"[외부 모듈 로드 완료] {module_name}: {module_path}")
+        return module
+
+    except Exception as e:
+        print(f"[외부 모듈 로드 실패] {module_path}: {e}")
+        return None
+
+
+# face_ROI_eye_added.py: 얼굴 위치/눈 감김 판단용
+face_roi_module = load_python_module(
+    "external_face_roi_eye_added",
+    FACE_ROI_MODULE_PATH
+)
+
+# porphyrin_analysis.py: 포르피린 분석용
+porphyrin_analysis_module = load_python_module(
+    "external_porphyrin_analysis",
+    PORPHYRIN_MODULE_PATH
+)
+
+FACE_ROI_READY = (
+    face_roi_module is not None
+    and hasattr(face_roi_module, "detect_face_bbox")
+    and hasattr(face_roi_module, "extract_face_landmarks")
+    and hasattr(face_roi_module, "estimate_eye_state_and_motion")
+)
+
+PORPHYRIN_ANALYSIS_READY = (
+    porphyrin_analysis_module is not None
+    and hasattr(porphyrin_analysis_module, "detect_porphyrin")
+)
+
+print("[얼굴/눈 인식 모듈]", "face_ROI_eye_added.py 사용" if FACE_ROI_READY else "OpenCV Haar fallback 사용")
+print("[포르피린 분석 모듈]", "GDH/Detect/porphyrin_analysis.py 사용" if PORPHYRIN_ANALYSIS_READY else "camera_server 내장 분석 사용")
+
+
+# =========================
+# 릴레이 객체 생성
+# =========================
+
+# 릴레이 LED 객체 생성
+relay = LED(RELAY_PIN, active_high=RELAY_ACTIVE_HIGH, initial_value=False)
+
+# 백색 LED 객체 생성
+white_led = LED(WHITE_LED_PIN, active_high=WHITE_LED_ACTIVE_HIGH, initial_value=False)
+
+# 백색 LED 상태값
+white_led_is_on = False
+
+
+# =========================
+# 카메라별 설정 정보
+# =========================
+
+CAMERA_INFO = {
+    "cam2": {
+        "label": "CAM 2 - NO FILTER",
+        "folder": "cam2_no_filter",
+        "filter": "no_filter",
+        "display_name": "No_Filter",
+        "x_start": SINGLE_WIDTH * 1,
+        "x_end": SINGLE_WIDTH * 2,
+        "sequence_order": 1
+    },
+    "cam3": {
+        "label": "CAM 3 - 405nm FILTER",
+        "folder": "cam3_405nm",
+        "filter": "405nm_filter",
+        "display_name": "405nm_Filter",
+        "x_start": SINGLE_WIDTH * 2,
+        "x_end": SINGLE_WIDTH * 3,
+        "sequence_order": 2
+    },
+    "cam4": {
+        "label": "CAM 4 - 660nm FILTER",
+        "folder": "cam4_660nm",
+        "filter": "660nm_filter",
+        "display_name": "660nm_Filter",
+        "x_start": SINGLE_WIDTH * 3,
+        "x_end": SINGLE_WIDTH * 4,
+        "sequence_order": 3
+    }
+}
+
+
+# =========================
+# 전역 카메라 상태값
+# =========================
+
+# 카메라 동시 접근 방지를 위한 락
+camera_lock = threading.Lock()
+
+# 카메라 준비 여부
+camera_ready = False
+
+# Picamera2 객체
+picam2 = None
+
+# 프리뷰 설정
+preview_config = None
+
+# 스틸 캡처 설정
+still_config = None
+
+# 자동 촬영 스레드 객체
+auto_capture_thread = None
+
+# 자동 촬영 상태 동기화용 락
+auto_state_lock = threading.Lock()
+
+# =========================
+# OpenCV Haar Cascade 경로 설정
+# =========================
+
+def find_haar_file(filename: str) -> Path:
+    # OpenCV 패키지에서 haarcascades 경로를 제공하는 경우 먼저 확인
+    if hasattr(cv2, "data") and hasattr(cv2.data, "haarcascades"):
+        candidate = Path(cv2.data.haarcascades) / filename
+
+        if candidate.exists():
+            return candidate
+
+    # Raspberry Pi OS에서 opencv-data 설치 시 흔한 경로들을 순서대로 확인
+    candidates = [
+        Path("/usr/share/opencv4/haarcascades") / filename,
+        Path("/usr/share/opencv/haarcascades") / filename,
+        Path("/usr/local/share/opencv4/haarcascades") / filename,
+        Path(__file__).resolve().parent / "haarcascades" / filename,
+    ]
+
+    # 후보 경로 중 실제 존재하는 파일 반환
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    # 어디에도 없으면 오류 발생
+    raise RuntimeError(
+        f"Haar Cascade 파일을 찾을 수 없습니다: {filename}. "
+        f"sudo apt install opencv-data -y 명령으로 설치해 주세요."
+    )
+
+
+# 얼굴 검출용 분류기 경로
+FACE_CASCADE_PATH = find_haar_file("haarcascade_frontalface_default.xml")
+
+# 눈 검출용 분류기 경로
+EYE_CASCADE_PATH = find_haar_file("haarcascade_eye_tree_eyeglasses.xml")
+
+# 얼굴 검출용 분류기 객체
+face_cascade = cv2.CascadeClassifier(str(FACE_CASCADE_PATH))
+
+# 눈 검출용 분류기 객체
+eye_cascade = cv2.CascadeClassifier(str(EYE_CASCADE_PATH))
+
+# OpenCV 얼굴/눈 검출 준비 여부
+opencv_face_ready = (not face_cascade.empty()) and (not eye_cascade.empty())
+
+# 얼굴/눈 검출기 로드 실패 시 서버 시작 단계에서 바로 원인을 출력
+if face_cascade.empty():
+    raise RuntimeError(f"얼굴 Haar Cascade 로드 실패: {FACE_CASCADE_PATH}")
+
+if eye_cascade.empty():
+    raise RuntimeError(f"눈 Haar Cascade 로드 실패: {EYE_CASCADE_PATH}")
+
+# 눈 2개가 보이는 상태에서 얼굴 기울기를 확인할 수 있습니다.
+# 눈을 감으면 눈 검출이 사라지므로, 얼굴 안정 조건을 먼저 만족한 뒤에는
+# 눈이 안 보이는 상태를 눈 감음으로 판단합니다.
+
+
+def make_default_auto_checks():
+    # 자동 촬영 조건 기본값 생성
+    return {
+        "face_found": False,
+        "center_ok": False,
+        "size_ok": False,
+        "angle_ok": False,
+        "eyes_closed": False,
+        "stable_ok": False,
+    }
+
+
+# 자동 촬영 상태값
+AUTO_STATE = {
+    "running": False,
+    "captured": False,
+    "profile_id": None,
+    "capture_id": None,
+    "status": "자동 촬영 대기 중",
+    "error": None,
+    "checks": make_default_auto_checks(),
+    "stable_face_count": 0,
+    "eyes_closed_count": 0,
+    "dynamic_eye_threshold": DEFAULT_EYE_AR_THRESHOLD,
+    "last_update": None,
+    "analysis_result": None,
+    "result_urls": None,
+    "face_detector": "unknown",
+}
+
+
+# =========================
+# 릴레이 제어 함수
+# =========================
+
+def relay_on():
+    # 릴레이 켜기
+    relay.on()
+
+
+def relay_off():
+    # 릴레이 끄기
+    relay.off()
+
+
+def white_led_on():
+    # 전역 백색 LED 상태값 사용 선언
+    global white_led_is_on
+
+    # 백색 LED 켜기
+    white_led.on()
+
+    # 백색 LED 상태값 갱신
+    white_led_is_on = True
+
+
+def white_led_off():
+    # 전역 백색 LED 상태값 사용 선언
+    global white_led_is_on
+
+    # 백색 LED 끄기
+    white_led.off()
+
+    # 백색 LED 상태값 갱신
+    white_led_is_on = False
+
+
+# =========================
+# 카메라 수동 제어 함수
+# =========================
+
+def set_manual_controls(camera, exposure_ms, gain):
+    # 자동 노출을 끄고 수동 노출/게인 적용
+    camera.set_controls({
+        "AeEnable": False,
+        "ExposureTime": exposure_ms * 1000,
+        "AnalogueGain": gain
+    })
+
+
+# =========================
+# 전체 프레임에서 개별 카메라 영역 자르기
+# =========================
+
+def extract_cam_frame(full_frame_bgr, cam_key):
+    # 해당 카메라 정보 읽기
+    info = CAMERA_INFO[cam_key]
+
+    # 전체 프레임에서 해당 영역만 잘라서 반환
+    return full_frame_bgr[:, info["x_start"]:info["x_end"]]
+
+
+# =========================
+# 이미지 저장 함수
+# =========================
+
+def save_image(path, img_bgr):
+    # PNG 저장일 경우 무압축 저장
+    if path.suffix.lower() == ".png":
+        cv2.imwrite(str(path), img_bgr, [cv2.IMWRITE_PNG_COMPRESSION, 0])
+
+    # JPG 저장일 경우 고품질 저장
+    else:
+        cv2.imwrite(str(path), img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 100])
+
+
+# =========================
+# 프로필 이름 정리
+# =========================
+
+def sanitize_profile_name(profile_name: str) -> str:
+    # 앞뒤 공백 제거
+    cleaned = profile_name.strip()
+
+    # 연속 공백을 하나로 정리
+    cleaned = re.sub(r"\s+", " ", cleaned)
+
+    # 비어 있으면 예외 발생
+    if not cleaned:
+        raise ValueError("유효한 프로필 이름이 아닙니다.")
+
+    # 정리된 이름 반환
+    return cleaned
+
+
+# =========================
+# 실제 폴더용 profile 폴더 ID 생성
+# =========================
+
+def make_folder_id() -> str:
+    # 현재 timestamp 기반으로 고유 폴더 ID 생성
+    return f"profile_{int(datetime.now().timestamp() * 1000)}"
+
+
+# =========================
+# 프로필 목록 로드
+# =========================
+
+def load_profiles():
+    # 프로필 파일이 없으면 빈 리스트 반환
+    if not PROFILES_FILE.exists():
+        return []
+
+    try:
+        # UTF-8로 JSON 읽기
+        with open(PROFILES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    except Exception:
+        # 파싱 실패 시 빈 리스트 반환
+        return []
+
+
+# =========================
+# 프로필 목록 저장
+# =========================
+
+def save_profiles(profiles):
+    # UTF-8로 JSON 저장
+    with open(PROFILES_FILE, "w", encoding="utf-8") as f:
+        json.dump(profiles, f, ensure_ascii=False, indent=2)
+
+
+# =========================
+# 프로필 기본 폴더 구조 생성
+# =========================
+
+def ensure_profile_dirs(folder_id: str):
+    # 프로필 루트 폴더 경로 생성
+    profile_root = SAVE_ROOT / folder_id
+
+    # 프로필 루트 생성
+    profile_root.mkdir(parents=True, exist_ok=True)
+
+    # 카메라별 폴더 생성
+    for cam in CAMERA_INFO.values():
+        (profile_root / cam["folder"]).mkdir(parents=True, exist_ok=True)
+
+    # 생성된 프로필 루트 반환
+    return profile_root
+
+
+# =========================
+# ID로 프로필 찾기
+# =========================
+
+def find_profile_by_id(profile_id: str):
+    # 현재 프로필 목록 로드
+    profiles = load_profiles()
+
+    # 일치하는 folderId 탐색
+    for profile in profiles:
+        if profile["folderId"] == profile_id:
+            return profile
+
+    # 없으면 None 반환
+    return None
+
+
+# =========================
+# 프로필 생성
+# =========================
+
+def create_profile(profile_name: str):
+    # 사용자 표시용 이름 정리
+    display_name = sanitize_profile_name(profile_name)
+
+    # 기존 프로필 목록 로드
+    profiles = load_profiles()
+
+    # 이름 중복 검사
+    exists = any(p["name"] == display_name for p in profiles)
+
+    # 이미 있으면 예외
+    if exists:
+        raise ValueError("이미 존재하는 프로필입니다.")
+
+    # 생성 날짜 문자열
+    created_at = datetime.now().strftime("%Y.%m.%d")
+
+    # 화면용 숫자 ID
+    profile_id = int(datetime.now().timestamp() * 1000)
+
+    # 실제 폴더용 안전한 ID
+    folder_id = make_folder_id()
+
+    # 새 프로필 정보 구성
+    new_profile = {
+        "id": profile_id,
+        "name": display_name,
+        "folderId": folder_id,
+        "createdAt": created_at
+    }
+
+    # 목록에 추가
+    profiles.append(new_profile)
+
+    # JSON 저장
+    save_profiles(profiles)
+
+    # 폴더 생성
+    ensure_profile_dirs(folder_id)
+
+    # 생성된 프로필 반환
+    return new_profile
+
+
+# =========================
+# 프로필 삭제
+# =========================
+
+def delete_profile(profile_id: str):
+    # 프로필 목록 로드
+    profiles = load_profiles()
+
+    # 삭제 대상 초기화
+    target = None
+
+    # 삭제할 프로필 찾기
+    for p in profiles:
+        if p["folderId"] == profile_id:
+            target = p
+            break
+
+    # 없으면 예외
+    if target is None:
+        raise ValueError("삭제할 프로필이 없습니다.")
+
+    # 삭제 대상 제외한 목록 생성
+    new_profiles = [p for p in profiles if p["folderId"] != profile_id]
+
+    # 프로필 루트 경로
+    profile_root = SAVE_ROOT / target["folderId"]
+
+    # 실제 폴더가 있으면 전체 삭제
+    if profile_root.exists() and profile_root.is_dir():
+        shutil.rmtree(profile_root)
+
+    # 갱신된 목록 저장
+    save_profiles(new_profiles)
+
+
+# =========================
+# 개별 카메라 이미지 저장
+# =========================
+
+def save_one_camera_image(
+    cam_key,
+    frame_bgr,
+    profile_root,
+    capture_id,
+    timestamp,
+    exposure_ms,
+    gain,
+    ext,
+    profile_name,
+    folder_id
+):
+    # 카메라 정보 조회
+    info = CAMERA_INFO[cam_key]
+
+    # 세로 미러 형태에 맞게 시계 방향 90도 회전
+    frame_bgr = cv2.rotate(frame_bgr, cv2.ROTATE_90_CLOCKWISE)
+
+    # 해당 캡처 시각 폴더 생성
+    target_dir = profile_root / info["folder"] / capture_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    # 이미지 경로 생성
+    image_path = target_dir / f"{cam_key}.{ext}"
+
+    # 메타데이터 경로 생성
+    meta_path = target_dir / "metadata.json"
+
+    # 이미지 저장
+    save_image(image_path, frame_bgr)
+
+    # 메타데이터 구성
+    metadata = {
+        "captured_at": timestamp.isoformat(),
+        "profile_name": profile_name,
+        "profile_folder_id": folder_id,
+        "camera_name": cam_key,
+        "camera_label": info["label"],
+        "filter_type": info["filter"],
+        "display_name": info["display_name"],
+        "sequence_order": info["sequence_order"],
+        "capture_type": "high_quality_still_fullframe_then_crop",
+        "file_format": ext,
+        "camera_mode": {
+            "capture_width": CAPTURE_WIDTH,
+            "capture_height": CAPTURE_HEIGHT,
+            "single_width": SINGLE_WIDTH
+        },
+        "camera_control": {
+            "AeEnable": False,
+            "ExposureTime_ms": exposure_ms,
+            "ExposureTime_us": exposure_ms * 1000,
+            "AnalogueGain": gain
+        },
+        "saved_file": str(image_path),
+        "rotation_applied": "ROTATE_90_CLOCKWISE"
+    }
+
+    # 메타데이터 저장
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=4)
+
+    # 저장 결과 반환
+    return {
+        "camera": cam_key,
+        "filter_type": info["filter"],
+        "display_name": info["display_name"],
+        "image_path": str(image_path),
+        "metadata_path": str(meta_path)
+    }
+
+
+# =========================
+# 카메라 초기화
+# =========================
+
+def init_camera():
+    # 전역 변수 사용 선언
+    global picam2, preview_config, still_config, camera_ready
+
+    # 연결된 카메라 목록 조회
+    camera_list = Picamera2.global_camera_info()
+
+    # 카메라가 없으면 예외
+    if len(camera_list) == 0:
+        raise RuntimeError("카메라가 감지되지 않았습니다.")
+
+    # 첫 번째 카메라 사용
+    picam2 = Picamera2(0)
+
+    # 프리뷰 설정 생성
+    preview_config = picam2.create_preview_configuration(
+        main={"size": (CAPTURE_WIDTH, CAPTURE_HEIGHT), "format": "XRGB8888"}
+    )
+
+    # 스틸 설정 생성
+    still_config = picam2.create_still_configuration(
+        main={"size": (CAPTURE_WIDTH, CAPTURE_HEIGHT), "format": "RGB888"}
+    )
+
+    # 프리뷰 설정 적용
+    picam2.configure(preview_config)
+
+    # 품질 옵션 설정
+    picam2.options["quality"] = 100
+    picam2.options["compress_level"] = 0
+
+    # 카메라 시작
+    picam2.start()
+
+    # 초기 노출/게인 설정
+    set_manual_controls(picam2, INITIAL_EXPOSURE_MS, CURRENT_GAIN)
+
+    # 카메라 준비 완료 표시
+    camera_ready = True
+
+
+# =========================
+# 프리뷰 프레임 읽기
+# =========================
+
+def read_preview_frame():
+    # 현재 프레임 캡처
+    frame = picam2.capture_array()
+
+    # BGRA -> BGR 변환 후 반환
+    return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+
+
+# =========================
+# 고화질 전체 프레임 촬영
+# =========================
+
+def capture_high_quality_full_frame(exposure_ms, gain):
+    # 전역 변수 사용
+    global picam2, preview_config, still_config
+
+    # 릴레이 ON
+    relay_on()
+
+    # 릴레이 안정화 대기
+    sleep(RELAY_WARMUP_SEC)
+
+    try:
+        # 프리뷰 중지
+        picam2.stop()
+
+        # 스틸 설정 적용
+        picam2.configure(still_config)
+
+        # 카메라 재시작
+        picam2.start()
+
+        # 수동 노출/게인 적용
+        set_manual_controls(picam2, exposure_ms, gain)
+
+        # 노출 안정화 대기
+        sleep(1)
+
+        # 스틸 프레임 캡처
+        still_frame = picam2.capture_array()
+
+        # RGB -> BGR 변환
+        full_frame_bgr = cv2.cvtColor(still_frame, cv2.COLOR_RGB2BGR)
+
+    finally:
+        # 릴레이 OFF
+        relay_off()
+
+        # 카메라 정지
+        picam2.stop()
+
+        # 프리뷰 설정 복귀
+        picam2.configure(preview_config)
+
+        # 카메라 재시작
+        picam2.start()
+
+        # 프리뷰에도 동일 수동 제어 재적용
+        set_manual_controls(picam2, exposure_ms, gain)
+
+    # 촬영 결과 반환
+    return full_frame_bgr
+
+
+# =========================
+# 촬영 기록 유틸 함수
+# =========================
+
+def format_capture_id_to_text(capture_id: str) -> str:
+    # 예: 20260408_132215_123 -> 2026-04-08 13:22:15.123 형태로 변환 시도
+    try:
+        dt = datetime.strptime(capture_id, "%Y%m%d_%H%M%S_%f")
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return capture_id
+
+
+def get_profile_root(profile_id: str) -> Path:
+    # 프로필 존재 여부 확인
+    profile = find_profile_by_id(profile_id)
+
+    # 없으면 예외
+    if profile is None:
+        raise ValueError("존재하지 않는 프로필입니다.")
+
+    # 루트 경로 반환
+    return SAVE_ROOT / profile["folderId"]
+
+
+def get_capture_history(profile_id: str):
+    # 프로필 루트 경로 가져오기
+    profile_root = get_profile_root(profile_id)
+
+    # 프로필 조회
+    profile = find_profile_by_id(profile_id)
+
+    # 프로필 루트가 없으면 빈 배열 반환
+    if not profile_root.exists():
+        return []
+
+    # 기준이 되는 cam2 폴더 경로
+    cam2_root = profile_root / CAMERA_INFO["cam2"]["folder"]
+
+    # cam2 폴더가 없으면 빈 배열 반환
+    if not cam2_root.exists():
+        return []
+
+    # 기록 목록 저장 배열
+    history = []
+
+    # capture_id 폴더 순회
+    for capture_dir in cam2_root.iterdir():
+        # 폴더만 처리
+        if not capture_dir.is_dir():
+            continue
+
+        # capture ID는 폴더 이름
+        capture_id = capture_dir.name
+
+        # 기본 captured_at 값
+        captured_at = None
+
+        # 메타데이터 파일 경로
+        meta_path = capture_dir / "metadata.json"
+
+        # 메타데이터가 있으면 실제 촬영 시각 사용
+        if meta_path.exists():
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+                    captured_at = meta.get("captured_at")
+            except Exception:
+                captured_at = None
+
+        # 메타데이터에서 못 읽었으면 capture_id를 기반으로 표시 문자열 구성
+        if not captured_at:
+            captured_at = capture_id
+
+        # 목록에 추가
+        history.append({
+            "captureId": capture_id,
+            "capturedAt": captured_at,
+            "displayTime": format_capture_id_to_text(capture_id),
+            "profileId": profile["folderId"],
+            "profileName": profile["name"]
+        })
+
+    # 최신 촬영이 위로 오도록 정렬
+    history.sort(key=lambda x: x["captureId"], reverse=True)
+
+    # 정렬된 기록 반환
+    return history
+
+
+def get_capture_detail(profile_id: str, capture_id: str):
+    # 프로필 루트 확인
+    profile_root = get_profile_root(profile_id)
+
+    # 프로필 정보 조회
+    profile = find_profile_by_id(profile_id)
+
+    # 결과 이미지 딕셔너리
+    images = {}
+
+    # 대표 촬영 시각
+    captured_at = None
+
+    # 각 카메라 폴더 순회
+    for cam_key, info in CAMERA_INFO.items():
+        # 해당 캡처 폴더 경로
+        target_dir = profile_root / info["folder"] / capture_id
+
+        # 파일 확장자 후보 목록
+        candidates = [
+            target_dir / f"{cam_key}.png",
+            target_dir / f"{cam_key}.jpg",
+            target_dir / f"{cam_key}.jpeg",
+        ]
+
+        # 실제 존재하는 이미지 파일 찾기
+        image_path = None
+        for candidate in candidates:
+            if candidate.exists():
+                image_path = candidate
+                break
+
+        # 메타데이터 경로
+        meta_path = target_dir / "metadata.json"
+
+        # 메타데이터 읽기
+        meta_data = {}
+        if meta_path.exists():
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    meta_data = json.load(f)
+            except Exception:
+                meta_data = {}
+
+        # captured_at은 하나만 대표로 사용
+        if captured_at is None:
+            captured_at = meta_data.get("captured_at")
+
+        # 이미지가 있으면 응답용 정보 생성
+        images[info["filter"]] = {
+            "camera": cam_key,
+            "display_name": info["display_name"],
+            "filter_type": info["filter"],
+            "exists": image_path is not None,
+            "image_url": f"/profiles/{profile_id}/history/{capture_id}/image/{info['filter']}" if image_path else None,
+            "metadata": meta_data
+        }
+
+    # 대표 촬영 시각이 없으면 capture_id 기반 문자열 사용
+    if captured_at is None:
+        captured_at = capture_id
+
+    # 최소 하나라도 이미지가 있어야 유효한 기록으로 판단
+    has_any = any(item["exists"] for item in images.values())
+
+    # 하나도 없으면 예외
+    if not has_any:
+        raise ValueError("해당 촬영 기록을 찾을 수 없습니다.")
+
+    # 분석 metadata가 있으면 같이 포함
+    analysis_metadata = load_analysis_metadata_if_exists(profile_id, capture_id)
+    analysis_urls = make_analysis_urls(profile_id, capture_id) if analysis_metadata is not None else None
+
+    # 최종 상세 정보 반환
+    return {
+        "captureId": capture_id,
+        "capturedAt": captured_at,
+        "displayTime": format_capture_id_to_text(capture_id),
+        "profileId": profile["folderId"],
+        "profileName": profile["name"],
+        "images": images,
+        "analysis": analysis_metadata,
+        "analysisUrls": analysis_urls
+    }
+
+
+def delete_capture_history(profile_id: str, capture_id: str):
+    # 프로필 루트 경로 가져오기
+    profile_root = get_profile_root(profile_id)
+
+    # 하나라도 삭제되었는지 확인하기 위한 플래그
+    deleted_any = False
+
+    # cam2, cam3, cam4의 동일 capture_id 폴더를 모두 삭제
+    for cam_key, info in CAMERA_INFO.items():
+        # 삭제 대상 폴더 경로 생성
+        target_dir = profile_root / info["folder"] / capture_id
+
+        # 실제 폴더가 있으면 내부 이미지와 metadata.json까지 전체 삭제
+        if target_dir.exists() and target_dir.is_dir():
+            shutil.rmtree(target_dir)
+            deleted_any = True
+
+    # 하나도 삭제되지 않았으면 잘못된 기록으로 판단
+    if not deleted_any:
+        raise ValueError("삭제할 촬영 기록이 없습니다.")
+
+
+def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Path:
+    # 프로필 루트 확인
+    profile_root = get_profile_root(profile_id)
+
+    # filter_type에 맞는 카메라 찾기
+    matched_cam_key = None
+    matched_info = None
+
+    for cam_key, info in CAMERA_INFO.items():
+        if info["filter"] == filter_type:
+            matched_cam_key = cam_key
+            matched_info = info
+            break
+
+    # 없으면 예외
+    if matched_cam_key is None:
+        raise ValueError("유효하지 않은 필터 타입입니다.")
+
+    # 캡처 폴더 경로
+    target_dir = profile_root / matched_info["folder"] / capture_id
+
+    # 후보 파일 목록
+    candidates = [
+        target_dir / f"{matched_cam_key}.png",
+        target_dir / f"{matched_cam_key}.jpg",
+        target_dir / f"{matched_cam_key}.jpeg",
+    ]
+
+    # 존재하는 파일 찾기
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+
+    # 없으면 예외
+    raise ValueError("이미지 파일이 존재하지 않습니다.")
+
+
+
+
+# =========================
+# 자동 얼굴 촬영 유틸 함수 - OpenCV Haar Cascade 방식
+# =========================
+
+def largest_rect(rects):
+    # 검출된 사각형이 없으면 None 반환
+    if len(rects) == 0:
+        return None
+
+    # 면적이 가장 큰 사각형 반환
+    return max(rects, key=lambda r: int(r[2]) * int(r[3]))
+
+
+def pick_two_eyes(eyes_abs):
+    # 눈 후보가 2개 미만이면 None 반환
+    if len(eyes_abs) < 2:
+        return None
+
+    # 면적이 큰 눈 후보를 우선 사용
+    sorted_eyes = sorted(
+        eyes_abs,
+        key=lambda e: int(e[2]) * int(e[3]),
+        reverse=True
+    )
+
+    # 후보 중 x 위치가 충분히 떨어진 두 개를 선택
+    for i in range(len(sorted_eyes)):
+        for j in range(i + 1, len(sorted_eyes)):
+            e1 = sorted_eyes[i]
+            e2 = sorted_eyes[j]
+
+            # 각 눈 중심점 계산
+            c1x = e1[0] + e1[2] / 2.0
+            c2x = e2[0] + e2[2] / 2.0
+
+            # 너무 가까운 후보는 같은 눈으로 보고 제외
+            if abs(c1x - c2x) < 30:
+                continue
+
+            # 왼쪽/오른쪽 순서로 정렬해서 반환
+            return sorted([e1, e2], key=lambda e: e[0])
+
+    # 적절한 두 눈을 못 찾으면 None 반환
+    return None
+
+
+def get_latched_angle_ok():
+    # 얼굴 안정 유지가 이미 완료된 상태인지 확인
+    with auto_state_lock:
+        return AUTO_STATE["stable_face_count"] >= STABLE_FACE_HOLD_FRAMES
+
+
+def update_dynamic_eye_threshold(avg_ear):
+    # OpenCV Haar 방식은 EAR 값을 계산하지 않습니다.
+    # React 상태 호환을 위해 함수만 유지합니다.
+    with auto_state_lock:
+        AUTO_STATE["dynamic_eye_threshold"] = 0.0
+
+
+
+def enhance_for_face_roi(cam2_bgr):
+    # 모노/저대비 영상에서 MediaPipe 검출률을 높이기 위한 대비 보정
+    gray = cv2.cvtColor(cam2_bgr, cv2.COLOR_BGR2GRAY)
+    gray = cv2.equalizeHist(gray)
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)
+    return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
+
+def analyze_face_for_auto_with_face_roi(cam2_bgr):
+    # face_ROI_eye_added.py의 함수들을 사용해서 얼굴 위치와 눈 감김을 판단합니다.
+    h, w = cam2_bgr.shape[:2]
+
+    result = {
+        "face_found": False,
+        "center_ok": False,
+        "size_ok": False,
+        "eyes_closed": False,
+        "roll_ok": True,
+        "yaw_ok": True,
+        "pitch_ok": True,
+        "angles_ok": False,
+        "eyes_visible": False,
+        "eye_count": 0,
+        "ear_left": 1.0,
+        "ear_right": 1.0,
+        "avg_ear": 1.0,
+        "roll_deg": 0.0,
+        "yaw_score": 0.0,
+        "pitch_score": 0.0,
+        "bbox": None,
+        "guide_text": "얼굴을 화면에 맞춰주세요",
+        "detector": "face_ROI_eye_added.py"
+    }
+
+    if not FACE_ROI_READY:
+        result["guide_text"] = "face_ROI 모듈을 사용할 수 없습니다"
+        return result
+
+    # 원본과 대비 보정본을 순차적으로 시도
+    candidates = [
+        ("original", cam2_bgr),
+        ("enhanced", enhance_for_face_roi(cam2_bgr)),
+    ]
+
+    bbox = None
+    pts = None
+    used_frame = None
+    used_candidate = "none"
+
+    for candidate_name, frame in candidates:
+        bbox = face_roi_module.detect_face_bbox(frame)
+        pts = face_roi_module.extract_face_landmarks(frame)
+
+        if bbox is not None or pts is not None:
+            used_frame = frame
+            used_candidate = candidate_name
+            break
+
+    if used_frame is None:
+        result["guide_text"] = "얼굴이 감지되지 않습니다"
+        return result
+
+    if bbox is None and pts is not None:
+        # FaceMesh는 잡혔는데 face detection bbox가 없을 때 랜드마크 좌표로 bbox 생성
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        bbox = (
+            max(0, min(xs)),
+            max(0, min(ys)),
+            min(w - 1, max(xs)),
+            min(h - 1, max(ys)),
+        )
+
+    if bbox is None:
+        result["guide_text"] = "얼굴 박스를 계산하지 못했습니다"
+        return result
+
+    x1, y1, x2, y2 = [int(v) for v in bbox]
+    bw = max(1, x2 - x1)
+    bh = max(1, y2 - y1)
+
+    cx = (x1 + x2) / 2.0
+    cy = (y1 + y2) / 2.0
+    area_ratio = (bw * bh) / float(w * h)
+
+    # 화면 중앙 조건
+    norm_dx = abs(cx - (w / 2.0)) / w
+    norm_dy = abs(cy - (h / 2.0)) / h
+    center_ok = (norm_dx <= FACE_CENTER_TOL_X) and (norm_dy <= FACE_CENTER_TOL_Y)
+
+    # 크기 조건
+    size_ok = (FACE_MIN_AREA_RATIO <= area_ratio <= FACE_MAX_AREA_RATIO)
+
+    # 실루엣 안에 얼굴 박스 중심이 들어왔는지 확인
+    sx1 = w * SILHOUETTE_X1_RATIO
+    sy1 = h * SILHOUETTE_Y1_RATIO
+    sx2 = w * SILHOUETTE_X2_RATIO
+    sy2 = h * SILHOUETTE_Y2_RATIO
+    silhouette_ok = (sx1 <= cx <= sx2) and (sy1 <= cy <= sy2)
+
+    eye_result = None
+    eyes_closed = False
+    eyes_visible = False
+
+    if pts is not None:
+        try:
+            eye_result = face_roi_module.estimate_eye_state_and_motion(pts)
+            eyes_closed = bool(eye_result.get("eyes_closed", False))
+            eyes_visible = True
+        except Exception as e:
+            print("[face_ROI 눈 상태 계산 오류]", e)
+
+    angles_ok = center_ok and size_ok and silhouette_ok
+
+    result.update({
+        "face_found": True,
+        "center_ok": bool(center_ok and silhouette_ok),
+        "size_ok": bool(size_ok),
+        "eyes_closed": bool(eyes_closed),
+        "roll_ok": True,
+        "yaw_ok": True,
+        "pitch_ok": True,
+        "angles_ok": bool(angles_ok),
+        "eyes_visible": bool(eyes_visible),
+        "eye_count": 2 if eyes_visible else 0,
+        "ear_left": float(eye_result.get("ear_left", 1.0)) if eye_result else 1.0,
+        "ear_right": float(eye_result.get("ear_right", 1.0)) if eye_result else 1.0,
+        "avg_ear": float(eye_result.get("ear_avg", 1.0)) if eye_result else 1.0,
+        "bbox": (x1, y1, x2, y2),
+        "detector": f"face_ROI_eye_added.py/{used_candidate}"
+    })
+
+    if not result["center_ok"]:
+        result["guide_text"] = "얼굴을 화면 실루엣 중앙에 맞춰주세요"
+    elif not result["size_ok"]:
+        result["guide_text"] = "얼굴 거리를 조정해주세요"
+    elif not result["angles_ok"]:
+        result["guide_text"] = "얼굴을 정면으로 맞춰주세요"
+    elif not result["eyes_closed"]:
+        result["guide_text"] = "얼굴을 고정한 뒤 눈을 감아주세요"
+    else:
+        result["guide_text"] = "조건 충족"
+
+    return result
+
+
+def analyze_face_for_auto(cam2_bgr):
+    # face_ROI_eye_added.py가 준비되어 있으면 외부 모듈 기반 얼굴/눈 인식을 우선 사용
+    if FACE_ROI_READY:
+        return analyze_face_for_auto_with_face_roi(cam2_bgr)
+
+    # 이미지 높이와 폭 읽기
+    h, w = cam2_bgr.shape[:2]
+
+    # 기본 분석 결과 구성
+    result = {
+        "face_found": False,
+        "center_ok": False,
+        "size_ok": False,
+        "eyes_closed": False,
+        "roll_ok": False,
+        "yaw_ok": True,
+        "pitch_ok": True,
+        "angles_ok": False,
+        "eyes_visible": False,
+        "eye_count": 0,
+        "ear_left": 1.0,
+        "ear_right": 1.0,
+        "avg_ear": 1.0,
+        "roll_deg": 0.0,
+        "yaw_score": 0.0,
+        "pitch_score": 0.0,
+        "bbox": None,
+        "guide_text": "얼굴을 화면에 맞춰주세요",
+    }
+
+    # Haar Cascade 파일을 못 읽었으면 분석 불가 처리
+    if not opencv_face_ready:
+        result["guide_text"] = "OpenCV 얼굴/눈 검출 파일을 불러오지 못했습니다"
+        return result
+
+    # BGR 이미지를 그레이스케일로 변환
+    gray = cv2.cvtColor(cam2_bgr, cv2.COLOR_BGR2GRAY)
+
+    # 조명 변화에 조금 더 강하게 만들기 위해 히스토그램 평활화 적용
+    gray = cv2.equalizeHist(gray)
+
+    # 얼굴 검출
+    faces = face_cascade.detectMultiScale(
+        gray,
+        scaleFactor=1.1,
+        minNeighbors=5,
+        minSize=(120, 120)
+    )
+
+    # 가장 큰 얼굴 하나 선택
+    face = largest_rect(faces)
+
+    # 얼굴이 없으면 반환
+    if face is None:
+        result["guide_text"] = "얼굴이 감지되지 않습니다"
+        return result
+
+    # 얼굴 박스 좌표 읽기
+    x, y, bw, bh = [int(v) for v in face]
+
+    # 얼굴 박스 좌표 보정
+    x1 = max(0, x)
+    y1 = max(0, y)
+    x2 = min(w - 1, x + bw)
+    y2 = min(h - 1, y + bh)
+
+    # 실제 박스 폭/높이 계산
+    bw = max(1, x2 - x1)
+    bh = max(1, y2 - y1)
+
+    # 얼굴 면적 비율 계산
+    area_ratio = (bw * bh) / float(w * h)
+
+    # 얼굴 중심 좌표 계산
+    cx = (x1 + x2) / 2.0
+    cy = (y1 + y2) / 2.0
+
+    # 화면 중앙에서 벗어난 정도 계산
+    norm_dx = abs(cx - (w / 2.0)) / w
+    norm_dy = abs(cy - (h / 2.0)) / h
+
+    # 얼굴 중앙 정렬 여부 계산
+    center_ok = (norm_dx <= FACE_CENTER_TOL_X) and (norm_dy <= FACE_CENTER_TOL_Y)
+
+    # 얼굴 크기 적정 여부 계산
+    size_ok = (FACE_MIN_AREA_RATIO <= area_ratio <= FACE_MAX_AREA_RATIO)
+
+    # 얼굴 상단 영역에서 눈 검출
+    eye_roi_y1 = y1
+    eye_roi_y2 = y1 + int(bh * 0.62)
+    eye_roi_x1 = x1
+    eye_roi_x2 = x2
+
+    # ROI 좌표 보정
+    eye_roi_y2 = min(h, max(eye_roi_y1 + 1, eye_roi_y2))
+    eye_roi_x2 = min(w, max(eye_roi_x1 + 1, eye_roi_x2))
+
+    # 눈 검출용 ROI 생성
+    eye_roi_gray = gray[eye_roi_y1:eye_roi_y2, eye_roi_x1:eye_roi_x2]
+
+    # 눈 검출
+    eyes = eye_cascade.detectMultiScale(
+        eye_roi_gray,
+        scaleFactor=1.08,
+        minNeighbors=4,
+        minSize=(24, 18)
+    )
+
+    # ROI 기준 눈 좌표를 원본 이미지 좌표로 변환
+    eyes_abs = []
+    for ex, ey, ew, eh in eyes:
+        eyes_abs.append((
+            int(eye_roi_x1 + ex),
+            int(eye_roi_y1 + ey),
+            int(ew),
+            int(eh),
+        ))
+
+    # 적절한 두 눈 선택
+    two_eyes = pick_two_eyes(eyes_abs)
+
+    # 눈 2개가 보이는지 여부
+    eyes_visible = two_eyes is not None
+
+    # 얼굴 기울기 기본값
+    roll_deg = 0.0
+
+    # 눈이 보이면 기울기 계산
+    if eyes_visible:
+        left_eye, right_eye = two_eyes
+
+        # 왼쪽 눈 중심
+        lx = left_eye[0] + left_eye[2] / 2.0
+        ly = left_eye[1] + left_eye[3] / 2.0
+
+        # 오른쪽 눈 중심
+        rx = right_eye[0] + right_eye[2] / 2.0
+        ry = right_eye[1] + right_eye[3] / 2.0
+
+        # 양쪽 눈 중심선으로 얼굴 좌우 기울기 계산
+        roll_deg = math.degrees(math.atan2(ry - ly, rx - lx))
+
+        # 기울기 허용 여부 계산
+        roll_ok = abs(roll_deg) <= MAX_ABS_ROLL_DEG
+
+        # 눈이 보이면 아직 눈을 감은 상태가 아님
+        eyes_closed = False
+
+        # 각도는 roll만 간단히 판단
+        angles_ok = roll_ok
+
+    # 눈이 안 보이는 경우
+    else:
+        # 안정 단계가 완료된 이후에는 눈이 안 보이는 것을 눈 감음으로 판단
+        latched = get_latched_angle_ok()
+
+        # 안정 단계 이전에는 눈이 보이지 않으면 각도 확인 불가
+        roll_ok = latched
+
+        # 안정 단계 이후에만 눈 감음으로 인정
+        eyes_closed = latched
+
+        # 안정 단계 이후에는 직전 정렬 상태를 유지한 것으로 판단
+        angles_ok = latched
+
+    # 분석 결과 갱신
+    result.update({
+        "face_found": True,
+        "center_ok": center_ok,
+        "size_ok": size_ok,
+        "eyes_closed": eyes_closed,
+        "roll_ok": roll_ok,
+        "yaw_ok": True,
+        "pitch_ok": True,
+        "angles_ok": angles_ok,
+        "eyes_visible": eyes_visible,
+        "eye_count": len(eyes_abs),
+        "roll_deg": roll_deg,
+        "bbox": (x1, y1, x2, y2),
+    })
+
+    # 안내 문구 결정
+    if not center_ok:
+        result["guide_text"] = "얼굴을 화면 중앙에 맞춰주세요"
+    elif not size_ok:
+        result["guide_text"] = "얼굴 거리를 조정해주세요"
+    elif not angles_ok:
+        result["guide_text"] = "눈을 뜬 상태로 정면을 맞춰주세요"
+    elif not eyes_closed:
+        result["guide_text"] = "얼굴을 고정한 뒤 눈을 감아주세요"
+    else:
+        result["guide_text"] = "조건 충족"
+
+    # 분석 결과 반환
+    return result
+
+
+def build_auto_checks(detection):
+    # 자동 촬영 체크 결과 구성
+    return {
+        "face_found": bool(detection.get("face_found")),
+        "center_ok": bool(detection.get("center_ok")),
+        "size_ok": bool(detection.get("size_ok")),
+        "angle_ok": bool(detection.get("angles_ok")),
+        "eyes_closed": bool(detection.get("eyes_closed")),
+        "stable_ok": False,
+    }
+
+
+def update_auto_state_from_detection(detection):
+    # 현재 검사 결과 생성
+    checks = build_auto_checks(detection)
+
+    # 기본 안정 조건 계산
+    stable_face_ok = (
+        checks["face_found"]
+        and checks["center_ok"]
+        and checks["size_ok"]
+        and checks["angle_ok"]
+    )
+
+    # 자동 촬영 상태 갱신을 위해 락 획득
+    with auto_state_lock:
+        # 얼굴 기본 조건이 안정적이면 카운트 증가
+        if stable_face_ok:
+            AUTO_STATE["stable_face_count"] += 1
+
+        # 얼굴 기본 조건이 불안정하면 카운트 초기화
+        else:
+            AUTO_STATE["stable_face_count"] = 0
+            AUTO_STATE["eyes_closed_count"] = 0
+
+        # 안정 유지 조건 갱신
+        checks["stable_ok"] = AUTO_STATE["stable_face_count"] >= STABLE_FACE_HOLD_FRAMES
+
+        # 얼굴을 못 찾은 경우 상태 문구 설정
+        if not checks["face_found"]:
+            AUTO_STATE["status"] = "얼굴이 감지되지 않습니다"
+
+        # 중앙 정렬이 안 된 경우 상태 문구 설정
+        elif not checks["center_ok"]:
+            AUTO_STATE["status"] = "얼굴을 화면 중앙에 맞춰주세요"
+
+        # 얼굴 크기가 안 맞는 경우 상태 문구 설정
+        elif not checks["size_ok"]:
+            AUTO_STATE["status"] = "얼굴 거리를 조정해주세요"
+
+        # 얼굴 각도가 안 맞는 경우 상태 문구 설정
+        elif not checks["angle_ok"]:
+            AUTO_STATE["status"] = "눈을 뜬 상태로 정면을 맞춰주세요"
+
+        # 얼굴 안정 유지 프레임이 부족한 경우 상태 문구 설정
+        elif not checks["stable_ok"]:
+            AUTO_STATE["status"] = f"얼굴 고정 중 {AUTO_STATE['stable_face_count']}/{STABLE_FACE_HOLD_FRAMES}"
+
+        # 눈을 아직 감지 않은 경우 상태 문구 설정
+        elif not checks["eyes_closed"]:
+            AUTO_STATE["eyes_closed_count"] = 0
+            AUTO_STATE["status"] = "얼굴을 유지한 채 눈을 감아주세요"
+
+        # 눈 감음이 확인된 경우 상태 문구 설정
+        else:
+            AUTO_STATE["eyes_closed_count"] += 1
+            AUTO_STATE["status"] = f"눈감음 확인 중 {AUTO_STATE['eyes_closed_count']}/{EYES_CLOSED_HOLD_FRAMES}"
+
+        # 검사 결과 저장
+        AUTO_STATE["checks"] = checks
+        AUTO_STATE["face_detector"] = detection.get("detector", "unknown")
+
+        # 분석 결과 초기화
+        AUTO_STATE["analysis_result"] = None
+        AUTO_STATE["result_urls"] = None
+        AUTO_STATE["face_detector"] = "unknown"
+
+        # 최근 갱신 시각 저장
+        AUTO_STATE["last_update"] = datetime.now().isoformat()
+
+        # 눈 감음 유지 여부 반환
+        return AUTO_STATE["eyes_closed_count"] >= EYES_CLOSED_HOLD_FRAMES
+
+
+def snapshot_detection_for_metadata(detection):
+    # 메타데이터 저장용 감지 결과 생성
+    return {
+        "bbox": list(detection["bbox"]) if detection.get("bbox") is not None else None,
+        "roll_deg": float(detection.get("roll_deg", 0.0)),
+        "yaw_score": float(detection.get("yaw_score", 0.0)),
+        "pitch_score": float(detection.get("pitch_score", 0.0)),
+        "opencv_eye_count": int(detection.get("eye_count", 0)),
+        "opencv_eyes_visible": bool(detection.get("eyes_visible", False)),
+        "dynamic_eye_threshold": 0.0,
+        "detector": detection.get("detector", "unknown"),
+    }
+
+
+def perform_capture_for_profile(profile_id: str):
+    # profileId가 비어 있으면 예외 발생
+    if not str(profile_id).strip():
+        raise ValueError("profileId가 필요합니다.")
+
+    # 프로필 정보 조회
+    profile = find_profile_by_id(profile_id)
+
+    # 프로필이 없으면 예외 발생
+    if profile is None:
+        raise ValueError("존재하지 않는 프로필입니다.")
+
+    # 표시용 프로필 이름 읽기
+    profile_name = profile["name"]
+
+    # 폴더용 프로필 ID 읽기
+    folder_id = profile["folderId"]
+
+    # 프로필 루트 경로 생성
+    profile_root = SAVE_ROOT / folder_id
+
+    # 프로필 폴더가 없으면 예외 발생
+    if not profile_root.exists():
+        raise ValueError("프로필 폴더가 존재하지 않습니다.")
+
+    # 촬영 노출 시간 설정
+    exposure_ms = INITIAL_EXPOSURE_MS
+
+    # 촬영 gain 설정
+    gain = CURRENT_GAIN
+
+    # 저장 확장자 결정
+    ext = "png" if SAVE_AS_PNG else "jpg"
+
+    # 카메라 락을 잡고 고화질 전체 프레임 촬영
+    with camera_lock:
+        full_frame_bgr = capture_high_quality_full_frame(
+            exposure_ms=exposure_ms,
+            gain=gain
+        )
+
+    # 촬영 시각 기록
+    capture_timestamp = datetime.now()
+
+    # 캡처 ID 생성
+    capture_id = capture_timestamp.strftime("%Y%m%d_%H%M%S_%f")[:-3]
+
+    # 저장 파일 목록 초기화
+    saved_files = []
+
+    # cam2, cam3, cam4 순서대로 저장
+    for cam_key in ["cam2", "cam3", "cam4"]:
+        # 개별 카메라 영역 추출
+        target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
+
+        # 개별 이미지 저장
+        result = save_one_camera_image(
+            cam_key=cam_key,
+            frame_bgr=target_frame,
+            profile_root=profile_root,
+            capture_id=capture_id,
+            timestamp=capture_timestamp,
+            exposure_ms=exposure_ms,
+            gain=gain,
+            ext=ext,
+            profile_name=profile_name,
+            folder_id=folder_id
+        )
+
+        # 저장 파일 목록에 추가
+        saved_files.append(result)
+
+    # 촬영 결과 반환
+    return {
+        "ok": True,
+        "captured_at": capture_timestamp.isoformat(),
+        "profile_name": profile_name,
+        "profile_id": folder_id,
+        "capture_id": capture_id,
+        "files": saved_files
+    }
+
+
+def get_auto_state_copy():
+    # 자동 촬영 상태를 안전하게 복사하기 위해 락 획득
+    with auto_state_lock:
+        # 응답용 상태 복사본 반환
+        return {
+            "running": AUTO_STATE["running"],
+            "captured": AUTO_STATE["captured"],
+            "profile_id": AUTO_STATE["profile_id"],
+            "capture_id": AUTO_STATE["capture_id"],
+            "status": AUTO_STATE["status"],
+            "error": AUTO_STATE["error"],
+            "checks": dict(AUTO_STATE["checks"]),
+            "stable_face_count": AUTO_STATE["stable_face_count"],
+            "eyes_closed_count": AUTO_STATE["eyes_closed_count"],
+            "dynamic_eye_threshold": AUTO_STATE["dynamic_eye_threshold"],
+            "white_led_is_on": white_led_is_on,
+            "last_update": AUTO_STATE["last_update"],
+            "analysis_result": AUTO_STATE.get("analysis_result"),
+            "result_urls": AUTO_STATE.get("result_urls"),
+            "face_detector": AUTO_STATE.get("face_detector", "unknown"),
+        }
+
+
+def reset_auto_state(profile_id=None, running=False):
+    # 자동 촬영 상태 초기화를 위해 락 획득
+    with auto_state_lock:
+        # 실행 여부 설정
+        AUTO_STATE["running"] = running
+
+        # 촬영 완료 여부 초기화
+        AUTO_STATE["captured"] = False
+
+        # 프로필 ID 저장
+        AUTO_STATE["profile_id"] = profile_id
+
+        # 촬영 ID 초기화
+        AUTO_STATE["capture_id"] = None
+
+        # 오류 메시지 초기화
+        AUTO_STATE["error"] = None
+
+        # 검사 상태 초기화
+        AUTO_STATE["checks"] = make_default_auto_checks()
+
+        # 얼굴 안정 카운트 초기화
+        AUTO_STATE["stable_face_count"] = 0
+
+        # 눈 감음 카운트 초기화
+        AUTO_STATE["eyes_closed_count"] = 0
+
+        # OpenCV 방식에서는 동적 EAR 기준값을 사용하지 않음
+        AUTO_STATE["dynamic_eye_threshold"] = 0.0
+
+        # 상태 문구 초기화
+        AUTO_STATE["status"] = "자동 촬영 조건 확인 중" if running else "자동 촬영 대기 중"
+
+        # 분석 결과 초기화
+        AUTO_STATE["analysis_result"] = None
+        AUTO_STATE["result_urls"] = None
+        AUTO_STATE["face_detector"] = "unknown"
+
+        # 최근 갱신 시각 저장
+        AUTO_STATE["last_update"] = datetime.now().isoformat()
+
+
+def auto_capture_worker(profile_id: str):
+    # 자동 촬영 백그라운드 작업 실행
+    try:
+        # 자동 촬영 루프 시작
+        while True:
+            # 현재 실행 여부 확인
+            with auto_state_lock:
+                running = AUTO_STATE["running"]
+
+            # 실행 중이 아니면 종료
+            if not running:
+                break
+
+            # 카메라가 준비되지 않았으면 상태 표시 후 대기
+            if not camera_ready:
+                with auto_state_lock:
+                    AUTO_STATE["status"] = "카메라가 아직 준비되지 않았습니다"
+                    AUTO_STATE["checks"] = make_default_auto_checks()
+                sleep(0.3)
+                continue
+
+            # 카메라 락을 잡고 프리뷰 프레임 읽기
+            with camera_lock:
+                full_frame_bgr = read_preview_frame()
+
+            # cam2 영역을 얼굴 인식용으로 사용
+            cam2_bgr = extract_cam_frame(full_frame_bgr, "cam2").copy()
+
+            # 얼굴 상태 분석
+            detection = analyze_face_for_auto(cam2_bgr)
+
+            # OpenCV 방식은 눈이 보이면 각도를 확인하고, 안정 이후 눈이 안 보이면 눈 감음으로 판단
+            update_dynamic_eye_threshold(detection.get("avg_ear", 1.0))
+
+            # 자동 촬영 조건 갱신 후 촬영 여부 판단
+            should_capture = update_auto_state_from_detection(detection)
+
+            # 조건이 충족되면 촬영 실행
+            if should_capture:
+                # 촬영 직전 백색 LED 자동 OFF
+                white_led_off()
+
+                # 백색 LED가 꺼질 시간을 잠시 확보
+                sleep(WHITE_LED_OFF_BEFORE_CAPTURE_SEC)
+
+                # 촬영 중 상태 표시
+                with auto_state_lock:
+                    AUTO_STATE["status"] = "조건 충족: 자동 촬영 중"
+
+                # 기존 프로필 저장 구조에 맞춰 촬영 실행
+                capture_result = perform_capture_for_profile(profile_id)
+                capture_id = capture_result["capture_id"]
+
+                # 촬영 직후 cam4_660nm 이미지 포르피린 분석 실행
+                with auto_state_lock:
+                    AUTO_STATE["status"] = "촬영 완료: 포르피린 분석 중"
+
+                analysis_report = run_porphyrin_analysis_for_capture(profile_id, capture_id)
+                result_urls = make_analysis_urls(profile_id, capture_id)
+
+                # 촬영 완료 상태 저장
+                with auto_state_lock:
+                    AUTO_STATE["running"] = False
+                    AUTO_STATE["captured"] = True
+                    AUTO_STATE["capture_id"] = capture_id
+                    AUTO_STATE["status"] = "자동 촬영 및 포르피린 분석 완료"
+                    AUTO_STATE["analysis_result"] = analysis_report
+                    AUTO_STATE["result_urls"] = result_urls
+                    AUTO_STATE["checks"] = {
+                        "face_found": True,
+                        "center_ok": True,
+                        "size_ok": True,
+                        "angle_ok": True,
+                        "eyes_closed": True,
+                        "stable_ok": True,
+                    }
+                    AUTO_STATE["last_update"] = datetime.now().isoformat()
+                break
+
+            # 다음 검사 전 짧게 대기
+            sleep(AUTO_CAPTURE_INTERVAL_SEC)
+
+        # 자동 촬영 루프가 정상 종료되면 백색 LED OFF 보장
+        white_led_off()
+
+    except Exception as e:
+        # 오류 발생 시 백색 LED OFF 보장
+        white_led_off()
+
+        # 오류 발생 시 자동 촬영 상태에 오류 저장
+        with auto_state_lock:
+            AUTO_STATE["running"] = False
+            AUTO_STATE["captured"] = False
+            AUTO_STATE["error"] = str(e)
+            AUTO_STATE["status"] = f"자동 촬영 오류: {e}"
+            AUTO_STATE["last_update"] = datetime.now().isoformat()
+
+
+
+# =========================
+# 외부 porphyrin_analysis.py 연동 함수
+# =========================
+
+def get_capture_analysis_dir(profile_id: str, capture_id: str) -> Path:
+    # cam4_660nm 캡처 폴더 아래 analysis 폴더 경로 반환
+    profile_root = get_profile_root(profile_id)
+    return profile_root / CAMERA_INFO["cam4"]["folder"] / capture_id / "analysis"
+
+
+def get_analysis_metadata_path(profile_id: str, capture_id: str) -> Path:
+    return get_capture_analysis_dir(profile_id, capture_id) / "metadata.json"
+
+
+def convert_external_metadata_to_report(metadata: dict, metadata_path: Path):
+    # GDH/Detect/porphyrin_analysis.py의 metadata 구조를 서버 응답용 report로 변환
+    analysis_result = metadata.get("analysis_result", {})
+    analysis_files = metadata.get("analysis_files", {})
+
+    return {
+        "source": "GDH/Detect/porphyrin_analysis.py",
+        "porphyrin_count": int(analysis_result.get("porphyrin_count", 0)),
+        "porphyrin_area": float(analysis_result.get("porphyrin_total_area_px", 0.0)),
+        "average_brightness": float(analysis_result.get("average_brightness", 0.0)),
+        "max_brightness": float(analysis_result.get("max_brightness", 0.0)),
+        "distribution": analysis_result.get("distribution", {}),
+        "detected_points": analysis_result.get("detected_points", []),
+        "overlay_path": analysis_files.get("detect_image"),
+        "compare_path": analysis_files.get("compare_image"),
+        "distribution_map_path": analysis_files.get("distribution_map"),
+        "metadata_path": str(metadata_path),
+    }
+
+
+def run_external_porphyrin_analysis(image_path: Path):
+    # 외부 porphyrin_analysis.py를 서버에서 실행할 때 OpenCV 창이 뜨지 않도록 UI 함수만 임시 비활성화
+    if not PORPHYRIN_ANALYSIS_READY:
+        return None
+
+    old_imshow = cv2.imshow
+    old_waitKey = cv2.waitKey
+    old_destroyAllWindows = cv2.destroyAllWindows
+
+    try:
+        cv2.imshow = lambda *args, **kwargs: None
+        cv2.waitKey = lambda *args, **kwargs: 1
+        cv2.destroyAllWindows = lambda *args, **kwargs: None
+
+        metadata = porphyrin_analysis_module.detect_porphyrin(Path(image_path))
+
+    finally:
+        cv2.imshow = old_imshow
+        cv2.waitKey = old_waitKey
+        cv2.destroyAllWindows = old_destroyAllWindows
+
+    if metadata is None:
+        return None
+
+    metadata_path = Path(image_path).parent / "analysis" / "metadata.json"
+    return convert_external_metadata_to_report(metadata, metadata_path)
+
+
+def run_porphyrin_analysis_for_capture(profile_id: str, capture_id: str):
+    # cam4_660nm 이미지 경로 찾기
+    image_path = resolve_image_path(
+        profile_id=profile_id,
+        capture_id=capture_id,
+        filter_type="660nm_filter"
+    )
+
+    analysis_dir = get_capture_analysis_dir(profile_id, capture_id)
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1순위: /GDH/Detect/porphyrin_analysis.py 사용
+    report = run_external_porphyrin_analysis(image_path)
+
+    # 실패 시 서버 내장 분석 사용
+    if report is None:
+        report = analyze_porphyrin_image(image_path, analysis_dir)
+        report["source"] = "camera_server_builtin"
+
+    # 분석 결과 대시보드 이미지 생성
+    try:
+        dashboard_path = build_analysis_dashboard_image(profile_id, capture_id, report)
+        report["dashboard_path"] = str(dashboard_path)
+    except Exception as e:
+        print("[분석 대시보드 생성 오류]", e)
+
+    return report
+
+
+def load_analysis_metadata_if_exists(profile_id: str, capture_id: str):
+    # 외부 분석 metadata.json이 있으면 읽어서 반환
+    metadata_path = get_analysis_metadata_path(profile_id, capture_id)
+
+    if not metadata_path.exists():
+        return None
+
+    try:
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    except Exception:
+        return None
+
+
+def make_analysis_urls(profile_id: str, capture_id: str):
+    # 프론트엔드에서 바로 표시할 수 있는 분석 이미지 URL 모음
+    return {
+        "overlay_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-overlay",
+        "mask_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-mask",
+        "compare_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-compare",
+        "distribution_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/distribution-map",
+        "dashboard_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/result-card",
+        "metadata_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/metadata",
+    }
+
+
+def load_image_for_dashboard(path: Path, size=(360, 520)):
+    # 대시보드용 이미지 로드/리사이즈
+    if path is None or not Path(path).exists():
+        canvas = np.zeros((size[1], size[0], 3), dtype=np.uint8)
+        cv2.putText(canvas, "No Image", (40, size[1] // 2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (180, 180, 180), 2)
+        return canvas
+
+    img = cv2.imread(str(path))
+
+    if img is None:
+        canvas = np.zeros((size[1], size[0], 3), dtype=np.uint8)
+        cv2.putText(canvas, "Load Fail", (40, size[1] // 2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (180, 180, 180), 2)
+        return canvas
+
+    return cv2.resize(img, size, interpolation=cv2.INTER_AREA)
+
+
+def build_analysis_dashboard_image(profile_id: str, capture_id: str, report: dict):
+    # 분석 결과를 한 장의 GUI 카드 이미지로 구성
+    profile_root = get_profile_root(profile_id)
+    analysis_dir = get_capture_analysis_dir(profile_id, capture_id)
+    analysis_dir.mkdir(parents=True, exist_ok=True)
+
+    no_filter_path = resolve_image_path(profile_id, capture_id, "no_filter")
+    filter_660_path = resolve_image_path(profile_id, capture_id, "660nm_filter")
+
+    overlay_path = report.get("overlay_path")
+    if overlay_path is None:
+        overlay_path = analysis_dir / "porphyrin_overlay.jpg"
+
+    dashboard_path = analysis_dir / "analysis_dashboard.jpg"
+
+    panel_w = 360
+    panel_h = 520
+    margin = 24
+    header_h = 120
+    footer_h = 90
+
+    canvas_w = panel_w * 3 + margin * 4
+    canvas_h = header_h + panel_h + footer_h + margin * 2
+
+    canvas = np.full((canvas_h, canvas_w, 3), 245, dtype=np.uint8)
+
+    cv2.putText(canvas, "Porphyrin Skin Analysis Result", (margin, 50),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.25, (30, 30, 30), 3)
+
+    count = report.get("porphyrin_count", 0)
+    avg_brightness = report.get("average_brightness", 0)
+    max_brightness = report.get("max_brightness", 0)
+    source = report.get("source", "unknown")
+
+    cv2.putText(canvas, f"Count: {count}", (margin, 92),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 0, 220), 2)
+    cv2.putText(canvas, f"Avg: {avg_brightness:.1f}  Max: {max_brightness:.1f}", (margin + 220, 92),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.75, (60, 60, 60), 2)
+
+    images = [
+        ("No Filter", no_filter_path),
+        ("660nm Filter", filter_660_path),
+        ("Detection Overlay", Path(overlay_path) if overlay_path else None),
+    ]
+
+    y0 = header_h + margin
+
+    for idx, (title, img_path) in enumerate(images):
+        x0 = margin + idx * (panel_w + margin)
+
+        panel = load_image_for_dashboard(img_path, size=(panel_w, panel_h))
+        canvas[y0:y0 + panel_h, x0:x0 + panel_w] = panel
+
+        cv2.rectangle(canvas, (x0, y0), (x0 + panel_w, y0 + panel_h), (210, 210, 210), 2)
+        cv2.rectangle(canvas, (x0, y0), (x0 + panel_w, y0 + 42), (0, 0, 0), -1)
+        cv2.putText(canvas, title, (x0 + 12, y0 + 29),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
+
+    y_footer = y0 + panel_h + 44
+
+    cv2.putText(canvas, f"Capture ID: {capture_id}", (margin, y_footer),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.65, (40, 40, 40), 2)
+    cv2.putText(canvas, f"Analyzer: {source}", (margin, y_footer + 32),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (80, 80, 80), 1)
+
+    cv2.imwrite(str(dashboard_path), canvas, [cv2.IMWRITE_JPEG_QUALITY, 95])
+
+    return dashboard_path
+
+
+# =========================
+# 포르피린 분석 함수
+# =========================
+
+def analyze_porphyrin_image(image_path: Path, output_dir: Path):
+    # 분석할 이미지 읽기
+    img = cv2.imread(str(image_path))
+
+    # 이미지가 없으면 예외 발생
+    if img is None:
+        raise RuntimeError("이미지 로드 실패")
+
+    # 결과 표시용 원본 복사
+    output = img.copy()
+
+    # BGR 이미지를 그레이스케일로 변환
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # CLAHE로 국소 대비 강화
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+    # 대비 강화 이미지 생성
+    enhanced = clahe.apply(gray)
+
+    # 작은 노이즈 완화를 위한 Gaussian Blur
+    blur = cv2.GaussianBlur(enhanced, (5, 5), 0)
+
+    # 상위 밝기 영역만 추출
+    threshold_value = np.percentile(blur, 97)
+
+    # 이진화
+    _, thresh = cv2.threshold(blur, threshold_value, 255, cv2.THRESH_BINARY)
+
+    # 노이즈 제거용 커널 생성
+    kernel = np.ones((3, 3), np.uint8)
+
+    # 작은 점 노이즈 제거
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+
+    # 외곽선 검출
+    contours, _ = cv2.findContours(
+        thresh,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    # 검출 개수 초기화
+    count = 0
+
+    # 검출 면적 초기화
+    total_area = 0.0
+
+    # 각 컨투어 순회
+    for cnt in contours:
+        # 컨투어 면적 계산
+        area = cv2.contourArea(cnt)
+
+        # 너무 작은 노이즈 제거
+        if area < 10:
+            continue
+
+        # 컨투어를 감싸는 최소 원 계산
+        (x, y), radius = cv2.minEnclosingCircle(cnt)
+
+        # 포르피린 후보 점 크기 범위 제한
+        if 3 < radius < 15:
+            # 중심 좌표 정수화
+            center = (int(x), int(y))
+
+            # 결과 이미지에 빨간 원 표시
+            cv2.circle(output, center, int(radius), (0, 0, 255), 2)
+
+            # 검출 개수 증가
+            count += 1
+
+            # 검출 면적 누적
+            total_area += float(area)
+
+    # 분석 결과 폴더 생성
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # 결과 이미지 경로
+    overlay_path = output_dir / "porphyrin_overlay.jpg"
+
+    # 마스크 이미지 경로
+    mask_path = output_dir / "porphyrin_mask.jpg"
+
+    # 비교 이미지 경로
+    compare_path = output_dir / "porphyrin_compare.jpg"
+
+    # 리포트 JSON 경로
+    report_path = output_dir / "porphyrin_report.json"
+
+    # 결과 이미지 저장
+    cv2.imwrite(str(overlay_path), output)
+
+    # 마스크 이미지 저장
+    cv2.imwrite(str(mask_path), thresh)
+
+    # 원본과 결과 비교 이미지 생성
+    combined = np.hstack((img, output))
+
+    # 원본 이미지 크기 읽기
+    h, w = img.shape[:2]
+
+    # 원본 텍스트 표시
+    cv2.putText(
+        combined,
+        "Original",
+        (20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (255, 255, 255),
+        2
+    )
+
+    # 검출 결과 텍스트 표시
+    cv2.putText(
+        combined,
+        "Detection",
+        (w + 20, 40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (0, 0, 255),
+        2
+    )
+
+    # 비교 이미지 저장
+    cv2.imwrite(str(compare_path), combined)
+
+    # 분석 결과 구성
+    report = {
+        "porphyrin_count": count,
+        "porphyrin_area": total_area,
+        "threshold_value": float(threshold_value),
+        "overlay_path": str(overlay_path),
+        "mask_path": str(mask_path),
+        "compare_path": str(compare_path),
+        "report_path": str(report_path)
+    }
+
+    # 리포트 JSON 저장
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+
+    # 분석 결과 반환
+    return report
+
+
+def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: str) -> Path:
+    # 프로필 루트 경로 가져오기
+    profile_root = get_profile_root(profile_id)
+
+    # 분석 결과 폴더 경로
+    analysis_dir = (
+        profile_root
+        / CAMERA_INFO["cam4"]["folder"]
+        / capture_id
+        / "analysis"
+    )
+
+    # 외부 porphyrin_analysis.py 파일명과 camera_server 내장 파일명을 모두 지원
+    file_map = {
+        "porphyrin-overlay": [
+            "porphyrin_detect_result.jpg",
+            "porphyrin_overlay.jpg",
+        ],
+        "porphyrin-mask": [
+            "porphyrin_mask.jpg",
+        ],
+        "porphyrin-compare": [
+            "compare_result.jpg",
+            "porphyrin_compare.jpg",
+        ],
+        "distribution-map": [
+            "distribution_map.jpg",
+        ],
+        "result-card": [
+            "analysis_dashboard.jpg",
+        ],
+    }
+
+    # 유효하지 않은 요청이면 예외 발생
+    if result_type not in file_map:
+        raise ValueError("유효하지 않은 분석 이미지 타입입니다.")
+
+    # 후보 파일 중 실제 존재하는 파일 반환
+    for filename in file_map[result_type]:
+        image_path = analysis_dir / filename
+        if image_path.exists() and image_path.is_file():
+            return image_path
+
+    # 없으면 예외
+    raise ValueError("분석 결과 이미지가 없습니다. 먼저 포르피린 분석을 실행하세요.")
+
+
+# =========================
+# 기본 상태 확인 API
+# =========================
+
+@app.route("/health")
+def health():
+    # 서버 상태 반환
+    return jsonify({
+        "ok": True,
+        "camera_ready": camera_ready,
+        "face_roi_ready": FACE_ROI_READY,
+        "porphyrin_analysis_ready": PORPHYRIN_ANALYSIS_READY,
+        "white_led_is_on": white_led_is_on
+    })
+
+
+# =========================
+# 프로필 목록 조회 API
+# =========================
+
+@app.route("/profiles", methods=["GET"])
+def get_profiles():
+    # 전체 프로필 목록 반환
+    return jsonify({
+        "ok": True,
+        "profiles": load_profiles()
+    })
+
+
+# =========================
+# 프로필 생성 API
+# =========================
+
+@app.route("/profiles", methods=["POST"])
+def create_profile_api():
+    try:
+        # JSON 바디 읽기
+        body = request.get_json(silent=True) or {}
+
+        # 이름 추출
+        profile_name = body.get("name", "")
+
+        # 프로필 생성
+        new_profile = create_profile(profile_name)
+
+        # 성공 응답
+        return jsonify({
+            "ok": True,
+            "profile": new_profile
+        })
+
+    except Exception as e:
+        # 실패 응답
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 400
+
+
+# =========================
+# 프로필 삭제 API
+# =========================
+
+@app.route("/profiles/<profile_id>", methods=["DELETE"])
+def delete_profile_api(profile_id):
+    try:
+        # 프로필 삭제
+        delete_profile(profile_id)
+
+        # 성공 응답
+        return jsonify({"ok": True})
+
+    except Exception as e:
+        # 실패 응답
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 400
+
+
+# =========================
+# CAM4 스트리밍 생성기
+# =========================
+
+def generate_cam4_stream():
+    # 목표 프레임 간격 계산
+    frame_delay = 1.0 / STREAM_FPS
+
+    # 무한 스트리밍 루프
+    while True:
+        # 이번 프레임 처리 시작 시간 기록
+        start_time = monotonic()
+
+        try:
+            # 카메라 접근 구간은 최대한 짧게 유지
+            with camera_lock:
+                # 카메라 준비 안 되었으면 잠시 대기
+                if not camera_ready:
+                    sleep(0.05)
+                    continue
+
+                # 전체 프레임 읽기
+                full_frame_bgr = read_preview_frame()
+
+                # cam4 부분만 잘라 복사
+                cam4_frame = extract_cam_frame(full_frame_bgr, "cam4").copy()
+
+            # 스트리밍용으로만 크기 축소
+            # 저장 촬영 이미지는 이 resize의 영향을 받지 않습니다.
+            cam4_frame = cv2.resize(
+                cam4_frame,
+                (STREAM_WIDTH, STREAM_HEIGHT),
+                interpolation=cv2.INTER_AREA
+            )
+
+            # JPEG 품질을 낮춰서 실시간 송출 부담을 줄임
+            ok, buffer = cv2.imencode(
+                ".jpg",
+                cam4_frame,
+                [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY]
+            )
+
+            # 인코딩 실패 시 다음 프레임으로 넘어감
+            if not ok:
+                sleep(0.01)
+                continue
+
+            # 바이트 변환
+            jpg_bytes = buffer.tobytes()
+
+            # multipart 응답 데이터 yield
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n"
+                b"Cache-Control: no-cache\r\n\r\n" +
+                jpg_bytes +
+                b"\r\n"
+            )
+
+            # 처리 시간을 뺀 만큼만 대기해서 실제 FPS를 최대한 일정하게 유지
+            elapsed = monotonic() - start_time
+            remain = frame_delay - elapsed
+
+            # 남은 시간이 있을 때만 대기
+            if remain > 0:
+                sleep(remain)
+
+        except GeneratorExit:
+            # 브라우저가 스트림 연결을 끊으면 조용히 종료
+            break
+
+        except Exception as e:
+            # 스트리밍 오류 출력
+            print("[스트림 오류]", e)
+
+            # 잠시 쉬고 재시도
+            sleep(0.1)
+
+
+# =========================
+# CAM4 스트리밍 API
+# =========================
+
+@app.route("/stream-cam4")
+def stream_cam4():
+    # MJPEG 스트림 반환
+    return Response(
+        generate_cam4_stream(),
+        mimetype="multipart/x-mixed-replace; boundary=frame"
+    )
+
+
+# =========================
+# 전체 촬영 API
+# =========================
+
+@app.route("/capture-all", methods=["POST"])
+def capture_all():
+    try:
+        # JSON 바디 읽기
+        body = request.get_json(silent=True) or {}
+
+        # 선택된 profileId 읽기
+        profile_id = body.get("profileId", "")
+
+        # 기존 저장 구조에 맞춰 촬영 실행
+        result = perform_capture_for_profile(profile_id)
+
+        # 촬영 직후 포르피린 분석까지 실행
+        capture_id = result["capture_id"]
+        analysis_report = run_porphyrin_analysis_for_capture(profile_id, capture_id)
+        result["analysis_result"] = analysis_report
+        result["result_urls"] = make_analysis_urls(profile_id, capture_id)
+
+        # 촬영 성공 응답 반환
+        return jsonify(result)
+
+    except Exception as e:
+        # 서버 콘솔에 오류 출력
+        print("[촬영 오류]", e)
+
+        # 실패 응답
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
+
+
+# =========================
+# 백색 LED 제어 API
+# =========================
+
+@app.route("/white-led/on", methods=["POST"])
+def white_led_on_api():
+    try:
+        # 백색 LED 켜기
+        white_led_on()
+
+        # 성공 응답 반환
+        return jsonify({
+            "ok": True,
+            "white_led_is_on": True
+        })
+
+    except Exception as e:
+        # 실패 응답 반환
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route("/white-led/off", methods=["POST"])
+def white_led_off_api():
+    try:
+        # 백색 LED 끄기
+        white_led_off()
+
+        # 성공 응답 반환
+        return jsonify({
+            "ok": True,
+            "white_led_is_on": False
+        })
+
+    except Exception as e:
+        # 실패 응답 반환
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route("/white-led/status", methods=["GET"])
+def white_led_status_api():
+    # 현재 백색 LED 상태 반환
+    return jsonify({
+        "ok": True,
+        "white_led_is_on": white_led_is_on
+    })
+
+
+# =========================
+# 자동 얼굴 촬영 API
+# =========================
+
+@app.route("/auto-capture/start", methods=["POST"])
+def auto_capture_start_api():
+    global auto_capture_thread
+
+    try:
+        # JSON 바디 읽기
+        body = request.get_json(silent=True) or {}
+
+        # 선택된 profileId 읽기
+        profile_id = body.get("profileId", "")
+
+        # profileId가 비어 있으면 에러
+        if not str(profile_id).strip():
+            return jsonify({
+                "ok": False,
+                "error": "profileId가 필요합니다."
+            }), 400
+
+        # 프로필 존재 여부 확인
+        if find_profile_by_id(profile_id) is None:
+            return jsonify({
+                "ok": False,
+                "error": "존재하지 않는 프로필입니다."
+            }), 400
+
+        # 얼굴/눈 검출 모듈 준비 여부 확인
+        if not (FACE_ROI_READY or opencv_face_ready):
+            return jsonify({
+                "ok": False,
+                "error": "face_ROI_eye_added.py 또는 OpenCV 얼굴/눈 검출 파일을 불러오지 못해 자동 촬영을 사용할 수 없습니다."
+            }), 400
+
+        # 카메라 준비 여부 확인
+        if not camera_ready:
+            return jsonify({
+                "ok": False,
+                "error": "카메라가 아직 준비되지 않았습니다."
+            }), 400
+
+        # 이미 자동 촬영 중인지 확인
+        with auto_state_lock:
+            already_running = AUTO_STATE["running"]
+
+        # 이미 실행 중이면 현재 상태 반환
+        if already_running:
+            return jsonify({
+                "ok": True,
+                **get_auto_state_copy()
+            })
+
+        # 자동 촬영 상태 초기화
+        reset_auto_state(profile_id=profile_id, running=True)
+
+        # 촬영 전 얼굴 위치/눈 감김 확인을 위해 백색 LED ON
+        white_led_on()
+
+        # 자동 촬영 스레드 생성
+        auto_capture_thread = threading.Thread(
+            target=auto_capture_worker,
+            args=(profile_id,),
+            daemon=True
+        )
+
+        # 자동 촬영 스레드 시작
+        auto_capture_thread.start()
+
+        # 현재 상태 반환
+        return jsonify({
+            "ok": True,
+            **get_auto_state_copy()
+        })
+
+    except Exception as e:
+        # 실패 응답 반환
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route("/auto-capture/status", methods=["GET"])
+def auto_capture_status_api():
+    # 현재 자동 촬영 상태 반환
+    return jsonify({
+        "ok": True,
+        **get_auto_state_copy()
+    })
+
+
+@app.route("/auto-capture/cancel", methods=["POST"])
+def auto_capture_cancel_api():
+    # 자동 촬영 취소 시 백색 LED OFF
+    white_led_off()
+
+    # 자동 촬영 상태를 중지로 변경
+    with auto_state_lock:
+        AUTO_STATE["running"] = False
+        AUTO_STATE["status"] = "자동 촬영 취소"
+        AUTO_STATE["last_update"] = datetime.now().isoformat()
+
+    # 취소 후 현재 상태 반환
+    return jsonify({
+        "ok": True,
+        **get_auto_state_copy()
+    })
+
+
+# =========================
+# 이전 기록 목록 조회 API
+# =========================
+
+@app.route("/profiles/<profile_id>/history", methods=["GET"])
+def get_history_api(profile_id):
+    try:
+        # 기록 목록 조회
+        history = get_capture_history(profile_id)
+
+        # 성공 응답
+        return jsonify({
+            "ok": True,
+            "profileId": profile_id,
+            "history": history
+        })
+
+    except Exception as e:
+        # 실패 응답
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 400
+
+
+# =========================
+# 특정 기록 상세 조회 API
+# =========================
+
+@app.route("/profiles/<profile_id>/history/<capture_id>", methods=["GET"])
+def get_history_detail_api(profile_id, capture_id):
+    try:
+        # 상세 정보 조회
+        detail = get_capture_detail(profile_id, capture_id)
+
+        # 성공 응답
+        return jsonify({
+            "ok": True,
+            **detail
+        })
+
+    except Exception as e:
+        # 실패 응답
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 400
+
+
+# =========================
+# 특정 촬영 기록 삭제 API
+# =========================
+
+@app.route("/profiles/<profile_id>/history/<capture_id>", methods=["DELETE"])
+def delete_history_api(profile_id, capture_id):
+    try:
+        # 특정 촬영 기록 삭제
+        delete_capture_history(profile_id, capture_id)
+
+        # 성공 응답
+        return jsonify({
+            "ok": True
+        })
+
+    except Exception as e:
+        # 실패 응답
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 400
+
+
+
+
+# =========================
+# 특정 촬영 기록 포르피린 분석 API
+# =========================
+
+@app.route("/profiles/<profile_id>/history/<capture_id>/analyze-porphyrin", methods=["POST"])
+def analyze_porphyrin_api(profile_id, capture_id):
+    try:
+        # 외부 /GDH/Detect/porphyrin_analysis.py 우선 사용 후 실패 시 내장 분석 사용
+        report = run_porphyrin_analysis_for_capture(profile_id, capture_id)
+        urls = make_analysis_urls(profile_id, capture_id)
+
+        # 성공 응답 반환
+        return jsonify({
+            "ok": True,
+            "captureId": capture_id,
+            "analysis_result": report,
+            **urls
+        })
+
+    except Exception as e:
+        # 실패 응답 반환
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 400
+
+
+@app.route("/profiles/<profile_id>/history/<capture_id>/analysis/metadata", methods=["GET"])
+def get_porphyrin_analysis_metadata_api(profile_id, capture_id):
+    try:
+        metadata = load_analysis_metadata_if_exists(profile_id, capture_id)
+
+        if metadata is None:
+            raise ValueError("분석 metadata.json이 없습니다. 먼저 포르피린 분석을 실행하세요.")
+
+        return jsonify({
+            "ok": True,
+            "captureId": capture_id,
+            "metadata": metadata,
+            "urls": make_analysis_urls(profile_id, capture_id)
+        })
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 404
+
+
+# =========================
+# 포르피린 분석 이미지 반환 API
+# =========================
+
+@app.route("/profiles/<profile_id>/history/<capture_id>/analysis/<result_type>", methods=["GET"])
+def get_porphyrin_analysis_image_api(profile_id, capture_id, result_type):
+    try:
+        # 분석 이미지 경로 가져오기
+        image_path = resolve_analysis_image_path(profile_id, capture_id, result_type)
+
+        # 이미지 파일 반환
+        return send_file(image_path)
+
+    except Exception as e:
+        # 실패 시 JSON 반환
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 404
+
+
+# =========================
+# 특정 기록 이미지 직접 반환 API
+# =========================
+
+@app.route("/profiles/<profile_id>/history/<capture_id>/image/<filter_type>", methods=["GET"])
+def get_history_image_api(profile_id, capture_id, filter_type):
+    try:
+        # 실제 파일 경로 찾기
+        image_path = resolve_image_path(profile_id, capture_id, filter_type)
+
+        # 이미지 파일 반환
+        return send_file(image_path)
+
+    except Exception as e:
+        # 실패 시 JSON 반환
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 404
+
+
+# =========================
+# 메인 실행부
+# =========================
+
+if __name__ == "__main__":
+    # 서버 시작 전에 릴레이 OFF 보장
+    relay_off()
+
+    # 서버 시작 전에 백색 LED OFF 보장
+    white_led_off()
+
+    # 카메라 초기화
+    init_camera()
+
+    # Flask 서버 실행
+    app.run(host="0.0.0.0", port=8000, threaded=True)
