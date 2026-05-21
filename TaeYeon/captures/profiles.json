@@ -4,5 +4,20 @@
     "name": "김태연",
     "folderId": "profile_1778054799364",
     "createdAt": "2026.05.06"
+<<<<<<< HEAD
+  },
+  {
+    "id": 1778398411257,
+    "name": "박",
+    "folderId": "profile_1778398411257",
+    "createdAt": "2026.05.10"
+  },
+  {
+    "id": 1778573493756,
+    "name": "qw",
+    "folderId": "profile_1778573493756",
+    "createdAt": "2026.05.12"
+=======
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
   }
 ]

@@ -241,7 +241,11 @@ const composeHangulWithoutJong = (buffer: HangulBuffer) => {
   });
 };
 
+<<<<<<< HEAD
+const API_BASE = "http://192.168.137.47:8000";
+=======
 const API_BASE = "http://192.168.137.145:8000";
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 function App() {
   const [screen, setScreen] = useState<Screen>("profiles");
@@ -1416,6 +1420,13 @@ function App() {
 
         .camera-live {
           position: absolute;
+<<<<<<< HEAD
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          background: #000;
+=======
           top: 50%;
           left: 50%;
           width: 100vh;
@@ -1424,6 +1435,7 @@ function App() {
           background: #000;
           transform: translate(-50%, -50%) rotate(90deg);
           transform-origin: center center;
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
         }
 
         .camera-overlay {

@@ -105,6 +105,30 @@ def viewer(base_path):
             idx = (idx + 1) % total
             continue
 
+<<<<<<< HEAD
+        result, count = detect_porhyrin(img)
+
+        # 좌우 비교
+        combined = np.hstack((img, result))
+
+        # 크기 줄이기 (너무 클 경우)
+        combined = cv2.resize(combined, (1400, 700))
+
+        # -----------------------------
+        # 텍스트 표시
+        # -----------------------------
+        cv2.putText(combined, name, (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+
+        cv2.putText(combined, f"{idx+1} / {total}", (20, 80),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+
+        cv2.putText(combined, f"Date: {date}", (20, 120),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,255), 2)
+
+        cv2.putText(combined, f"Detected: {count}", (20, 160),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,255), 3)
+=======
         result, heatmap, count, rate, grade, region_result = detect_porhyrin(img)
 
         # 크기 통일
@@ -135,6 +159,7 @@ def viewer(base_path):
 
         # 2개 가로 출력
         combined = np.hstack((img_view, heatmap_view))
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
         cv2.imshow("Porphyrin Viewer", combined)
 

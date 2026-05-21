@@ -56,7 +56,11 @@ CAPTURE_HEIGHT = 800
 SINGLE_WIDTH = CAPTURE_WIDTH // 4
 
 # 저장 루트 경로 설정
+<<<<<<< HEAD
+SAVE_ROOT = Path.home() / "Graduate_Project" / "Final_Project" / "captures"
+=======
 SAVE_ROOT = Path.home() / "Graduate_Project" / "TaeYeon" / "captures"
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 # 저장 루트 폴더가 없으면 생성
 SAVE_ROOT.mkdir(parents=True, exist_ok=True)
