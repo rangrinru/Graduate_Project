@@ -339,23 +339,19 @@ def capture_sequence(cam, preview_config, still_config, exposure_ms, gain, save_
         for cam_key in ["cam2", "cam3", "cam4"]:
             target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
 
-
-            # 단독 표시
-            show_single_camera(WINDOW_NAME, target_frame, cam_key, exposure_ms, hold_ms=700)
-
-            # 개별 저장 (원본 방향 그대로 저장)
-            save_one_camera_image(
-                cam_key=cam_key,
-                frame_bgr=target_frame)
-
-            show_single_camera(WINDOW_NAME, target_frame, cam_key, exposure_ms, hold_ms=700)
+            show_single_camera(
+                WINDOW_NAME,
+                target_frame,
+                cam_key,
+                exposure_ms,
+                hold_ms=700
+            )
 
             save_frame = rotate_for_save(target_frame)
 
             save_one_camera_image(
                 cam_key=cam_key,
                 frame_bgr=save_frame,
-
                 timestamp=capture_timestamp,
                 exposure_ms=exposure_ms,
                 gain=gain,
