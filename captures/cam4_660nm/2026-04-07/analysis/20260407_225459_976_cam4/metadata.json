@@ -1,0 +1,151 @@
+{
+    "generated_at": "2026-05-21T16:38:55.757697",
+    "analysis_type": "porphyrin_strong_fluorescence_detection",
+    "input_file": "..\\captures\\cam4_660nm\\2026-04-07\\20260407_225459_976_cam4.png",
+    "date_folder": "2026-04-07",
+    "image_name": "20260407_225459_976_cam4.png",
+    "output_files": {
+        "result_image": "..\\captures\\cam4_660nm\\2026-04-07\\analysis\\20260407_225459_976_cam4\\porphyrin_result.jpg",
+        "heatmap_image": "..\\captures\\cam4_660nm\\2026-04-07\\analysis\\20260407_225459_976_cam4\\porphyrin_heatmap.jpg",
+        "mask_image": "..\\captures\\cam4_660nm\\2026-04-07\\analysis\\20260407_225459_976_cam4\\porphyrin_mask.png",
+        "compare_image": "..\\captures\\cam4_660nm\\2026-04-07\\analysis\\20260407_225459_976_cam4\\porphyrin_compare.jpg",
+        "metadata": "..\\captures\\cam4_660nm\\2026-04-07\\analysis\\20260407_225459_976_cam4\\metadata.json"
+    },
+    "image_info": {
+        "width": 1280,
+        "height": 800,
+        "channels": 3,
+        "shape": [
+            800,
+            1280,
+            3
+        ]
+    },
+    "analysis_result": {
+        "porphyrin_count": 2,
+        "detection_rate_percent": 0.006787,
+        "grade": "Low",
+        "region_data": {
+            "Upper": 0.0,
+            "Middle": 0.006787,
+            "Lower": 0.0,
+            "Left": 0.0,
+            "Center": 0.006787,
+            "Right": 0.0
+        },
+        "detected_points": [
+            {
+                "x": 645,
+                "y": 370
+            },
+            {
+                "x": 641,
+                "y": 344
+            }
+        ],
+        "detected_regions": [
+            {
+                "id": 1,
+                "center": {
+                    "x": 645,
+                    "y": 370
+                },
+                "bbox": {
+                    "x": 642,
+                    "y": 367,
+                    "width": 6,
+                    "height": 7
+                },
+                "area_px": 29.0,
+                "contour_points": [
+                    [
+                        643,
+                        367
+                    ],
+                    [
+                        642,
+                        368
+                    ],
+                    [
+                        642,
+                        373
+                    ],
+                    [
+                        646,
+                        373
+                    ],
+                    [
+                        647,
+                        372
+                    ],
+                    [
+                        647,
+                        367
+                    ]
+                ],
+                "mean_brightness": 5.7143,
+                "max_brightness": 7
+            },
+            {
+                "id": 2,
+                "center": {
+                    "x": 641,
+                    "y": 344
+                },
+                "bbox": {
+                    "x": 637,
+                    "y": 341,
+                    "width": 9,
+                    "height": 7
+                },
+                "area_px": 40.5,
+                "contour_points": [
+                    [
+                        641,
+                        341
+                    ],
+                    [
+                        639,
+                        343
+                    ],
+                    [
+                        637,
+                        343
+                    ],
+                    [
+                        637,
+                        347
+                    ],
+                    [
+                        644,
+                        347
+                    ],
+                    [
+                        644,
+                        346
+                    ],
+                    [
+                        645,
+                        345
+                    ],
+                    [
+                        645,
+                        341
+                    ]
+                ],
+                "mean_brightness": 5.5714,
+                "max_brightness": 8
+            }
+        ],
+        "porphyrin_total_area_px": 69.5,
+        "threshold_value": 5.0
+    },
+    "coordinate_system": {
+        "origin": "top_left",
+        "x_direction": "right",
+        "y_direction": "down",
+        "unit": "pixel",
+        "note": "좌표는 입력 이미지 기준입니다."
+    },
+    "interpretation_note": "이 결과는 660nm 필터 영상에서 밝게 검출되는 포르피린 후보를 규칙 기반으로 분석한 값입니다. 조명, 노출, 필터, 피부 반사, 이미지 방향에 따라 결과가 달라질 수 있으며 의료 진단용이 아닙니다."
+}

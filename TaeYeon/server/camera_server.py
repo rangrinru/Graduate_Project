@@ -40,11 +40,46 @@ from collections import deque
 # 릴레이 제어용 GPIO import
 from gpiozero import LED
 
+<<<<<<< HEAD
+# 외부 명령 실행용 import
+import subprocess
+
+# UC-788 FIFO 스트리밍용 OS/select import
+import os
+import select
+import errno
+
+# UC-788 Rev.B는 Picamera2 RGB 프리뷰가 검게 나오는 문제가 있어
+# /dev/video0의 Y10P raw를 직접 읽어서 화면용 이미지로 변환합니다.
+
+# 자동 얼굴 촬영 조건 확인은 MediaPipe Face Landmarker로 수행합니다.
+# 기존 OpenCV Haar Cascade 얼굴/눈 검출보다 얼굴 랜드마크 기반으로 더 안정적으로 판단합니다.
+try:
+    # MediaPipe 기본 모듈 import
+    import mediapipe as mp
+
+    # MediaPipe Tasks Python API import
+    from mediapipe.tasks import python as mp_python
+
+    # MediaPipe Vision Task import
+    from mediapipe.tasks.python import vision
+
+    # MediaPipe import 성공 표시
+    MEDIAPIPE_IMPORT_ERROR = None
+
+except Exception as e:
+    # MediaPipe import 실패 시 서버는 켜지되 자동 촬영만 사용할 수 없게 처리
+    mp = None
+    mp_python = None
+    vision = None
+    MEDIAPIPE_IMPORT_ERROR = e
+=======
 # Picamera2 import
 from picamera2 import Picamera2
 
 # MediaPipe 대신 OpenCV Haar Cascade로 얼굴/눈 검출을 수행합니다.
 # 따라서 mediapipe 설치 없이 자동 촬영 조건 확인이 가능합니다.
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 # Flask 앱 생성
@@ -83,6 +118,21 @@ CURRENT_GAIN = 1.0
 SAVE_AS_PNG = True
 
 # 초기 노출 시간(ms)
+<<<<<<< HEAD
+INITIAL_EXPOSURE_MS = 100
+
+# 스트리밍 FPS
+STREAM_FPS = 15
+
+# 스트리밍용 화면 가로 크기
+STREAM_WIDTH = 720
+
+# 스트리밍용 화면 세로 크기
+STREAM_HEIGHT = 1152
+
+# 스트리밍용 JPEG 품질
+STREAM_JPEG_QUALITY = 70
+=======
 INITIAL_EXPOSURE_MS = 20
 
 # 스트리밍 FPS
@@ -96,6 +146,7 @@ STREAM_HEIGHT = 400
 
 # 스트리밍용 JPEG 품질
 STREAM_JPEG_QUALITY = 60
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 # 릴레이 연결 GPIO 번호
 RELAY_PIN = 17
@@ -155,13 +206,68 @@ STABLE_FACE_HOLD_FRAMES = 6
 OPEN_EYE_BASELINE_SAMPLES = 15
 
 # 눈 감음이 유지되어야 하는 프레임 수
+<<<<<<< HEAD
+EYES_CLOSED_HOLD_FRAMES = 4
+=======
 EYES_CLOSED_HOLD_FRAMES = 2
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 # 자동 촬영 상태 갱신 주기
 AUTO_CAPTURE_INTERVAL_SEC = 0.12
 
 
 # =========================
+<<<<<<< HEAD
+# UC-788 Rev.B / Arducam Pivariety RAW 설정
+# =========================
+
+# UC-788 Rev.B 전체 raw 가로 해상도
+RAW_WIDTH = CAPTURE_WIDTH
+
+# UC-788 Rev.B 전체 raw 세로 해상도
+RAW_HEIGHT = CAPTURE_HEIGHT
+
+# V4L2 카메라 장치 경로
+RAW_VIDEO_DEVICE = "/dev/video0"
+
+# Y10P raw 임시 저장 경로
+RAW_FRAME_PATH = Path("/dev/shm/uc788_raw_frame.bin")
+
+# Y10P 한 프레임의 정상 바이트 크기: 5120 * 800 * 10bit / 8 = 5,120,000 bytes
+RAW_EXPECTED_BYTES = RAW_WIDTH * RAW_HEIGHT * 5 // 4
+
+# 부드러운 스트리밍을 위해 v4l2-ctl이 raw를 계속 써주는 FIFO 경로
+RAW_FIFO_PATH = Path("/dev/shm/uc788_y10p_fifo")
+
+# FIFO 스트림 상태값
+raw_stream_process = None
+raw_stream_thread = None
+raw_stream_stop_event = threading.Event()
+raw_stream_lock = threading.Lock()
+latest_preview_gray8 = None
+latest_preview_frame_time = 0.0
+raw_fifo_fd = None
+
+# raw 프레임을 화면용 8bit로 만들 때 사용할 하위/상위 퍼센타일
+RAW_NORMALIZE_LOW_PERCENTILE = 1
+RAW_NORMALIZE_HIGH_PERCENTILE = 99
+
+# UC-788 직접 V4L2 캡처용 기본 노출값
+# 너무 밝으면 400~600, 너무 어두우면 1000~2000 정도로 조정하세요.
+UC788_TRIGGER_MODE = 0
+UC788_EXPOSURE = 800
+UC788_ANALOGUE_GAIN = 100
+
+# 현재 검색된 Arducam media device 경로
+arducam_media_device = None
+
+# media-ctl 포맷 설정 완료 여부
+uc788_media_configured = False
+
+
+# =========================
+=======
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 # 릴레이 객체 생성
 # =========================
 
@@ -220,6 +326,12 @@ camera_lock = threading.Lock()
 # 카메라 준비 여부
 camera_ready = False
 
+<<<<<<< HEAD
+# 기존 코드 호환을 위해 남겨두는 자리값입니다.
+# UC-788 Rev.B는 Picamera2 대신 V4L2 raw 캡처를 사용합니다.
+picam2 = None
+preview_config = None
+=======
 # Picamera2 객체
 picam2 = None
 
@@ -227,6 +339,7 @@ picam2 = None
 preview_config = None
 
 # 스틸 캡처 설정
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 still_config = None
 
 # 자동 촬영 스레드 객체
@@ -236,6 +349,74 @@ auto_capture_thread = None
 auto_state_lock = threading.Lock()
 
 # =========================
+<<<<<<< HEAD
+# MediaPipe Face Landmarker 설정
+# =========================
+
+# face_landmarker.task 모델 파일 경로
+FACE_LANDMARKER_MODEL_PATH = Path.home() / "Graduate_Project" / "face_landmarker.task"
+
+# MediaPipe Face Landmarker 객체
+face_landmarker = None
+
+# MediaPipe 얼굴 랜드마커 준비 여부
+mediapipe_face_ready = False
+
+# MediaPipe 얼굴 랜드마커 오류 메시지
+mediapipe_face_error = None
+
+
+def init_mediapipe_face_landmarker():
+    # 전역 MediaPipe 상태값 사용 선언
+    global face_landmarker, mediapipe_face_ready, mediapipe_face_error
+
+    # MediaPipe import 자체가 실패한 경우
+    if MEDIAPIPE_IMPORT_ERROR is not None:
+        mediapipe_face_ready = False
+        mediapipe_face_error = f"MediaPipe import 실패: {MEDIAPIPE_IMPORT_ERROR}"
+        return
+
+    # 모델 파일이 없으면 자동 촬영 기능만 비활성화
+    if not FACE_LANDMARKER_MODEL_PATH.exists():
+        mediapipe_face_ready = False
+        mediapipe_face_error = (
+            f"Face Landmarker 모델 파일이 없습니다: {FACE_LANDMARKER_MODEL_PATH}. "
+            f"face_landmarker.task 파일을 camera_server.py와 같은 폴더에 넣어주세요."
+        )
+        return
+
+    try:
+        # MediaPipe 모델 경로 설정
+        base_options = mp_python.BaseOptions(
+            model_asset_path=str(FACE_LANDMARKER_MODEL_PATH)
+        )
+
+        # Face Landmarker 옵션 설정
+        options = vision.FaceLandmarkerOptions(
+            base_options=base_options,
+            running_mode=vision.RunningMode.IMAGE,
+            num_faces=1,
+            min_face_detection_confidence=0.5,
+            min_face_presence_confidence=0.5,
+        )
+
+        # Face Landmarker 객체 생성
+        face_landmarker = vision.FaceLandmarker.create_from_options(options)
+
+        # 준비 완료 표시
+        mediapipe_face_ready = True
+        mediapipe_face_error = None
+
+    except Exception as e:
+        # 생성 실패 시 오류 저장
+        face_landmarker = None
+        mediapipe_face_ready = False
+        mediapipe_face_error = f"MediaPipe Face Landmarker 초기화 실패: {e}"
+
+
+# 서버 시작 시 MediaPipe Face Landmarker 초기화
+init_mediapipe_face_landmarker()
+=======
 # OpenCV Haar Cascade 경로 설정
 # =========================
 
@@ -292,6 +473,7 @@ if eye_cascade.empty():
 # 눈 2개가 보이는 상태에서 얼굴 기울기를 확인할 수 있습니다.
 # 눈을 감으면 눈 검출이 사라지므로, 얼굴 안정 조건을 먼저 만족한 뒤에는
 # 눈이 안 보이는 상태를 눈 감음으로 판단합니다.
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 def make_default_auto_checks():
@@ -321,6 +503,12 @@ AUTO_STATE = {
     "last_update": None,
 }
 
+<<<<<<< HEAD
+# 열린 눈 EAR 기준값 계산용 샘플 저장소
+open_eye_ear_samples = deque(maxlen=OPEN_EYE_BASELINE_SAMPLES)
+
+=======
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 # =========================
 # 릴레이 제어 함수
@@ -363,12 +551,18 @@ def white_led_off():
 # =========================
 
 def set_manual_controls(camera, exposure_ms, gain):
+<<<<<<< HEAD
+    # UC-788 Rev.B raw 캡처는 Picamera2 제어를 사용하지 않습니다.
+    # 노출/게인 제어가 필요하면 v4l2-ctl --list-ctrls로 지원 컨트롤명을 확인한 뒤 별도 적용해야 합니다.
+    return
+=======
     # 자동 노출을 끄고 수동 노출/게인 적용
     camera.set_controls({
         "AeEnable": False,
         "ExposureTime": exposure_ms * 1000,
         "AnalogueGain": gain
     })
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 # =========================
@@ -618,7 +812,11 @@ def save_one_camera_image(
         "filter_type": info["filter"],
         "display_name": info["display_name"],
         "sequence_order": info["sequence_order"],
+<<<<<<< HEAD
+        "capture_type": "uc788_y10p_raw_v4l2_fullframe_then_crop",
+=======
         "capture_type": "high_quality_still_fullframe_then_crop",
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
         "file_format": ext,
         "camera_mode": {
             "capture_width": CAPTURE_WIDTH,
@@ -650,11 +848,361 @@ def save_one_camera_image(
 
 
 # =========================
+<<<<<<< HEAD
+# UC-788 Rev.B RAW 카메라 유틸 함수
+# =========================
+
+def run_command(command, check=True, capture_output=True):
+    # 외부 명령을 실행하고 결과를 반환
+    return subprocess.run(
+        command,
+        check=check,
+        text=True,
+        stdout=subprocess.PIPE if capture_output else subprocess.DEVNULL,
+        stderr=subprocess.PIPE if capture_output else subprocess.DEVNULL,
+    )
+
+
+def find_arducam_media_device():
+    # /dev/media* 목록을 순회하면서 arducam-pivariety가 붙은 unicam media 장치를 찾음
+    for media_path in sorted(Path("/dev").glob("media*")):
+        try:
+            # media topology 조회
+            result = run_command(["media-ctl", "-d", str(media_path), "-p"])
+
+            # 출력 문자열 결합
+            output = (result.stdout or "") + (result.stderr or "")
+
+            # Arducam Pivariety 센서가 있는 media 장치인지 확인
+            if "arducam-pivariety" in output and "unicam" in output:
+                return str(media_path)
+
+        except Exception:
+            # 접근 실패한 media 장치는 무시
+            continue
+
+    # 찾지 못하면 예외 발생
+    raise RuntimeError("arducam-pivariety가 연결된 /dev/media* 장치를 찾지 못했습니다.")
+
+
+def configure_uc788_media(force=False):
+    # 전역 media 상태값 사용 선언
+    global arducam_media_device, uc788_media_configured
+
+    # 이미 설정되어 있고 강제 재설정이 아니면 종료
+    if uc788_media_configured and not force:
+        return
+
+    # Arducam media 장치가 없으면 검색
+    if arducam_media_device is None or force:
+        arducam_media_device = find_arducam_media_device()
+
+    # UC-788 Rev.B 센서 출력 포맷을 5120x800 Y10으로 설정
+    run_command(
+        [
+            "media-ctl",
+            "-d", arducam_media_device,
+            "--set-v4l2",
+            "'arducam-pivariety 10-000c':0 [fmt:Y10_1X10/5120x800 field:none]",
+        ],
+        capture_output=True,
+    )
+
+    # 설정 완료 표시
+    uc788_media_configured = True
+
+
+
+
+def apply_uc788_controls():
+    # UC-788 Rev.B 직접 V4L2 캡처용 노출/게인/트리거 기본값 적용
+    # /dev/v4l-subdev0 컨트롤이 순간적으로 준비되지 않을 수 있으므로 실패해도 서버는 계속 실행합니다.
+    commands = [
+        ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"trigger_mode={UC788_TRIGGER_MODE}"],
+        ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"exposure={UC788_EXPOSURE}"],
+        ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"analogue_gain={UC788_ANALOGUE_GAIN}"],
+    ]
+
+    for command in commands:
+        try:
+            run_command(command, check=False, capture_output=True)
+        except Exception as e:
+            print(f"[UC-788 컨트롤 적용 경고] {command}: {e}")
+
+def y10p_high8_to_gray8(raw_bytes):
+    # Y10P는 4픽셀을 5바이트에 저장합니다.
+    # 화면 프리뷰는 속도를 위해 하위 2비트를 버리고 상위 8비트만 사용합니다.
+    data = np.frombuffer(raw_bytes, dtype=np.uint8)
+
+    # 크기 확인
+    if data.size != RAW_EXPECTED_BYTES:
+        raise RuntimeError(f"raw 크기 오류: expected={RAW_EXPECTED_BYTES}, actual={data.size}")
+
+    # 한 줄 바이트 수 계산
+    row_stride = RAW_WIDTH * 5 // 4
+
+    # 행 단위로 재구성
+    packed = data.reshape(RAW_HEIGHT, row_stride)
+
+    # 5바이트 그룹 중 앞 4바이트가 각 픽셀의 상위 8비트입니다.
+    groups = packed.reshape(RAW_HEIGHT, RAW_WIDTH // 4, 5)
+    gray8 = groups[:, :, :4].reshape(RAW_HEIGHT, RAW_WIDTH).copy()
+
+    # 화면 확인용 밝기 보정
+    gray8 = cv2.convertScaleAbs(gray8, alpha=1.35, beta=0)
+
+    return gray8
+
+
+def unpack_y10p_to_gray8(raw_bytes):
+    # 저장/분석용으로 10비트를 복원한 뒤 보기 좋게 정규화합니다.
+    data = np.frombuffer(raw_bytes, dtype=np.uint8)
+
+    # Y10P는 4픽셀을 5바이트에 저장하므로 5바이트 단위로 재구성
+    data = data.reshape(-1, 5)
+
+    # 5바이트에서 10비트 픽셀 4개 복원
+    p0 = (data[:, 0].astype(np.uint16) << 2) | ((data[:, 4] >> 0) & 0x03)
+    p1 = (data[:, 1].astype(np.uint16) << 2) | ((data[:, 4] >> 2) & 0x03)
+    p2 = (data[:, 2].astype(np.uint16) << 2) | ((data[:, 4] >> 4) & 0x03)
+    p3 = (data[:, 3].astype(np.uint16) << 2) | ((data[:, 4] >> 6) & 0x03)
+
+    # 전체 10비트 이미지 배열 생성
+    img10 = np.empty(RAW_WIDTH * RAW_HEIGHT, dtype=np.uint16)
+
+    # 4픽셀씩 순서대로 배치
+    img10[0::4] = p0
+    img10[1::4] = p1
+    img10[2::4] = p2
+    img10[3::4] = p3
+
+    # 2차원 이미지로 변환
+    img10 = img10.reshape(RAW_HEIGHT, RAW_WIDTH)
+
+    # 화면에서 잘 보이도록 퍼센타일 기반 자동 대비 계산
+    low = np.percentile(img10, RAW_NORMALIZE_LOW_PERCENTILE)
+    high = np.percentile(img10, RAW_NORMALIZE_HIGH_PERCENTILE)
+
+    # 대비 계산이 불가능하면 단순 8비트 축소 사용
+    if high <= low:
+        return np.clip(img10 >> 2, 0, 255).astype(np.uint8)
+
+    # 10비트 raw를 0~255 화면용 gray 이미지로 변환
+    gray8 = np.clip((img10.astype(np.float32) - low) * 255.0 / (high - low), 0, 255).astype(np.uint8)
+
+    return gray8
+
+
+def stop_uc788_stream():
+    # 전역 스트림 상태값 사용 선언
+    global raw_stream_process, raw_stream_thread, raw_fifo_fd
+
+    # 종료 요청
+    raw_stream_stop_event.set()
+
+    # FIFO fd 닫기
+    if raw_fifo_fd is not None:
+        try:
+            os.close(raw_fifo_fd)
+        except Exception:
+            pass
+        raw_fifo_fd = None
+
+    # v4l2-ctl 프로세스 종료
+    if raw_stream_process is not None:
+        try:
+            raw_stream_process.terminate()
+            raw_stream_process.wait(timeout=1.0)
+        except Exception:
+            try:
+                raw_stream_process.kill()
+            except Exception:
+                pass
+        raw_stream_process = None
+
+    # 스레드 참조 초기화
+    raw_stream_thread = None
+
+
+def start_uc788_stream():
+    # 전역 스트림 상태값 사용 선언
+    global raw_stream_process, raw_stream_thread, raw_fifo_fd, latest_preview_gray8
+
+    # 이미 살아 있으면 종료
+    if raw_stream_process is not None and raw_stream_process.poll() is None and raw_stream_thread is not None:
+        return
+
+    # 기존 스트림 정리
+    stop_uc788_stream()
+
+    # 최신 프레임 초기화
+    latest_preview_gray8 = None
+
+    # 종료 이벤트 초기화
+    raw_stream_stop_event.clear()
+
+    # media 포맷 설정
+    configure_uc788_media(force=True)
+
+    # UC-788 직접 V4L2 캡처용 노출/게인/트리거 기본값 적용
+    apply_uc788_controls()
+
+    # 기존 FIFO 삭제 후 새로 생성
+    try:
+        RAW_FIFO_PATH.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    os.mkfifo(RAW_FIFO_PATH, 0o666)
+
+    # 읽기 fd를 먼저 열어 v4l2-ctl writer가 막히지 않게 함
+    raw_fifo_fd = os.open(str(RAW_FIFO_PATH), os.O_RDONLY | os.O_NONBLOCK)
+
+    # v4l2-ctl이 FIFO에 raw 프레임을 연속으로 쓰도록 실행
+    command = [
+        "v4l2-ctl",
+        "--silent",
+        "-d", RAW_VIDEO_DEVICE,
+        "--set-fmt-video=width=5120,height=800,pixelformat=Y10P",
+        "--stream-mmap=3",
+        "--stream-skip=5",
+        "--stream-count=100000000",
+        f"--stream-to={RAW_FIFO_PATH}",
+    ]
+
+    raw_stream_process = subprocess.Popen(
+        command,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    # FIFO reader 스레드 시작
+    raw_stream_thread = threading.Thread(target=uc788_fifo_reader_loop, daemon=True)
+    raw_stream_thread.start()
+
+
+def read_exact_from_fifo(size, timeout_sec=2.0):
+    # 전역 FIFO fd 사용
+    global raw_fifo_fd
+
+    # 수신 버퍼 생성
+    chunks = []
+    received = 0
+    deadline = monotonic() + timeout_sec
+
+    # 필요한 크기만큼 반복해서 읽기
+    while received < size:
+        remaining_time = deadline - monotonic()
+        if remaining_time <= 0:
+            raise TimeoutError(f"FIFO raw 프레임 수신 시간 초과: {received}/{size}")
+
+        readable, _, _ = select.select([raw_fifo_fd], [], [], remaining_time)
+        if not readable:
+            continue
+
+        try:
+            chunk = os.read(raw_fifo_fd, size - received)
+        except BlockingIOError:
+            sleep(0.001)
+            continue
+        except OSError as e:
+            if e.errno in (errno.EAGAIN, errno.EINTR):
+                sleep(0.001)
+                continue
+            raise
+
+        if not chunk:
+            # writer가 아직 준비 전이면 잠깐 대기
+            sleep(0.002)
+            continue
+
+        chunks.append(chunk)
+        received += len(chunk)
+
+    return b"".join(chunks)
+
+
+def uc788_fifo_reader_loop():
+    # 전역 최신 프레임 상태값 사용 선언
+    global latest_preview_gray8, latest_preview_frame_time
+
+    # 스트림 반복
+    while not raw_stream_stop_event.is_set():
+        try:
+            # v4l2-ctl이 죽었으면 재시작
+            if raw_stream_process is None or raw_stream_process.poll() is not None:
+                sleep(0.05)
+                start_uc788_stream()
+                continue
+
+            # FIFO에서 raw 프레임 1장 읽기
+            raw_bytes = read_exact_from_fifo(RAW_EXPECTED_BYTES, timeout_sec=2.0)
+
+            # 전체 5120x800을 1채널 gray로만 보관합니다.
+            # 기존처럼 BGR 3채널 전체 프레임으로 만들면 메모리/CPU가 3배 가까이 늘어
+            # 세로 키오스크 모드에서 프레임이 툭툭 끊길 수 있습니다.
+            gray8 = y10p_high8_to_gray8(raw_bytes)
+
+            # 최신 프레임 갱신
+            with raw_stream_lock:
+                latest_preview_gray8 = gray8
+                latest_preview_frame_time = monotonic()
+
+        except Exception as e:
+            print("[UC-788 FIFO 스트림 오류]", e)
+            sleep(0.05)
+
+
+def capture_y10p_raw_bytes():
+    # 부드러운 스트림에서 프레임을 직접 하나 읽습니다.
+    start_uc788_stream()
+    return read_exact_from_fifo(RAW_EXPECTED_BYTES, timeout_sec=2.0)
+
+
+def read_uc788_full_frame_gray8():
+    # 스트림 시작
+    start_uc788_stream()
+
+    # 최신 gray 프레임 대기
+    deadline = monotonic() + 2.0
+
+    while monotonic() < deadline:
+        with raw_stream_lock:
+            if latest_preview_gray8 is not None:
+                return latest_preview_gray8.copy()
+
+        sleep(0.005)
+
+    raise RuntimeError("UC-788 FIFO 프리뷰 프레임을 받지 못했습니다.")
+
+
+def read_uc788_full_frame_bgr():
+    # 기존 자동 촬영/저장 로직 호환용으로 필요할 때만 BGR 변환합니다.
+    gray8 = read_uc788_full_frame_gray8()
+    return cv2.cvtColor(gray8, cv2.COLOR_GRAY2BGR)
+
+
+# =========================
+=======
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 # 카메라 초기화
 # =========================
 
 def init_camera():
     # 전역 변수 사용 선언
+<<<<<<< HEAD
+    global camera_ready
+
+    # Arducam media 장치 검색 및 포맷 설정
+    configure_uc788_media(force=True)
+
+    # 테스트 raw 프레임 1장을 읽어서 카메라 상태 확인
+    test_frame = read_uc788_full_frame_bgr()
+
+    # 프레임 크기 검증
+    if test_frame.shape[:2] != (CAPTURE_HEIGHT, CAPTURE_WIDTH):
+        raise RuntimeError(f"카메라 프레임 크기가 올바르지 않습니다: {test_frame.shape}")
+=======
     global picam2, preview_config, still_config, camera_ready
 
     # 연결된 카메라 목록 조회
@@ -689,21 +1237,33 @@ def init_camera():
 
     # 초기 노출/게인 설정
     set_manual_controls(picam2, INITIAL_EXPOSURE_MS, CURRENT_GAIN)
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
     # 카메라 준비 완료 표시
     camera_ready = True
 
+<<<<<<< HEAD
+    # 상태 출력
+    print(f"[UC-788] camera ready: {RAW_VIDEO_DEVICE}, media={arducam_media_device}, frame={test_frame.shape}")
+
+=======
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 # =========================
 # 프리뷰 프레임 읽기
 # =========================
 
 def read_preview_frame():
+<<<<<<< HEAD
+    # UC-788 Rev.B Y10P raw를 직접 읽어서 BGR 이미지로 반환
+    return read_uc788_full_frame_bgr()
+=======
     # 현재 프레임 캡처
     frame = picam2.capture_array()
 
     # BGRA -> BGR 변환 후 반환
     return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 # =========================
@@ -711,9 +1271,12 @@ def read_preview_frame():
 # =========================
 
 def capture_high_quality_full_frame(exposure_ms, gain):
+<<<<<<< HEAD
+=======
     # 전역 변수 사용
     global picam2, preview_config, still_config
 
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
     # 릴레이 ON
     relay_on()
 
@@ -721,6 +1284,10 @@ def capture_high_quality_full_frame(exposure_ms, gain):
     sleep(RELAY_WARMUP_SEC)
 
     try:
+<<<<<<< HEAD
+        # UC-788 Rev.B raw 기반 전체 프레임 촬영
+        full_frame_bgr = read_uc788_full_frame_bgr()
+=======
         # 프리뷰 중지
         picam2.stop()
 
@@ -741,11 +1308,14 @@ def capture_high_quality_full_frame(exposure_ms, gain):
 
         # RGB -> BGR 변환
         full_frame_bgr = cv2.cvtColor(still_frame, cv2.COLOR_RGB2BGR)
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
     finally:
         # 릴레이 OFF
         relay_off()
 
+<<<<<<< HEAD
+=======
         # 카메라 정지
         picam2.stop()
 
@@ -758,6 +1328,7 @@ def capture_high_quality_full_frame(exposure_ms, gain):
         # 프리뷰에도 동일 수동 제어 재적용
         set_manual_controls(picam2, exposure_ms, gain)
 
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
     # 촬영 결과 반환
     return full_frame_bgr
 
@@ -994,6 +1565,25 @@ def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Pa
 
 
 # =========================
+<<<<<<< HEAD
+# 자동 얼굴 촬영 유틸 함수 - MediaPipe Face Landmarker 방식
+# =========================
+
+# MediaPipe Face Mesh 기준 오른쪽 눈 랜드마크 인덱스
+RIGHT_EYE_EAR_INDICES = [33, 160, 158, 133, 153, 144]
+
+# MediaPipe Face Mesh 기준 왼쪽 눈 랜드마크 인덱스
+LEFT_EYE_EAR_INDICES = [362, 385, 387, 263, 373, 380]
+
+# 얼굴 좌우 기울기 계산에 사용할 오른쪽 눈 중심 인덱스
+RIGHT_EYE_CENTER_INDICES = [33, 133, 159, 145]
+
+# 얼굴 좌우 기울기 계산에 사용할 왼쪽 눈 중심 인덱스
+LEFT_EYE_CENTER_INDICES = [362, 263, 386, 374]
+
+# 코끝 랜드마크 인덱스
+NOSE_TIP_INDEX = 1
+=======
 # 자동 얼굴 촬영 유틸 함수 - OpenCV Haar Cascade 방식
 # =========================
 
@@ -1037,6 +1627,7 @@ def pick_two_eyes(eyes_abs):
 
     # 적절한 두 눈을 못 찾으면 None 반환
     return None
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 def get_latched_angle_ok():
@@ -1045,11 +1636,90 @@ def get_latched_angle_ok():
         return AUTO_STATE["stable_face_count"] >= STABLE_FACE_HOLD_FRAMES
 
 
+<<<<<<< HEAD
+def landmark_to_xy(landmark, width, height):
+    # 정규화 좌표를 픽셀 좌표로 변환
+    return (float(landmark.x) * width, float(landmark.y) * height)
+
+
+def average_landmark_point(landmarks, indices, width, height):
+    # 여러 랜드마크의 평균 중심 좌표 계산
+    points = [landmark_to_xy(landmarks[index], width, height) for index in indices]
+
+    # x 평균 계산
+    avg_x = sum(point[0] for point in points) / len(points)
+
+    # y 평균 계산
+    avg_y = sum(point[1] for point in points) / len(points)
+
+    # 평균 좌표 반환
+    return avg_x, avg_y
+
+
+def point_distance(p1, p2):
+    # 두 점 사이의 거리 계산
+    return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
+
+
+def calculate_eye_aspect_ratio(landmarks, indices, width, height):
+    # EAR 계산에 사용할 6개 눈 랜드마크 좌표 변환
+    points = [landmark_to_xy(landmarks[index], width, height) for index in indices]
+
+    # 수직 거리 1 계산
+    vertical_1 = point_distance(points[1], points[5])
+
+    # 수직 거리 2 계산
+    vertical_2 = point_distance(points[2], points[4])
+
+    # 수평 거리 계산
+    horizontal = point_distance(points[0], points[3])
+
+    # 0으로 나누기 방지
+    if horizontal <= 0:
+        return 1.0
+
+    # Eye Aspect Ratio 계산
+    return (vertical_1 + vertical_2) / (2.0 * horizontal)
+
+
+def update_dynamic_eye_threshold(avg_ear):
+    # 유효하지 않은 EAR 값은 무시
+    if avg_ear is None or not math.isfinite(float(avg_ear)):
+        return
+
+    # 숫자형으로 변환
+    avg_ear = float(avg_ear)
+
+    # 자동 촬영 상태 갱신을 위해 락 획득
+    with auto_state_lock:
+        # 확실히 눈을 뜬 상태로 보이는 값만 기준 샘플에 추가
+        if avg_ear >= DEFAULT_EYE_AR_THRESHOLD + 0.03:
+            open_eye_ear_samples.append(avg_ear)
+
+        # 충분한 샘플이 있으면 개인별 열린 눈 기준값으로 동적 임계값 계산
+        if len(open_eye_ear_samples) >= 3:
+            open_eye_avg = sum(open_eye_ear_samples) / len(open_eye_ear_samples)
+            dynamic_threshold = open_eye_avg * EYE_THRESHOLD_RATIO
+
+            # 임계값이 너무 낮거나 높아지지 않도록 제한
+            dynamic_threshold = max(
+                MIN_DYNAMIC_EYE_AR_THRESHOLD,
+                min(MAX_DYNAMIC_EYE_AR_THRESHOLD, dynamic_threshold)
+            )
+
+            # 동적 임계값 저장
+            AUTO_STATE["dynamic_eye_threshold"] = dynamic_threshold
+
+        # 샘플이 부족하면 기본 임계값 사용
+        else:
+            AUTO_STATE["dynamic_eye_threshold"] = DEFAULT_EYE_AR_THRESHOLD
+=======
 def update_dynamic_eye_threshold(avg_ear):
     # OpenCV Haar 방식은 EAR 값을 계산하지 않습니다.
     # React 상태 호환을 위해 함수만 유지합니다.
     with auto_state_lock:
         AUTO_STATE["dynamic_eye_threshold"] = 0.0
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 def analyze_face_for_auto(cam2_bgr):
@@ -1078,6 +1748,48 @@ def analyze_face_for_auto(cam2_bgr):
         "guide_text": "얼굴을 화면에 맞춰주세요",
     }
 
+<<<<<<< HEAD
+    # MediaPipe Face Landmarker가 준비되지 않았으면 분석 불가 처리
+    if not mediapipe_face_ready or face_landmarker is None:
+        result["guide_text"] = mediapipe_face_error or "MediaPipe 얼굴 랜드마커를 사용할 수 없습니다"
+        return result
+
+    try:
+        # BGR 이미지를 RGB 이미지로 변환
+        rgb = cv2.cvtColor(cam2_bgr, cv2.COLOR_BGR2RGB)
+
+        # MediaPipe 입력 배열을 연속 메모리 형태로 변환
+        rgb = np.ascontiguousarray(rgb)
+
+        # MediaPipe Image 객체 생성
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
+        # 얼굴 랜드마크 검출
+        mp_result = face_landmarker.detect(mp_image)
+
+    except Exception as e:
+        # 검출 중 오류가 나면 안내 문구 설정 후 반환
+        result["guide_text"] = f"MediaPipe 얼굴 분석 오류: {e}"
+        return result
+
+    # 얼굴이 없으면 반환
+    if not mp_result.face_landmarks:
+        result["guide_text"] = "얼굴이 감지되지 않습니다"
+        return result
+
+    # 첫 번째 얼굴의 랜드마크 사용
+    landmarks = mp_result.face_landmarks[0]
+
+    # 랜드마크 x, y 좌표를 픽셀 기준으로 변환
+    xs = [float(landmark.x) * w for landmark in landmarks]
+    ys = [float(landmark.y) * h for landmark in landmarks]
+
+    # 얼굴 박스 좌표 계산
+    x1 = max(0, int(min(xs)))
+    y1 = max(0, int(min(ys)))
+    x2 = min(w - 1, int(max(xs)))
+    y2 = min(h - 1, int(max(ys)))
+=======
     # Haar Cascade 파일을 못 읽었으면 분석 불가 처리
     if not opencv_face_ready:
         result["guide_text"] = "OpenCV 얼굴/눈 검출 파일을 불러오지 못했습니다"
@@ -1113,6 +1825,7 @@ def analyze_face_for_auto(cam2_bgr):
     y1 = max(0, y)
     x2 = min(w - 1, x + bw)
     y2 = min(h - 1, y + bh)
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
     # 실제 박스 폭/높이 계산
     bw = max(1, x2 - x1)
@@ -1135,6 +1848,89 @@ def analyze_face_for_auto(cam2_bgr):
     # 얼굴 크기 적정 여부 계산
     size_ok = (FACE_MIN_AREA_RATIO <= area_ratio <= FACE_MAX_AREA_RATIO)
 
+<<<<<<< HEAD
+    # 오른쪽 눈 EAR 계산
+    ear_right = calculate_eye_aspect_ratio(
+        landmarks,
+        RIGHT_EYE_EAR_INDICES,
+        w,
+        h
+    )
+
+    # 왼쪽 눈 EAR 계산
+    ear_left = calculate_eye_aspect_ratio(
+        landmarks,
+        LEFT_EYE_EAR_INDICES,
+        w,
+        h
+    )
+
+    # 양쪽 눈 평균 EAR 계산
+    avg_ear = (ear_left + ear_right) / 2.0
+
+    # 오른쪽 눈 중심 계산
+    right_eye_center = average_landmark_point(
+        landmarks,
+        RIGHT_EYE_CENTER_INDICES,
+        w,
+        h
+    )
+
+    # 왼쪽 눈 중심 계산
+    left_eye_center = average_landmark_point(
+        landmarks,
+        LEFT_EYE_CENTER_INDICES,
+        w,
+        h
+    )
+
+    # 이미지 기준 왼쪽/오른쪽 눈 순서로 정렬
+    eye_centers = sorted([right_eye_center, left_eye_center], key=lambda point: point[0])
+    image_left_eye_center, image_right_eye_center = eye_centers
+
+    # 양쪽 눈 중심선으로 얼굴 좌우 기울기 계산
+    roll_deg = math.degrees(
+        math.atan2(
+            image_right_eye_center[1] - image_left_eye_center[1],
+            image_right_eye_center[0] - image_left_eye_center[0]
+        )
+    )
+
+    # 기울기 허용 여부 계산
+    roll_ok = abs(roll_deg) <= MAX_ABS_ROLL_DEG
+
+    # 코끝 좌표 계산
+    nose_tip = landmark_to_xy(landmarks[NOSE_TIP_INDEX], w, h)
+
+    # 양쪽 눈 중앙 좌표 계산
+    eyes_mid_x = (right_eye_center[0] + left_eye_center[0]) / 2.0
+    eyes_mid_y = (right_eye_center[1] + left_eye_center[1]) / 2.0
+
+    # 좌우 회전 정도를 참고값으로 계산
+    yaw_score = (nose_tip[0] - eyes_mid_x) / max(float(bw), 1.0)
+
+    # 위아래 회전 정도를 참고값으로 계산
+    pitch_score = ((nose_tip[1] - eyes_mid_y) / max(float(bh), 1.0)) - 0.30
+
+    # 기존 OpenCV 버전과 동일하게 실제 각도 판정은 roll 중심으로 수행
+    yaw_ok = True
+    pitch_ok = True
+    angles_ok = roll_ok and yaw_ok and pitch_ok
+
+    # 현재 동적 눈 감음 기준값 읽기
+    with auto_state_lock:
+        eye_threshold = AUTO_STATE["dynamic_eye_threshold"]
+
+    # 임계값이 비정상이면 기본값 사용
+    if eye_threshold <= 0:
+        eye_threshold = DEFAULT_EYE_AR_THRESHOLD
+
+    # 얼굴 안정 단계 완료 여부 확인
+    latched = get_latched_angle_ok()
+
+    # 안정 단계 이후에만 눈 감음을 촬영 조건으로 인정
+    eyes_closed = bool(latched and avg_ear < eye_threshold)
+=======
     # 얼굴 상단 영역에서 눈 검출
     eye_roi_y1 = y1
     eye_roi_y2 = y1 + int(bh * 0.62)
@@ -1222,6 +2018,7 @@ def analyze_face_for_auto(cam2_bgr):
 
         # 안정 단계 이후에는 직전 정렬 상태를 유지한 것으로 판단
         angles_ok = latched
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
     # 분석 결과 갱신
     result.update({
@@ -1230,12 +2027,26 @@ def analyze_face_for_auto(cam2_bgr):
         "size_ok": size_ok,
         "eyes_closed": eyes_closed,
         "roll_ok": roll_ok,
+<<<<<<< HEAD
+        "yaw_ok": yaw_ok,
+        "pitch_ok": pitch_ok,
+        "angles_ok": angles_ok,
+        "eyes_visible": True,
+        "eye_count": 2,
+        "ear_left": float(ear_left),
+        "ear_right": float(ear_right),
+        "avg_ear": float(avg_ear),
+        "roll_deg": float(roll_deg),
+        "yaw_score": float(yaw_score),
+        "pitch_score": float(pitch_score),
+=======
         "yaw_ok": True,
         "pitch_ok": True,
         "angles_ok": angles_ok,
         "eyes_visible": eyes_visible,
         "eye_count": len(eyes_abs),
         "roll_deg": roll_deg,
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
         "bbox": (x1, y1, x2, y2),
     })
 
@@ -1246,8 +2057,15 @@ def analyze_face_for_auto(cam2_bgr):
         result["guide_text"] = "얼굴 거리를 조정해주세요"
     elif not angles_ok:
         result["guide_text"] = "눈을 뜬 상태로 정면을 맞춰주세요"
+<<<<<<< HEAD
+    elif not latched:
+        result["guide_text"] = "얼굴을 고정해주세요"
+    elif not eyes_closed:
+        result["guide_text"] = "얼굴을 유지한 채 눈을 감아주세요"
+=======
     elif not eyes_closed:
         result["guide_text"] = "얼굴을 고정한 뒤 눈을 감아주세요"
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
     else:
         result["guide_text"] = "조건 충족"
 
@@ -1340,9 +2158,18 @@ def snapshot_detection_for_metadata(detection):
         "roll_deg": float(detection.get("roll_deg", 0.0)),
         "yaw_score": float(detection.get("yaw_score", 0.0)),
         "pitch_score": float(detection.get("pitch_score", 0.0)),
+<<<<<<< HEAD
+        "mediapipe_eye_count": int(detection.get("eye_count", 0)),
+        "mediapipe_eyes_visible": bool(detection.get("eyes_visible", False)),
+        "ear_left": float(detection.get("ear_left", 1.0)),
+        "ear_right": float(detection.get("ear_right", 1.0)),
+        "avg_ear": float(detection.get("avg_ear", 1.0)),
+        "dynamic_eye_threshold": float(AUTO_STATE.get("dynamic_eye_threshold", DEFAULT_EYE_AR_THRESHOLD)),
+=======
         "opencv_eye_count": int(detection.get("eye_count", 0)),
         "opencv_eyes_visible": bool(detection.get("eyes_visible", False)),
         "dynamic_eye_threshold": 0.0,
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
     }
 
 
@@ -1476,8 +2303,14 @@ def reset_auto_state(profile_id=None, running=False):
         # 눈 감음 카운트 초기화
         AUTO_STATE["eyes_closed_count"] = 0
 
+<<<<<<< HEAD
+        # MediaPipe EAR 동적 기준값 초기화
+        open_eye_ear_samples.clear()
+        AUTO_STATE["dynamic_eye_threshold"] = DEFAULT_EYE_AR_THRESHOLD
+=======
         # OpenCV 방식에서는 동적 EAR 기준값을 사용하지 않음
         AUTO_STATE["dynamic_eye_threshold"] = 0.0
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
         # 상태 문구 초기화
         AUTO_STATE["status"] = "자동 촬영 조건 확인 중" if running else "자동 촬영 대기 중"
@@ -1517,7 +2350,11 @@ def auto_capture_worker(profile_id: str):
             # 얼굴 상태 분석
             detection = analyze_face_for_auto(cam2_bgr)
 
+<<<<<<< HEAD
+            # MediaPipe EAR 값을 이용해 개인별 눈 감음 기준값 갱신
+=======
             # OpenCV 방식은 눈이 보이면 각도를 확인하고, 안정 이후 눈이 안 보이면 눈 감음으로 판단
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             update_dynamic_eye_threshold(detection.get("avg_ear", 1.0))
 
             # 자동 촬영 조건 갱신 후 촬영 여부 판단
@@ -1839,13 +2676,30 @@ def generate_cam4_stream():
         start_time = monotonic()
 
         try:
+<<<<<<< HEAD
+            # 스트리밍에서는 전체 BGR 변환을 하지 않고 1채널 gray에서 CAM4만 잘라냅니다.
+            # 이렇게 해야 15.6인치 세로 키오스크에서도 프레임이 덜 끊깁니다.
+            with camera_lock:
+=======
             # 카메라 접근 구간은 최대한 짧게 유지
             with camera_lock:
                 # 카메라 준비 안 되었으면 잠시 대기
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
                 if not camera_ready:
                     sleep(0.05)
                     continue
 
+<<<<<<< HEAD
+                full_gray8 = read_uc788_full_frame_gray8()
+                cam4_gray = extract_cam_frame(full_gray8, "cam4").copy()
+
+            # 세로 키오스크 화면에 맞게 CAM4 영상을 서버에서 세로 방향으로 회전
+            cam4_gray = cv2.rotate(cam4_gray, cv2.ROTATE_90_CLOCKWISE)
+
+            # 800x1280 원본 세로 프레임에서 720x1152로 약간만 줄여 품질과 부드러움을 균형 있게 맞춤
+            cam4_gray = cv2.resize(
+                cam4_gray,
+=======
                 # 전체 프레임 읽기
                 full_frame_bgr = read_preview_frame()
 
@@ -1856,10 +2710,21 @@ def generate_cam4_stream():
             # 저장 촬영 이미지는 이 resize의 영향을 받지 않습니다.
             cam4_frame = cv2.resize(
                 cam4_frame,
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
                 (STREAM_WIDTH, STREAM_HEIGHT),
                 interpolation=cv2.INTER_AREA
             )
 
+<<<<<<< HEAD
+            # 흑백 이미지는 BGR로 바꾸지 않고 그대로 JPEG 인코딩합니다.
+            # 브라우저는 grayscale JPEG도 정상 표시합니다.
+            ok, buffer = cv2.imencode(
+                ".jpg",
+                cam4_gray,
+                [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY]
+            )
+
+=======
             # JPEG 품질을 낮춰서 실시간 송출 부담을 줄임
             ok, buffer = cv2.imencode(
                 ".jpg",
@@ -1868,14 +2733,20 @@ def generate_cam4_stream():
             )
 
             # 인코딩 실패 시 다음 프레임으로 넘어감
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             if not ok:
                 sleep(0.01)
                 continue
 
+<<<<<<< HEAD
+            jpg_bytes = buffer.tobytes()
+
+=======
             # 바이트 변환
             jpg_bytes = buffer.tobytes()
 
             # multipart 응답 데이터 yield
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             yield (
                 b"--frame\r\n"
                 b"Content-Type: image/jpeg\r\n"
@@ -1884,15 +2755,27 @@ def generate_cam4_stream():
                 b"\r\n"
             )
 
+<<<<<<< HEAD
+            elapsed = monotonic() - start_time
+            remain = frame_delay - elapsed
+
+=======
             # 처리 시간을 뺀 만큼만 대기해서 실제 FPS를 최대한 일정하게 유지
             elapsed = monotonic() - start_time
             remain = frame_delay - elapsed
 
             # 남은 시간이 있을 때만 대기
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             if remain > 0:
                 sleep(remain)
 
         except GeneratorExit:
+<<<<<<< HEAD
+            break
+
+        except Exception as e:
+            print("[스트림 오류]", e)
+=======
             # 브라우저가 스트림 연결을 끊으면 조용히 종료
             break
 
@@ -1901,6 +2784,7 @@ def generate_cam4_stream():
             print("[스트림 오류]", e)
 
             # 잠시 쉬고 재시도
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             sleep(0.1)
 
 
@@ -2029,11 +2913,19 @@ def auto_capture_start_api():
                 "error": "존재하지 않는 프로필입니다."
             }), 400
 
+<<<<<<< HEAD
+        # MediaPipe Face Landmarker 준비 여부 확인
+        if not mediapipe_face_ready:
+            return jsonify({
+                "ok": False,
+                "error": mediapipe_face_error or "MediaPipe 얼굴 랜드마커를 사용할 수 없어 자동 촬영을 사용할 수 없습니다."
+=======
         # OpenCV 얼굴/눈 검출 분류기 준비 여부 확인
         if not opencv_face_ready:
             return jsonify({
                 "ok": False,
                 "error": "OpenCV 얼굴/눈 검출 파일을 불러오지 못해 자동 촬영을 사용할 수 없습니다."
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             }), 400
 
         # 카메라 준비 여부 확인

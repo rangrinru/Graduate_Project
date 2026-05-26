@@ -1,0 +1,221 @@
+{
+    "generated_at": "2026-05-21T16:39:37.534667",
+    "analysis_type": "porphyrin_strong_fluorescence_detection",
+    "input_file": "..\\captures\\cam4_660nm\\2026-03-30\\20260330_173841_955_cam4.png",
+    "date_folder": "2026-03-30",
+    "image_name": "20260330_173841_955_cam4.png",
+    "output_files": {
+        "result_image": "..\\captures\\cam4_660nm\\2026-03-30\\analysis\\20260330_173841_955_cam4\\porphyrin_result.jpg",
+        "heatmap_image": "..\\captures\\cam4_660nm\\2026-03-30\\analysis\\20260330_173841_955_cam4\\porphyrin_heatmap.jpg",
+        "mask_image": "..\\captures\\cam4_660nm\\2026-03-30\\analysis\\20260330_173841_955_cam4\\porphyrin_mask.png",
+        "compare_image": "..\\captures\\cam4_660nm\\2026-03-30\\analysis\\20260330_173841_955_cam4\\porphyrin_compare.jpg",
+        "metadata": "..\\captures\\cam4_660nm\\2026-03-30\\analysis\\20260330_173841_955_cam4\\metadata.json"
+    },
+    "image_info": {
+        "width": 1280,
+        "height": 800,
+        "channels": 3,
+        "shape": [
+            800,
+            1280,
+            3
+        ]
+    },
+    "analysis_result": {
+        "porphyrin_count": 1,
+        "detection_rate_percent": 0.147461,
+        "grade": "Low",
+        "region_data": {
+            "Upper": 0.0,
+            "Middle": 0.0,
+            "Lower": 0.147461,
+            "Left": 0.147461,
+            "Center": 0.0,
+            "Right": 0.0
+        },
+        "detected_points": [
+            {
+                "x": 275,
+                "y": 778
+            }
+        ],
+        "detected_regions": [
+            {
+                "id": 1,
+                "center": {
+                    "x": 275,
+                    "y": 778
+                },
+                "bbox": {
+                    "x": 248,
+                    "y": 757,
+                    "width": 55,
+                    "height": 43
+                },
+                "area_px": 1510.0,
+                "contour_points": [
+                    [
+                        283,
+                        757
+                    ],
+                    [
+                        281,
+                        759
+                    ],
+                    [
+                        281,
+                        760
+                    ],
+                    [
+                        279,
+                        762
+                    ],
+                    [
+                        278,
+                        762
+                    ],
+                    [
+                        276,
+                        764
+                    ],
+                    [
+                        276,
+                        766
+                    ],
+                    [
+                        274,
+                        768
+                    ],
+                    [
+                        273,
+                        768
+                    ],
+                    [
+                        271,
+                        770
+                    ],
+                    [
+                        271,
+                        771
+                    ],
+                    [
+                        270,
+                        772
+                    ],
+                    [
+                        270,
+                        774
+                    ],
+                    [
+                        269,
+                        775
+                    ],
+                    [
+                        267,
+                        775
+                    ],
+                    [
+                        266,
+                        776
+                    ],
+                    [
+                        266,
+                        778
+                    ],
+                    [
+                        263,
+                        781
+                    ],
+                    [
+                        262,
+                        781
+                    ],
+                    [
+                        262,
+                        782
+                    ],
+                    [
+                        260,
+                        784
+                    ],
+                    [
+                        260,
+                        785
+                    ],
+                    [
+                        258,
+                        787
+                    ],
+                    [
+                        257,
+                        787
+                    ],
+                    [
+                        248,
+                        796
+                    ],
+                    [
+                        248,
+                        799
+                    ],
+                    [
+                        302,
+                        799
+                    ],
+                    [
+                        302,
+                        775
+                    ],
+                    [
+                        301,
+                        774
+                    ],
+                    [
+                        301,
+                        770
+                    ],
+                    [
+                        300,
+                        769
+                    ],
+                    [
+                        300,
+                        760
+                    ],
+                    [
+                        299,
+                        759
+                    ],
+                    [
+                        295,
+                        759
+                    ],
+                    [
+                        294,
+                        758
+                    ],
+                    [
+                        289,
+                        758
+                    ],
+                    [
+                        288,
+                        757
+                    ]
+                ],
+                "mean_brightness": 111.918,
+                "max_brightness": 137
+            }
+        ],
+        "porphyrin_total_area_px": 1510.0,
+        "threshold_value": 111.0
+    },
+    "coordinate_system": {
+        "origin": "top_left",
+        "x_direction": "right",
+        "y_direction": "down",
+        "unit": "pixel",
+        "note": "좌표는 입력 이미지 기준입니다."
+    },
+    "interpretation_note": "이 결과는 660nm 필터 영상에서 밝게 검출되는 포르피린 후보를 규칙 기반으로 분석한 값입니다. 조명, 노출, 필터, 피부 반사, 이미지 방향에 따라 결과가 달라질 수 있으며 의료 진단용이 아닙니다."
+}

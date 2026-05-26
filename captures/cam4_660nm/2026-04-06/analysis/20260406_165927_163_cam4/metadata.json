@@ -1,0 +1,49 @@
+{
+    "generated_at": "2026-05-21T16:38:51.361599",
+    "analysis_type": "porphyrin_strong_fluorescence_detection",
+    "input_file": "..\\captures\\cam4_660nm\\2026-04-06\\20260406_165927_163_cam4.png",
+    "date_folder": "2026-04-06",
+    "image_name": "20260406_165927_163_cam4.png",
+    "output_files": {
+        "result_image": "..\\captures\\cam4_660nm\\2026-04-06\\analysis\\20260406_165927_163_cam4\\porphyrin_result.jpg",
+        "heatmap_image": "..\\captures\\cam4_660nm\\2026-04-06\\analysis\\20260406_165927_163_cam4\\porphyrin_heatmap.jpg",
+        "mask_image": "..\\captures\\cam4_660nm\\2026-04-06\\analysis\\20260406_165927_163_cam4\\porphyrin_mask.png",
+        "compare_image": "..\\captures\\cam4_660nm\\2026-04-06\\analysis\\20260406_165927_163_cam4\\porphyrin_compare.jpg",
+        "metadata": "..\\captures\\cam4_660nm\\2026-04-06\\analysis\\20260406_165927_163_cam4\\metadata.json"
+    },
+    "image_info": {
+        "width": 1280,
+        "height": 800,
+        "channels": 3,
+        "shape": [
+            800,
+            1280,
+            3
+        ]
+    },
+    "analysis_result": {
+        "porphyrin_count": 0,
+        "detection_rate_percent": 0.0,
+        "grade": "Low",
+        "region_data": {
+            "Upper": 0.0,
+            "Middle": 0.0,
+            "Lower": 0.0,
+            "Left": 0.0,
+            "Center": 0.0,
+            "Right": 0.0
+        },
+        "detected_points": [],
+        "detected_regions": [],
+        "porphyrin_total_area_px": 0.0,
+        "threshold_value": 226.0
+    },
+    "coordinate_system": {
+        "origin": "top_left",
+        "x_direction": "right",
+        "y_direction": "down",
+        "unit": "pixel",
+        "note": "좌표는 입력 이미지 기준입니다."
+    },
+    "interpretation_note": "이 결과는 660nm 필터 영상에서 밝게 검출되는 포르피린 후보를 규칙 기반으로 분석한 값입니다. 조명, 노출, 필터, 피부 반사, 이미지 방향에 따라 결과가 달라질 수 있으며 의료 진단용이 아닙니다."
+}

@@ -10,8 +10,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+<<<<<<< HEAD
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+=======
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

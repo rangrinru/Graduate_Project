@@ -23,7 +23,11 @@ SINGLE_VIEW_HEIGHT = 800
 
 MIN_EXPOSURE_MS = 1
 MAX_EXPOSURE_MS = 100
+
+INITIAL_EXPOSURE_MS = 1
+
 INITIAL_EXPOSURE_MS = 8
+
 
 WINDOW_NAME = "Cam2 | Cam3 | Cam4 Preview"
 
@@ -55,12 +59,14 @@ RELAY_WARMUP_SEC = 0.3      # LED 켠 뒤 안정화 대기 시간(초)
 relay = LED(RELAY_PIN, active_high=RELAY_ACTIVE_HIGH, initial_value=False)
 
 
+
 # =========================
 # 저장 회전 설정
 # True면 저장 이미지도 90도 회전
 # =========================
 ROTATE_SAVE = True
 SAVE_ROTATE_CODE = cv2.ROTATE_90_CLOCKWISE
+
 
 CAMERA_INFO = {
     "cam2": {
@@ -284,7 +290,9 @@ def capture_high_quality_full_frame(cam, preview_config, still_config, exposure_
         set_manual_controls(cam, exposure_ms, gain)
 
         still_frame = cam.capture_array()   # RGB888 예상
+
         print("FRAME INFO:", frame.shape, frame.dtype)
+
         full_frame_bgr = cv2.cvtColor(still_frame, cv2.COLOR_RGB2BGR)
 
     finally:
@@ -296,10 +304,12 @@ def capture_high_quality_full_frame(cam, preview_config, still_config, exposure_
 
     return full_frame_bgr
 
+
 def rotate_for_save(img):
     if ROTATE_SAVE:
         return cv2.rotate(img, SAVE_ROTATE_CODE)
     return img
+
 # =========================
 # 순차 촬영
 # Cam2 -> Cam3 -> Cam4
@@ -329,7 +339,13 @@ def capture_sequence(cam, preview_config, still_config, exposure_ms, gain, save_
         for cam_key in ["cam2", "cam3", "cam4"]:
             target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
 
-            show_single_camera(WINDOW_NAME, target_frame, cam_key, exposure_ms, hold_ms=700)
+            show_single_camera(
+                WINDOW_NAME,
+                target_frame,
+                cam_key,
+                exposure_ms,
+                hold_ms=700
+            )
 
             save_frame = rotate_for_save(target_frame)
 
@@ -376,8 +392,18 @@ cam.configure(preview_config)
 cam.options["quality"] = 100
 cam.options["compress_level"] = 0
 
+
+cam.start()
+
+sleep(0.5)
+
+set_manual_controls(cam, INITIAL_EXPOSURE_MS, CURRENT_GAIN)
+
+sleep(0.5)
+
 set_manual_controls(cam, INITIAL_EXPOSURE_MS, CURRENT_GAIN)
 cam.start()
+
 
 # 시작 시 릴레이 OFF 보장
 relay_off()
@@ -503,4 +529,8 @@ try:
 finally:
     relay_off()
     cam.stop()
+
     cv2.destroyAllWindows()
+
+    cv2.destroyAllWindows()
+

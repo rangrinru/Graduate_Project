@@ -1,0 +1,455 @@
+{
+    "generated_at": "2026-05-21T16:39:24.985818",
+    "analysis_type": "porphyrin_strong_fluorescence_detection",
+    "input_file": "..\\captures\\cam4_660nm\\2026-04-07\\20260407_232517_834_cam4.png",
+    "date_folder": "2026-04-07",
+    "image_name": "20260407_232517_834_cam4.png",
+    "output_files": {
+        "result_image": "..\\captures\\cam4_660nm\\2026-04-07\\analysis\\20260407_232517_834_cam4\\porphyrin_result.jpg",
+        "heatmap_image": "..\\captures\\cam4_660nm\\2026-04-07\\analysis\\20260407_232517_834_cam4\\porphyrin_heatmap.jpg",
+        "mask_image": "..\\captures\\cam4_660nm\\2026-04-07\\analysis\\20260407_232517_834_cam4\\porphyrin_mask.png",
+        "compare_image": "..\\captures\\cam4_660nm\\2026-04-07\\analysis\\20260407_232517_834_cam4\\porphyrin_compare.jpg",
+        "metadata": "..\\captures\\cam4_660nm\\2026-04-07\\analysis\\20260407_232517_834_cam4\\metadata.json"
+    },
+    "image_info": {
+        "width": 1280,
+        "height": 800,
+        "channels": 3,
+        "shape": [
+            800,
+            1280,
+            3
+        ]
+    },
+    "analysis_result": {
+        "porphyrin_count": 10,
+        "detection_rate_percent": 0.020703,
+        "grade": "Low",
+        "region_data": {
+            "Upper": 0.008203,
+            "Middle": 0.006641,
+            "Lower": 0.005859,
+            "Left": 0.010156,
+            "Center": 0.010547,
+            "Right": 0.0
+        },
+        "detected_points": [
+            {
+                "x": 263,
+                "y": 717
+            },
+            {
+                "x": 711,
+                "y": 642
+            },
+            {
+                "x": 18,
+                "y": 553
+            },
+            {
+                "x": 561,
+                "y": 510
+            },
+            {
+                "x": 144,
+                "y": 498
+            },
+            {
+                "x": 628,
+                "y": 389
+            },
+            {
+                "x": 840,
+                "y": 240
+            },
+            {
+                "x": 671,
+                "y": 218
+            },
+            {
+                "x": 105,
+                "y": 170
+            },
+            {
+                "x": 279,
+                "y": 110
+            }
+        ],
+        "detected_regions": [
+            {
+                "id": 1,
+                "center": {
+                    "x": 263,
+                    "y": 717
+                },
+                "bbox": {
+                    "x": 260,
+                    "y": 715,
+                    "width": 6,
+                    "height": 5
+                },
+                "area_px": 20.0,
+                "contour_points": [
+                    [
+                        260,
+                        715
+                    ],
+                    [
+                        260,
+                        719
+                    ],
+                    [
+                        265,
+                        719
+                    ],
+                    [
+                        265,
+                        715
+                    ]
+                ],
+                "mean_brightness": 4.5667,
+                "max_brightness": 7
+            },
+            {
+                "id": 2,
+                "center": {
+                    "x": 711,
+                    "y": 642
+                },
+                "bbox": {
+                    "x": 709,
+                    "y": 639,
+                    "width": 5,
+                    "height": 6
+                },
+                "area_px": 20.0,
+                "contour_points": [
+                    [
+                        709,
+                        639
+                    ],
+                    [
+                        709,
+                        644
+                    ],
+                    [
+                        713,
+                        644
+                    ],
+                    [
+                        713,
+                        639
+                    ]
+                ],
+                "mean_brightness": 4.5333,
+                "max_brightness": 6
+            },
+            {
+                "id": 3,
+                "center": {
+                    "x": 18,
+                    "y": 553
+                },
+                "bbox": {
+                    "x": 16,
+                    "y": 550,
+                    "width": 5,
+                    "height": 6
+                },
+                "area_px": 20.0,
+                "contour_points": [
+                    [
+                        16,
+                        550
+                    ],
+                    [
+                        16,
+                        555
+                    ],
+                    [
+                        20,
+                        555
+                    ],
+                    [
+                        20,
+                        550
+                    ]
+                ],
+                "mean_brightness": 4.6,
+                "max_brightness": 8
+            },
+            {
+                "id": 4,
+                "center": {
+                    "x": 561,
+                    "y": 510
+                },
+                "bbox": {
+                    "x": 558,
+                    "y": 507,
+                    "width": 6,
+                    "height": 6
+                },
+                "area_px": 24.0,
+                "contour_points": [
+                    [
+                        558,
+                        507
+                    ],
+                    [
+                        558,
+                        511
+                    ],
+                    [
+                        559,
+                        512
+                    ],
+                    [
+                        563,
+                        512
+                    ],
+                    [
+                        563,
+                        508
+                    ],
+                    [
+                        562,
+                        507
+                    ]
+                ],
+                "mean_brightness": 4.4167,
+                "max_brightness": 7
+            },
+            {
+                "id": 5,
+                "center": {
+                    "x": 144,
+                    "y": 498
+                },
+                "bbox": {
+                    "x": 142,
+                    "y": 495,
+                    "width": 5,
+                    "height": 6
+                },
+                "area_px": 20.0,
+                "contour_points": [
+                    [
+                        142,
+                        495
+                    ],
+                    [
+                        142,
+                        500
+                    ],
+                    [
+                        146,
+                        500
+                    ],
+                    [
+                        146,
+                        495
+                    ]
+                ],
+                "mean_brightness": 4.8333,
+                "max_brightness": 7
+            },
+            {
+                "id": 6,
+                "center": {
+                    "x": 628,
+                    "y": 389
+                },
+                "bbox": {
+                    "x": 625,
+                    "y": 386,
+                    "width": 6,
+                    "height": 6
+                },
+                "area_px": 24.0,
+                "contour_points": [
+                    [
+                        626,
+                        386
+                    ],
+                    [
+                        625,
+                        387
+                    ],
+                    [
+                        625,
+                        391
+                    ],
+                    [
+                        629,
+                        391
+                    ],
+                    [
+                        630,
+                        390
+                    ],
+                    [
+                        630,
+                        386
+                    ]
+                ],
+                "mean_brightness": 4.4444,
+                "max_brightness": 7
+            },
+            {
+                "id": 7,
+                "center": {
+                    "x": 840,
+                    "y": 240
+                },
+                "bbox": {
+                    "x": 837,
+                    "y": 238,
+                    "width": 6,
+                    "height": 5
+                },
+                "area_px": 20.0,
+                "contour_points": [
+                    [
+                        837,
+                        238
+                    ],
+                    [
+                        837,
+                        242
+                    ],
+                    [
+                        842,
+                        242
+                    ],
+                    [
+                        842,
+                        238
+                    ]
+                ],
+                "mean_brightness": 4.6667,
+                "max_brightness": 7
+            },
+            {
+                "id": 8,
+                "center": {
+                    "x": 671,
+                    "y": 218
+                },
+                "bbox": {
+                    "x": 669,
+                    "y": 215,
+                    "width": 5,
+                    "height": 6
+                },
+                "area_px": 20.0,
+                "contour_points": [
+                    [
+                        669,
+                        215
+                    ],
+                    [
+                        669,
+                        220
+                    ],
+                    [
+                        673,
+                        220
+                    ],
+                    [
+                        673,
+                        215
+                    ]
+                ],
+                "mean_brightness": 4.4667,
+                "max_brightness": 6
+            },
+            {
+                "id": 9,
+                "center": {
+                    "x": 105,
+                    "y": 170
+                },
+                "bbox": {
+                    "x": 102,
+                    "y": 167,
+                    "width": 6,
+                    "height": 6
+                },
+                "area_px": 24.0,
+                "contour_points": [
+                    [
+                        102,
+                        167
+                    ],
+                    [
+                        102,
+                        171
+                    ],
+                    [
+                        103,
+                        172
+                    ],
+                    [
+                        107,
+                        172
+                    ],
+                    [
+                        107,
+                        168
+                    ],
+                    [
+                        106,
+                        167
+                    ]
+                ],
+                "mean_brightness": 4.3056,
+                "max_brightness": 6
+            },
+            {
+                "id": 10,
+                "center": {
+                    "x": 279,
+                    "y": 110
+                },
+                "bbox": {
+                    "x": 276,
+                    "y": 108,
+                    "width": 6,
+                    "height": 5
+                },
+                "area_px": 20.0,
+                "contour_points": [
+                    [
+                        276,
+                        108
+                    ],
+                    [
+                        276,
+                        112
+                    ],
+                    [
+                        281,
+                        112
+                    ],
+                    [
+                        281,
+                        108
+                    ]
+                ],
+                "mean_brightness": 4.5667,
+                "max_brightness": 6
+            }
+        ],
+        "porphyrin_total_area_px": 212.0,
+        "threshold_value": 4.0
+    },
+    "coordinate_system": {
+        "origin": "top_left",
+        "x_direction": "right",
+        "y_direction": "down",
+        "unit": "pixel",
+        "note": "좌표는 입력 이미지 기준입니다."
+    },
+    "interpretation_note": "이 결과는 660nm 필터 영상에서 밝게 검출되는 포르피린 후보를 규칙 기반으로 분석한 값입니다. 조명, 노출, 필터, 피부 반사, 이미지 방향에 따라 결과가 달라질 수 있으며 의료 진단용이 아닙니다."
+}

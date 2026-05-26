@@ -1,0 +1,201 @@
+{
+    "success": false,
+    "tried": [
+        {
+            "candidate": "original_0",
+            "confidence": 0.5,
+            "size": [
+                1280,
+                800
+            ]
+        },
+        {
+            "candidate": "original_0",
+            "confidence": 0.35,
+            "size": [
+                1280,
+                800
+            ]
+        },
+        {
+            "candidate": "original_0",
+            "confidence": 0.2,
+            "size": [
+                1280,
+                800
+            ]
+        },
+        {
+            "candidate": "enhanced_0",
+            "confidence": 0.5,
+            "size": [
+                1280,
+                800
+            ]
+        },
+        {
+            "candidate": "enhanced_0",
+            "confidence": 0.35,
+            "size": [
+                1280,
+                800
+            ]
+        },
+        {
+            "candidate": "enhanced_0",
+            "confidence": 0.2,
+            "size": [
+                1280,
+                800
+            ]
+        },
+        {
+            "candidate": "original_90cw",
+            "confidence": 0.5,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "original_90cw",
+            "confidence": 0.35,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "original_90cw",
+            "confidence": 0.2,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "enhanced_90cw",
+            "confidence": 0.5,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "enhanced_90cw",
+            "confidence": 0.35,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "enhanced_90cw",
+            "confidence": 0.2,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "original_90ccw",
+            "confidence": 0.5,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "original_90ccw",
+            "confidence": 0.35,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "original_90ccw",
+            "confidence": 0.2,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "enhanced_90ccw",
+            "confidence": 0.5,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "enhanced_90ccw",
+            "confidence": 0.35,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "enhanced_90ccw",
+            "confidence": 0.2,
+            "size": [
+                800,
+                1280
+            ]
+        },
+        {
+            "candidate": "original_180",
+            "confidence": 0.5,
+            "size": [
+                1280,
+                800
+            ]
+        },
+        {
+            "candidate": "original_180",
+            "confidence": 0.35,
+            "size": [
+                1280,
+                800
+            ]
+        },
+        {
+            "candidate": "original_180",
+            "confidence": 0.2,
+            "size": [
+                1280,
+                800
+            ]
+        },
+        {
+            "candidate": "enhanced_180",
+            "confidence": 0.5,
+            "size": [
+                1280,
+                800
+            ]
+        },
+        {
+            "candidate": "enhanced_180",
+            "confidence": 0.35,
+            "size": [
+                1280,
+                800
+            ]
+        },
+        {
+            "candidate": "enhanced_180",
+            "confidence": 0.2,
+            "size": [
+                1280,
+                800
+            ]
+        }
+    ],
+    "original_size": [
+        1280,
+        800
+    ]
+}
