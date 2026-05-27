@@ -297,7 +297,7 @@ function App() {
 
   const autoChecks = autoStatus?.checks ?? EMPTY_AUTO_CHECKS;
   const isAutoRunning = autoStatus?.running ?? false;
-  const showAutoPanel = Boolean(autoStatus && (autoStatus.running || autoStatus.captured || autoStatus.error));
+  const showAutoPanel = Boolean(autoStatus && (autoStatus.running || autoStatus.error));
 
   const showToast = (
     message: string,
