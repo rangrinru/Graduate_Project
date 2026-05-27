@@ -34,9 +34,6 @@ from datetime import datetime
 # 대기 시간과 경과 시간 측정용 import
 from time import sleep, monotonic
 
-# 눈 감음 기준값 누적용 deque import
-from collections import deque
-
 # 릴레이와 RGB LED 제어용 GPIO import
 from gpiozero import LED, RGBLED
 
@@ -51,17 +48,11 @@ import errno
 # UC-788 Rev.B는 Picamera2 RGB 프리뷰가 검게 나오는 문제가 있어
 # /dev/video0의 Y10P raw를 직접 읽어서 화면용 이미지로 변환합니다.
 
-# 자동 얼굴 촬영 조건 확인은 MediaPipe Face Landmarker로 수행합니다.
-# 기존 OpenCV Haar Cascade 얼굴/눈 검출보다 얼굴 랜드마크 기반으로 더 안정적으로 판단합니다.
+# 자동 얼굴 촬영 조건 확인은 rpicam_03_eye_closed_auto.py와 같은 MediaPipe FaceMesh EAR 방식으로 수행합니다.
+# 눈 감음이 2초 유지되면 기존 촬영 저장 흐름을 호출합니다.
 try:
     # MediaPipe 기본 모듈 import
     import mediapipe as mp
-
-    # MediaPipe Tasks Python API import
-    from mediapipe.tasks import python as mp_python
-
-    # MediaPipe Vision Task import
-    from mediapipe.tasks.python import vision
 
     # MediaPipe import 성공 표시
     MEDIAPIPE_IMPORT_ERROR = None
@@ -69,8 +60,6 @@ try:
 except Exception as e:
     # MediaPipe import 실패 시 서버는 켜지되 자동 촬영만 사용할 수 없게 처리
     mp = None
-    mp_python = None
-    vision = None
     MEDIAPIPE_IMPORT_ERROR = e
 
 
@@ -153,47 +142,17 @@ WHITE_LED_COLOR = (1, 1, 1)
 # 자동 촬영 직전 백색 LED를 끈 뒤 대기하는 시간
 WHITE_LED_OFF_BEFORE_CAPTURE_SEC = 0.15
 
-# 얼굴 중앙 허용 오차 X축 비율
-FACE_CENTER_TOL_X = 0.18
-
-# 얼굴 중앙 허용 오차 Y축 비율
-FACE_CENTER_TOL_Y = 0.20
-
-# 얼굴이 너무 작은지 판단하는 최소 면적 비율
-FACE_MIN_AREA_RATIO = 0.08
-
-# 얼굴이 너무 큰지 판단하는 최대 면적 비율
-FACE_MAX_AREA_RATIO = 0.70
-
-# 얼굴 좌우 기울기 허용 각도
-MAX_ABS_ROLL_DEG = 8.0
-
-# 얼굴 좌우 회전 점수 허용값
-MAX_ABS_YAW_SCORE = 0.12
-
-# 얼굴 위아래 회전 점수 허용값
-MAX_ABS_PITCH_SCORE = 0.12
-
 # 기본 눈 감음 EAR 기준값
-DEFAULT_EYE_AR_THRESHOLD = 0.18
+DEFAULT_EYE_AR_THRESHOLD = 0.20
 
-# 자동 보정 EAR 최소값
-MIN_DYNAMIC_EYE_AR_THRESHOLD = 0.14
+# rpicam_03_eye_closed_auto.py와 동일한 눈 감음 자동 촬영 대기 시간
+EYES_CLOSED_DELAY_SEC = 2.0
 
-# 자동 보정 EAR 최대값
-MAX_DYNAMIC_EYE_AR_THRESHOLD = 0.26
+# 자동 촬영 얼굴/눈 인식에 사용할 카메라 영역
+AUTO_DETECTION_CAM_KEY = "cam2"
 
-# 열린 눈 평균값에 곱할 비율
-EYE_THRESHOLD_RATIO = 0.72
-
-# 얼굴 정렬이 유지되어야 하는 프레임 수
-STABLE_FACE_HOLD_FRAMES = 6
-
-# 열린 눈 기준값을 계산할 샘플 수
-OPEN_EYE_BASELINE_SAMPLES = 15
-
-# 눈 감음이 유지되어야 하는 프레임 수
-EYES_CLOSED_HOLD_FRAMES = 4
+# MediaPipe 처리 속도를 위해 cam2 영역을 줄일 목표 폭
+AUTO_DETECTION_PROCESS_WIDTH = 960
 
 # 자동 촬영 상태 갱신 주기
 AUTO_CAPTURE_INTERVAL_SEC = 0.12
@@ -336,25 +295,23 @@ auto_capture_thread = None
 auto_state_lock = threading.Lock()
 
 # =========================
-# MediaPipe Face Landmarker 설정
+# MediaPipe FaceMesh 설정
 # =========================
 
-# face_landmarker.task 모델 파일 경로
-FACE_LANDMARKER_MODEL_PATH = Path.home() / "Graduate_Project" / "face_landmarker.task"
+# rpicam_03_eye_closed_auto.py와 같은 solutions API 객체
+face_detector = None
+face_mesh = None
 
-# MediaPipe Face Landmarker 객체
-face_landmarker = None
-
-# MediaPipe 얼굴 랜드마커 준비 여부
+# MediaPipe 얼굴/눈 인식 준비 여부
 mediapipe_face_ready = False
 
-# MediaPipe 얼굴 랜드마커 오류 메시지
+# MediaPipe 얼굴/눈 인식 오류 메시지
 mediapipe_face_error = None
 
 
-def init_mediapipe_face_landmarker():
+def init_mediapipe_face_mesh():
     # 전역 MediaPipe 상태값 사용 선언
-    global face_landmarker, mediapipe_face_ready, mediapipe_face_error
+    global face_detector, face_mesh, mediapipe_face_ready, mediapipe_face_error
 
     # MediaPipe import 자체가 실패한 경우
     if MEDIAPIPE_IMPORT_ERROR is not None:
@@ -362,32 +319,20 @@ def init_mediapipe_face_landmarker():
         mediapipe_face_error = f"MediaPipe import 실패: {MEDIAPIPE_IMPORT_ERROR}"
         return
 
-    # 모델 파일이 없으면 자동 촬영 기능만 비활성화
-    if not FACE_LANDMARKER_MODEL_PATH.exists():
-        mediapipe_face_ready = False
-        mediapipe_face_error = (
-            f"Face Landmarker 모델 파일이 없습니다: {FACE_LANDMARKER_MODEL_PATH}. "
-            f"face_landmarker.task 파일을 camera_server.py와 같은 폴더에 넣어주세요."
-        )
-        return
-
     try:
-        # MediaPipe 모델 경로 설정
-        base_options = mp_python.BaseOptions(
-            model_asset_path=str(FACE_LANDMARKER_MODEL_PATH)
+        # face_ROI_eye_added.py / rpicam_03_eye_closed_auto.py와 같은 방식으로 초기화
+        face_detector = mp.solutions.face_detection.FaceDetection(
+            model_selection=0,
+            min_detection_confidence=0.5
         )
 
-        # Face Landmarker 옵션 설정
-        options = vision.FaceLandmarkerOptions(
-            base_options=base_options,
-            running_mode=vision.RunningMode.IMAGE,
-            num_faces=1,
-            min_face_detection_confidence=0.5,
-            min_face_presence_confidence=0.5,
+        face_mesh = mp.solutions.face_mesh.FaceMesh(
+            static_image_mode=False,
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
         )
-
-        # Face Landmarker 객체 생성
-        face_landmarker = vision.FaceLandmarker.create_from_options(options)
 
         # 준비 완료 표시
         mediapipe_face_ready = True
@@ -395,13 +340,14 @@ def init_mediapipe_face_landmarker():
 
     except Exception as e:
         # 생성 실패 시 오류 저장
-        face_landmarker = None
+        face_detector = None
+        face_mesh = None
         mediapipe_face_ready = False
-        mediapipe_face_error = f"MediaPipe Face Landmarker 초기화 실패: {e}"
+        mediapipe_face_error = f"MediaPipe FaceMesh 초기화 실패: {e}"
 
 
-# 서버 시작 시 MediaPipe Face Landmarker 초기화
-init_mediapipe_face_landmarker()
+# 서버 시작 시 MediaPipe FaceMesh 초기화
+init_mediapipe_face_mesh()
 
 
 def make_default_auto_checks():
@@ -431,8 +377,15 @@ AUTO_STATE = {
     "last_update": None,
 }
 
-# 열린 눈 EAR 기준값 계산용 샘플 저장소
-open_eye_ear_samples = deque(maxlen=OPEN_EYE_BASELINE_SAMPLES)
+# rpicam_03_eye_closed_auto.py의 눈 감음 타이머 상태
+AUTO_EYE_STATE = {
+    "blink_count": 0,
+    "closed_frame_count": 0,
+    "prev_eye_closed": False,
+    "eyes_closed_started_at": None,
+    "eye_state": "Unknown",
+    "gaze_direction": "Unknown",
+}
 
 
 # =========================
@@ -699,7 +652,8 @@ def save_one_camera_image(
     gain,
     ext,
     profile_name,
-    folder_id
+    folder_id,
+    trigger_metadata=None
 ):
     # 카메라 정보 조회
     info = CAMERA_INFO[cam_key]
@@ -744,7 +698,8 @@ def save_one_camera_image(
             "AnalogueGain": gain
         },
         "saved_file": str(image_path),
-        "rotation_applied": "ROTATE_90_CLOCKWISE"
+        "rotation_applied": "ROTATE_90_CLOCKWISE",
+        "auto_capture_trigger": trigger_metadata,
     }
 
     # 메타데이터 저장
@@ -1384,120 +1339,192 @@ def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Pa
 
 
 # =========================
-# 자동 얼굴 촬영 유틸 함수 - MediaPipe Face Landmarker 방식
+# 자동 얼굴 촬영 유틸 함수 - rpicam_03_eye_closed_auto.py 방식
 # =========================
 
-# MediaPipe Face Mesh 기준 오른쪽 눈 랜드마크 인덱스
-RIGHT_EYE_EAR_INDICES = [33, 160, 158, 133, 153, 144]
+# MediaPipe FaceMesh 눈 EAR 인덱스
+LEFT_EYE_EAR_INDICES = [33, 160, 158, 133, 153, 144]
+RIGHT_EYE_EAR_INDICES = [362, 385, 387, 263, 373, 380]
 
-# MediaPipe Face Mesh 기준 왼쪽 눈 랜드마크 인덱스
-LEFT_EYE_EAR_INDICES = [362, 385, 387, 263, 373, 380]
+# 얼굴 ROI 표시용 확장 비율
+AUTO_ROI_EXPAND_X = 0.12
+AUTO_ROI_EXPAND_Y = 0.18
 
-# 얼굴 좌우 기울기 계산에 사용할 오른쪽 눈 중심 인덱스
-RIGHT_EYE_CENTER_INDICES = [33, 133, 159, 145]
-
-# 얼굴 좌우 기울기 계산에 사용할 왼쪽 눈 중심 인덱스
-LEFT_EYE_CENTER_INDICES = [362, 263, 386, 374]
-
-# 코끝 랜드마크 인덱스
-NOSE_TIP_INDEX = 1
+# 너무 짧은 깜빡임을 blink로 세기 위한 최소 프레임
+MIN_CLOSED_FRAMES_FOR_BLINK = 2
 
 
-def get_latched_angle_ok():
-    # 얼굴 안정 유지가 이미 완료된 상태인지 확인
-    with auto_state_lock:
-        return AUTO_STATE["stable_face_count"] >= STABLE_FACE_HOLD_FRAMES
+def clamp(value: int, low: int, high: int) -> int:
+    return max(low, min(high, value))
 
 
-def landmark_to_xy(landmark, width, height):
-    # 정규화 좌표를 픽셀 좌표로 변환
-    return (float(landmark.x) * width, float(landmark.y) * height)
+def expand_auto_bbox(x1: int, y1: int, x2: int, y2: int, w: int, h: int):
+    bw = x2 - x1
+    bh = y2 - y1
+    ex = int(bw * AUTO_ROI_EXPAND_X)
+    ey = int(bh * AUTO_ROI_EXPAND_Y)
+    return (
+        clamp(x1 - ex, 0, w - 1),
+        clamp(y1 - ey, 0, h - 1),
+        clamp(x2 + ex, 0, w - 1),
+        clamp(y2 + ey, 0, h - 1),
+    )
 
 
-def average_landmark_point(landmarks, indices, width, height):
-    # 여러 랜드마크의 평균 중심 좌표 계산
-    points = [landmark_to_xy(landmarks[index], width, height) for index in indices]
+def resize_for_auto_detection(frame_bgr):
+    h, w = frame_bgr.shape[:2]
+    if w <= AUTO_DETECTION_PROCESS_WIDTH:
+        return frame_bgr, 1.0, 1.0
 
-    # x 평균 계산
-    avg_x = sum(point[0] for point in points) / len(points)
+    scale = AUTO_DETECTION_PROCESS_WIDTH / float(w)
+    resized = cv2.resize(
+        frame_bgr,
+        (AUTO_DETECTION_PROCESS_WIDTH, int(h * scale)),
+        interpolation=cv2.INTER_AREA,
+    )
+    scale_x = w / float(resized.shape[1])
+    scale_y = h / float(resized.shape[0])
+    return resized, scale_x, scale_y
 
-    # y 평균 계산
-    avg_y = sum(point[1] for point in points) / len(points)
 
-    # 평균 좌표 반환
-    return avg_x, avg_y
+def scale_bbox_to_original(bbox, scale_x, scale_y):
+    if bbox is None:
+        return None
+    x1, y1, x2, y2 = bbox
+    return (
+        int(x1 * scale_x),
+        int(y1 * scale_y),
+        int(x2 * scale_x),
+        int(y2 * scale_y),
+    )
+
+
+def detect_face_bbox_for_auto(frame_bgr):
+    if face_detector is None:
+        return None
+
+    h, w = frame_bgr.shape[:2]
+    rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    result = face_detector.process(rgb)
+
+    if not result.detections:
+        return None
+
+    best_bbox = None
+    best_area = 0
+
+    for detection in result.detections:
+        rel_box = detection.location_data.relative_bounding_box
+        x1 = int(rel_box.xmin * w)
+        y1 = int(rel_box.ymin * h)
+        bw = int(rel_box.width * w)
+        bh = int(rel_box.height * h)
+        x2 = x1 + bw
+        y2 = y1 + bh
+        x1 = clamp(x1, 0, w - 1)
+        y1 = clamp(y1, 0, h - 1)
+        x2 = clamp(x2, 0, w - 1)
+        y2 = clamp(y2, 0, h - 1)
+
+        area = max(1, (x2 - x1) * (y2 - y1))
+        if area > best_area:
+            best_area = area
+            best_bbox = (x1, y1, x2, y2)
+
+    if best_bbox is None:
+        return None
+
+    return expand_auto_bbox(*best_bbox, w, h)
+
+
+def extract_face_landmarks_for_auto(frame_bgr):
+    if face_mesh is None:
+        return None
+
+    h, w = frame_bgr.shape[:2]
+    rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    result = face_mesh.process(rgb)
+
+    if not result.multi_face_landmarks:
+        return None
+
+    pts = []
+    for lm in result.multi_face_landmarks[0].landmark:
+        pts.append((int(lm.x * w), int(lm.y * h)))
+    return pts
+
+
+def bbox_from_landmark_points(pts, width, height):
+    if not pts:
+        return None
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    return expand_auto_bbox(
+        clamp(min(xs), 0, width - 1),
+        clamp(min(ys), 0, height - 1),
+        clamp(max(xs), 0, width - 1),
+        clamp(max(ys), 0, height - 1),
+        width,
+        height,
+    )
 
 
 def point_distance(p1, p2):
-    # 두 점 사이의 거리 계산
     return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
 
 
-def calculate_eye_aspect_ratio(landmarks, indices, width, height):
-    # EAR 계산에 사용할 6개 눈 랜드마크 좌표 변환
-    points = [landmark_to_xy(landmarks[index], width, height) for index in indices]
+def calculate_eye_aspect_ratio_from_points(eye_pts):
+    vertical_1 = point_distance(eye_pts[1], eye_pts[5])
+    vertical_2 = point_distance(eye_pts[2], eye_pts[4])
+    horizontal = point_distance(eye_pts[0], eye_pts[3])
 
-    # 수직 거리 1 계산
-    vertical_1 = point_distance(points[1], points[5])
-
-    # 수직 거리 2 계산
-    vertical_2 = point_distance(points[2], points[4])
-
-    # 수평 거리 계산
-    horizontal = point_distance(points[0], points[3])
-
-    # 0으로 나누기 방지
     if horizontal <= 0:
         return 1.0
 
-    # Eye Aspect Ratio 계산
     return (vertical_1 + vertical_2) / (2.0 * horizontal)
 
 
-def update_dynamic_eye_threshold(avg_ear):
-    # 유효하지 않은 EAR 값은 무시
-    if avg_ear is None or not math.isfinite(float(avg_ear)):
-        return
+def estimate_eye_state_and_motion(pts):
+    left_eye_pts = [pts[i] for i in LEFT_EYE_EAR_INDICES]
+    right_eye_pts = [pts[i] for i in RIGHT_EYE_EAR_INDICES]
 
-    # 숫자형으로 변환
-    avg_ear = float(avg_ear)
+    ear_left = calculate_eye_aspect_ratio_from_points(left_eye_pts)
+    ear_right = calculate_eye_aspect_ratio_from_points(right_eye_pts)
+    ear_avg = (ear_left + ear_right) / 2.0
 
-    # 자동 촬영 상태 갱신을 위해 락 획득
+    eyes_closed = ear_avg < DEFAULT_EYE_AR_THRESHOLD
+    eye_state = "Closed" if eyes_closed else "Open"
+    gaze_direction = "Eyes Closed" if eyes_closed else "Unknown"
+
+    AUTO_EYE_STATE["eye_state"] = eye_state
+    AUTO_EYE_STATE["gaze_direction"] = gaze_direction
+
+    return {
+        "ear_left": float(ear_left),
+        "ear_right": float(ear_right),
+        "avg_ear": float(ear_avg),
+        "eyes_closed": eyes_closed,
+        "eye_state": eye_state,
+        "gaze_direction": gaze_direction,
+    }
+
+
+def update_dynamic_eye_threshold(_avg_ear):
+    # rpicam_03_eye_closed_auto.py는 고정 EAR 기준을 사용합니다.
     with auto_state_lock:
-        # 확실히 눈을 뜬 상태로 보이는 값만 기준 샘플에 추가
-        if avg_ear >= DEFAULT_EYE_AR_THRESHOLD + 0.03:
-            open_eye_ear_samples.append(avg_ear)
-
-        # 충분한 샘플이 있으면 개인별 열린 눈 기준값으로 동적 임계값 계산
-        if len(open_eye_ear_samples) >= 3:
-            open_eye_avg = sum(open_eye_ear_samples) / len(open_eye_ear_samples)
-            dynamic_threshold = open_eye_avg * EYE_THRESHOLD_RATIO
-
-            # 임계값이 너무 낮거나 높아지지 않도록 제한
-            dynamic_threshold = max(
-                MIN_DYNAMIC_EYE_AR_THRESHOLD,
-                min(MAX_DYNAMIC_EYE_AR_THRESHOLD, dynamic_threshold)
-            )
-
-            # 동적 임계값 저장
-            AUTO_STATE["dynamic_eye_threshold"] = dynamic_threshold
-
-        # 샘플이 부족하면 기본 임계값 사용
-        else:
-            AUTO_STATE["dynamic_eye_threshold"] = DEFAULT_EYE_AR_THRESHOLD
+        AUTO_STATE["dynamic_eye_threshold"] = DEFAULT_EYE_AR_THRESHOLD
 
 
 def analyze_face_for_auto(cam2_bgr):
-    # 이미지 높이와 폭 읽기
-    h, w = cam2_bgr.shape[:2]
+    process_frame, scale_x, scale_y = resize_for_auto_detection(cam2_bgr)
+    h, w = process_frame.shape[:2]
 
-    # 기본 분석 결과 구성
     result = {
         "face_found": False,
         "center_ok": False,
         "size_ok": False,
         "eyes_closed": False,
-        "roll_ok": False,
+        "roll_ok": True,
         "yaw_ok": True,
         "pitch_ok": True,
         "angles_ok": False,
@@ -1513,196 +1540,65 @@ def analyze_face_for_auto(cam2_bgr):
         "guide_text": "얼굴을 화면에 맞춰주세요",
     }
 
-    # MediaPipe Face Landmarker가 준비되지 않았으면 분석 불가 처리
-    if not mediapipe_face_ready or face_landmarker is None:
-        result["guide_text"] = mediapipe_face_error or "MediaPipe 얼굴 랜드마커를 사용할 수 없습니다"
+    if not mediapipe_face_ready or face_mesh is None:
+        result["guide_text"] = mediapipe_face_error or "MediaPipe FaceMesh를 사용할 수 없습니다"
         return result
 
     try:
-        # BGR 이미지를 RGB 이미지로 변환
-        rgb = cv2.cvtColor(cam2_bgr, cv2.COLOR_BGR2RGB)
-
-        # MediaPipe 입력 배열을 연속 메모리 형태로 변환
-        rgb = np.ascontiguousarray(rgb)
-
-        # MediaPipe Image 객체 생성
-        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-
-        # 얼굴 랜드마크 검출
-        mp_result = face_landmarker.detect(mp_image)
-
+        face_bbox = detect_face_bbox_for_auto(process_frame)
+        pts = extract_face_landmarks_for_auto(process_frame)
     except Exception as e:
-        # 검출 중 오류가 나면 안내 문구 설정 후 반환
-        result["guide_text"] = f"MediaPipe 얼굴 분석 오류: {e}"
+        result["guide_text"] = f"MediaPipe 얼굴/눈 분석 오류: {e}"
         return result
 
-    # 얼굴이 없으면 반환
-    if not mp_result.face_landmarks:
-        result["guide_text"] = "얼굴이 감지되지 않습니다"
+    if pts is None:
+        if face_bbox is not None:
+            result["face_found"] = True
+            result["bbox"] = scale_bbox_to_original(face_bbox, scale_x, scale_y)
+            result["guide_text"] = "얼굴 랜드마크를 찾는 중입니다"
+        else:
+            result["guide_text"] = "얼굴이 감지되지 않습니다"
         return result
 
-    # 첫 번째 얼굴의 랜드마크 사용
-    landmarks = mp_result.face_landmarks[0]
+    if face_bbox is None:
+        face_bbox = bbox_from_landmark_points(pts, w, h)
 
-    # 랜드마크 x, y 좌표를 픽셀 기준으로 변환
-    xs = [float(landmark.x) * w for landmark in landmarks]
-    ys = [float(landmark.y) * h for landmark in landmarks]
+    eye_result = estimate_eye_state_and_motion(pts)
+    face_bbox_original = scale_bbox_to_original(face_bbox, scale_x, scale_y)
 
-    # 얼굴 박스 좌표 계산
-    x1 = max(0, int(min(xs)))
-    y1 = max(0, int(min(ys)))
-    x2 = min(w - 1, int(max(xs)))
-    y2 = min(h - 1, int(max(ys)))
-
-    # 실제 박스 폭/높이 계산
-    bw = max(1, x2 - x1)
-    bh = max(1, y2 - y1)
-
-    # 얼굴 면적 비율 계산
-    area_ratio = (bw * bh) / float(w * h)
-
-    # 얼굴 중심 좌표 계산
-    cx = (x1 + x2) / 2.0
-    cy = (y1 + y2) / 2.0
-
-    # 화면 중앙에서 벗어난 정도 계산
-    norm_dx = abs(cx - (w / 2.0)) / w
-    norm_dy = abs(cy - (h / 2.0)) / h
-
-    # 얼굴 중앙 정렬 여부 계산
-    center_ok = (norm_dx <= FACE_CENTER_TOL_X) and (norm_dy <= FACE_CENTER_TOL_Y)
-
-    # 얼굴 크기 적정 여부 계산
-    size_ok = (FACE_MIN_AREA_RATIO <= area_ratio <= FACE_MAX_AREA_RATIO)
-
-    # 오른쪽 눈 EAR 계산
-    ear_right = calculate_eye_aspect_ratio(
-        landmarks,
-        RIGHT_EYE_EAR_INDICES,
-        w,
-        h
-    )
-
-    # 왼쪽 눈 EAR 계산
-    ear_left = calculate_eye_aspect_ratio(
-        landmarks,
-        LEFT_EYE_EAR_INDICES,
-        w,
-        h
-    )
-
-    # 양쪽 눈 평균 EAR 계산
-    avg_ear = (ear_left + ear_right) / 2.0
-
-    # 오른쪽 눈 중심 계산
-    right_eye_center = average_landmark_point(
-        landmarks,
-        RIGHT_EYE_CENTER_INDICES,
-        w,
-        h
-    )
-
-    # 왼쪽 눈 중심 계산
-    left_eye_center = average_landmark_point(
-        landmarks,
-        LEFT_EYE_CENTER_INDICES,
-        w,
-        h
-    )
-
-    # 이미지 기준 왼쪽/오른쪽 눈 순서로 정렬
-    eye_centers = sorted([right_eye_center, left_eye_center], key=lambda point: point[0])
-    image_left_eye_center, image_right_eye_center = eye_centers
-
-    # 양쪽 눈 중심선으로 얼굴 좌우 기울기 계산
-    roll_deg = math.degrees(
-        math.atan2(
-            image_right_eye_center[1] - image_left_eye_center[1],
-            image_right_eye_center[0] - image_left_eye_center[0]
-        )
-    )
-
-    # 기울기 허용 여부 계산
-    roll_ok = abs(roll_deg) <= MAX_ABS_ROLL_DEG
-
-    # 코끝 좌표 계산
-    nose_tip = landmark_to_xy(landmarks[NOSE_TIP_INDEX], w, h)
-
-    # 양쪽 눈 중앙 좌표 계산
-    eyes_mid_x = (right_eye_center[0] + left_eye_center[0]) / 2.0
-    eyes_mid_y = (right_eye_center[1] + left_eye_center[1]) / 2.0
-
-    # 좌우 회전 정도를 참고값으로 계산
-    yaw_score = (nose_tip[0] - eyes_mid_x) / max(float(bw), 1.0)
-
-    # 위아래 회전 정도를 참고값으로 계산
-    pitch_score = ((nose_tip[1] - eyes_mid_y) / max(float(bh), 1.0)) - 0.30
-
-    # 기존 OpenCV 버전과 동일하게 실제 각도 판정은 roll 중심으로 수행
-    yaw_ok = True
-    pitch_ok = True
-    angles_ok = roll_ok and yaw_ok and pitch_ok
-
-    # 현재 동적 눈 감음 기준값 읽기
-    with auto_state_lock:
-        eye_threshold = AUTO_STATE["dynamic_eye_threshold"]
-
-    # 임계값이 비정상이면 기본값 사용
-    if eye_threshold <= 0:
-        eye_threshold = DEFAULT_EYE_AR_THRESHOLD
-
-    # 얼굴 안정 단계 완료 여부 확인
-    latched = get_latched_angle_ok()
-
-    # 안정 단계 이후에만 눈 감음을 촬영 조건으로 인정
-    eyes_closed = bool(latched and avg_ear < eye_threshold)
-
-    # 분석 결과 갱신
     result.update({
         "face_found": True,
-        "center_ok": center_ok,
-        "size_ok": size_ok,
-        "eyes_closed": eyes_closed,
-        "roll_ok": roll_ok,
-        "yaw_ok": yaw_ok,
-        "pitch_ok": pitch_ok,
-        "angles_ok": angles_ok,
+        "center_ok": True,
+        "size_ok": True,
+        "eyes_closed": bool(eye_result["eyes_closed"]),
+        "roll_ok": True,
+        "yaw_ok": True,
+        "pitch_ok": True,
+        "angles_ok": True,
         "eyes_visible": True,
         "eye_count": 2,
-        "ear_left": float(ear_left),
-        "ear_right": float(ear_right),
-        "avg_ear": float(avg_ear),
-        "roll_deg": float(roll_deg),
-        "yaw_score": float(yaw_score),
-        "pitch_score": float(pitch_score),
-        "bbox": (x1, y1, x2, y2),
+        "ear_left": eye_result["ear_left"],
+        "ear_right": eye_result["ear_right"],
+        "avg_ear": eye_result["avg_ear"],
+        "bbox": face_bbox_original,
     })
 
-    # 안내 문구 결정
-    if not center_ok:
-        result["guide_text"] = "얼굴을 화면 중앙에 맞춰주세요"
-    elif not size_ok:
-        result["guide_text"] = "얼굴 거리를 조정해주세요"
-    elif not angles_ok:
-        result["guide_text"] = "눈을 뜬 상태로 정면을 맞춰주세요"
-    elif not latched:
-        result["guide_text"] = "얼굴을 고정해주세요"
-    elif not eyes_closed:
-        result["guide_text"] = "얼굴을 유지한 채 눈을 감아주세요"
+    if eye_result["eyes_closed"]:
+        result["guide_text"] = "눈 감음 감지됨"
     else:
-        result["guide_text"] = "조건 충족"
+        result["guide_text"] = "눈을 감으면 2초 후 자동 촬영합니다"
 
-    # 분석 결과 반환
     return result
 
 
 def build_auto_checks(detection):
     # 자동 촬영 체크 결과 구성
+    face_found = bool(detection.get("face_found"))
     return {
-        "face_found": bool(detection.get("face_found")),
-        "center_ok": bool(detection.get("center_ok")),
-        "size_ok": bool(detection.get("size_ok")),
-        "angle_ok": bool(detection.get("angles_ok")),
+        "face_found": face_found,
+        "center_ok": face_found,
+        "size_ok": face_found,
+        "angle_ok": face_found,
         "eyes_closed": bool(detection.get("eyes_closed")),
         "stable_ok": False,
     }
@@ -1712,57 +1608,53 @@ def update_auto_state_from_detection(detection):
     # 현재 검사 결과 생성
     checks = build_auto_checks(detection)
 
-    # 기본 안정 조건 계산
-    stable_face_ok = (
-        checks["face_found"]
-        and checks["center_ok"]
-        and checks["size_ok"]
-        and checks["angle_ok"]
-    )
+    now = monotonic()
 
     # 자동 촬영 상태 갱신을 위해 락 획득
     with auto_state_lock:
-        # 얼굴 기본 조건이 안정적이면 카운트 증가
-        if stable_face_ok:
-            AUTO_STATE["stable_face_count"] += 1
-
-        # 얼굴 기본 조건이 불안정하면 카운트 초기화
-        else:
-            AUTO_STATE["stable_face_count"] = 0
-            AUTO_STATE["eyes_closed_count"] = 0
-
-        # 안정 유지 조건 갱신
-        checks["stable_ok"] = AUTO_STATE["stable_face_count"] >= STABLE_FACE_HOLD_FRAMES
-
-        # 얼굴을 못 찾은 경우 상태 문구 설정
+        # 얼굴이 없으면 눈 감음 타이머 초기화
         if not checks["face_found"]:
             AUTO_STATE["status"] = "얼굴이 감지되지 않습니다"
+            AUTO_STATE["stable_face_count"] = 0
+            AUTO_STATE["eyes_closed_count"] = 0
+            AUTO_EYE_STATE["eyes_closed_started_at"] = None
+            AUTO_EYE_STATE["closed_frame_count"] = 0
+            AUTO_EYE_STATE["prev_eye_closed"] = False
 
-        # 중앙 정렬이 안 된 경우 상태 문구 설정
-        elif not checks["center_ok"]:
-            AUTO_STATE["status"] = "얼굴을 화면 중앙에 맞춰주세요"
-
-        # 얼굴 크기가 안 맞는 경우 상태 문구 설정
-        elif not checks["size_ok"]:
-            AUTO_STATE["status"] = "얼굴 거리를 조정해주세요"
-
-        # 얼굴 각도가 안 맞는 경우 상태 문구 설정
-        elif not checks["angle_ok"]:
-            AUTO_STATE["status"] = "눈을 뜬 상태로 정면을 맞춰주세요"
-
-        # 얼굴 안정 유지 프레임이 부족한 경우 상태 문구 설정
-        elif not checks["stable_ok"]:
-            AUTO_STATE["status"] = f"얼굴 고정 중 {AUTO_STATE['stable_face_count']}/{STABLE_FACE_HOLD_FRAMES}"
-
-        # 눈을 아직 감지 않은 경우 상태 문구 설정
+        # 눈을 뜨면 2초 타이머를 다시 시작하도록 초기화
         elif not checks["eyes_closed"]:
             AUTO_STATE["eyes_closed_count"] = 0
-            AUTO_STATE["status"] = "얼굴을 유지한 채 눈을 감아주세요"
+            AUTO_STATE["stable_face_count"] = 1
+            AUTO_STATE["status"] = "눈을 감으면 2초 후 자동 촬영합니다"
+            AUTO_EYE_STATE["eyes_closed_started_at"] = None
 
-        # 눈 감음이 확인된 경우 상태 문구 설정
+            if (
+                AUTO_EYE_STATE["prev_eye_closed"]
+                and AUTO_EYE_STATE["closed_frame_count"] >= MIN_CLOSED_FRAMES_FOR_BLINK
+            ):
+                AUTO_EYE_STATE["blink_count"] += 1
+
+            AUTO_EYE_STATE["closed_frame_count"] = 0
+            AUTO_EYE_STATE["prev_eye_closed"] = False
+
+        # 눈 감음이 유지되면 초 단위로 2초를 기다림
         else:
-            AUTO_STATE["eyes_closed_count"] += 1
-            AUTO_STATE["status"] = f"눈감음 확인 중 {AUTO_STATE['eyes_closed_count']}/{EYES_CLOSED_HOLD_FRAMES}"
+            AUTO_EYE_STATE["closed_frame_count"] += 1
+            AUTO_EYE_STATE["prev_eye_closed"] = True
+
+            if AUTO_EYE_STATE["eyes_closed_started_at"] is None:
+                AUTO_EYE_STATE["eyes_closed_started_at"] = now
+
+            elapsed = now - AUTO_EYE_STATE["eyes_closed_started_at"]
+            remaining = max(0.0, EYES_CLOSED_DELAY_SEC - elapsed)
+            checks["stable_ok"] = elapsed >= EYES_CLOSED_DELAY_SEC
+            AUTO_STATE["stable_face_count"] = int(min(elapsed, EYES_CLOSED_DELAY_SEC) * 10)
+            AUTO_STATE["eyes_closed_count"] = int(elapsed * 10)
+
+            if checks["stable_ok"]:
+                AUTO_STATE["status"] = "조건 충족: 자동 촬영 준비"
+            else:
+                AUTO_STATE["status"] = f"눈감음 유지 중 {elapsed:.1f}/{EYES_CLOSED_DELAY_SEC:.1f}초, {remaining:.1f}초 남음"
 
         # 검사 결과 저장
         AUTO_STATE["checks"] = checks
@@ -1770,8 +1662,8 @@ def update_auto_state_from_detection(detection):
         # 최근 갱신 시각 저장
         AUTO_STATE["last_update"] = datetime.now().isoformat()
 
-        # 눈 감음 유지 여부 반환
-        return AUTO_STATE["eyes_closed_count"] >= EYES_CLOSED_HOLD_FRAMES
+        # 2초 눈 감음 유지 여부 반환
+        return checks["stable_ok"]
 
 
 def snapshot_detection_for_metadata(detection):
@@ -1790,7 +1682,23 @@ def snapshot_detection_for_metadata(detection):
     }
 
 
-def perform_capture_for_profile(profile_id: str):
+def build_auto_trigger_metadata(detection):
+    started_at = AUTO_EYE_STATE.get("eyes_closed_started_at")
+    held_sec = 0.0 if started_at is None else monotonic() - started_at
+    metadata = snapshot_detection_for_metadata(detection)
+    metadata.update({
+        "type": "eyes_closed_for_2_seconds",
+        "detection_camera": AUTO_DETECTION_CAM_KEY,
+        "threshold_ear": DEFAULT_EYE_AR_THRESHOLD,
+        "held_sec": float(held_sec),
+        "eye_state": AUTO_EYE_STATE["eye_state"],
+        "gaze_direction": AUTO_EYE_STATE["gaze_direction"],
+        "blink_count": AUTO_EYE_STATE["blink_count"],
+    })
+    return metadata
+
+
+def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
     # profileId가 비어 있으면 예외 발생
     if not str(profile_id).strip():
         raise ValueError("profileId가 필요합니다.")
@@ -1856,7 +1764,8 @@ def perform_capture_for_profile(profile_id: str):
             gain=gain,
             ext=ext,
             profile_name=profile_name,
-            folder_id=folder_id
+            folder_id=folder_id,
+            trigger_metadata=trigger_metadata
         )
 
         # 저장 파일 목록에 추가
@@ -1920,12 +1829,17 @@ def reset_auto_state(profile_id=None, running=False):
         # 눈 감음 카운트 초기화
         AUTO_STATE["eyes_closed_count"] = 0
 
-        # MediaPipe EAR 동적 기준값 초기화
-        open_eye_ear_samples.clear()
+        # MediaPipe EAR 기준값 초기화
         AUTO_STATE["dynamic_eye_threshold"] = DEFAULT_EYE_AR_THRESHOLD
+        AUTO_EYE_STATE["blink_count"] = 0
+        AUTO_EYE_STATE["closed_frame_count"] = 0
+        AUTO_EYE_STATE["prev_eye_closed"] = False
+        AUTO_EYE_STATE["eyes_closed_started_at"] = None
+        AUTO_EYE_STATE["eye_state"] = "Unknown"
+        AUTO_EYE_STATE["gaze_direction"] = "Unknown"
 
         # 상태 문구 초기화
-        AUTO_STATE["status"] = "자동 촬영 조건 확인 중" if running else "자동 촬영 대기 중"
+        AUTO_STATE["status"] = "눈을 감으면 2초 후 자동 촬영합니다" if running else "자동 촬영 대기 중"
 
         # 최근 갱신 시각 저장
         AUTO_STATE["last_update"] = datetime.now().isoformat()
@@ -1956,13 +1870,13 @@ def auto_capture_worker(profile_id: str):
             with camera_lock:
                 full_frame_bgr = read_preview_frame()
 
-            # cam2 영역을 얼굴 인식용으로 사용
-            cam2_bgr = extract_cam_frame(full_frame_bgr, "cam2").copy()
+            # rpicam_03_eye_closed_auto.py와 동일하게 cam2 영역을 얼굴/눈 인식용으로 사용
+            cam2_bgr = extract_cam_frame(full_frame_bgr, AUTO_DETECTION_CAM_KEY).copy()
 
             # 얼굴 상태 분석
             detection = analyze_face_for_auto(cam2_bgr)
 
-            # MediaPipe EAR 값을 이용해 개인별 눈 감음 기준값 갱신
+            # rpicam_03_eye_closed_auto.py의 고정 EAR 기준값을 응답 상태에도 반영
             update_dynamic_eye_threshold(detection.get("avg_ear", 1.0))
 
             # 자동 촬영 조건 갱신 후 촬영 여부 판단
@@ -1981,7 +1895,10 @@ def auto_capture_worker(profile_id: str):
                     AUTO_STATE["status"] = "조건 충족: 자동 촬영 중"
 
                 # 기존 프로필 저장 구조에 맞춰 촬영 실행
-                capture_result = perform_capture_for_profile(profile_id)
+                capture_result = perform_capture_for_profile(
+                    profile_id,
+                    trigger_metadata=build_auto_trigger_metadata(detection)
+                )
 
                 # 촬영 완료 상태 저장
                 with auto_state_lock:
@@ -2465,11 +2382,11 @@ def auto_capture_start_api():
                 "error": "존재하지 않는 프로필입니다."
             }), 400
 
-        # MediaPipe Face Landmarker 준비 여부 확인
+        # MediaPipe FaceMesh 준비 여부 확인
         if not mediapipe_face_ready:
             return jsonify({
                 "ok": False,
-                "error": mediapipe_face_error or "MediaPipe 얼굴 랜드마커를 사용할 수 없어 자동 촬영을 사용할 수 없습니다."
+                "error": mediapipe_face_error or "MediaPipe FaceMesh를 사용할 수 없어 자동 촬영을 사용할 수 없습니다."
             }), 400
 
         # 카메라 준비 여부 확인
