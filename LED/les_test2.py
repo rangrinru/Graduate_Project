@@ -14,6 +14,16 @@ while True:
     rgb2.color = (1, 1, 1)
     sleep(1)
 
+    # 첫 번째 빨강 / 두 번째 파랑
+    rgb1.color = (1, 0, 0)
+    rgb2.color = (0, 0, 1)
+    sleep(1)
+
+    # 첫 번째 초록 / 두 번째 보라
+    rgb1.color = (0, 1, 0)
+    rgb2.color = (1, 0, 1)
+    sleep(1)
+
     # 둘 다 OFF
     rgb1.off()
     rgb2.off()
