@@ -241,7 +241,11 @@ const composeHangulWithoutJong = (buffer: HangulBuffer) => {
   });
 };
 
+<<<<<<< HEAD
 const API_BASE = "http://192.168.137.47:8000";
+=======
+const API_BASE = "http://192.168.137.145:8000";
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 function App() {
   const [screen, setScreen] = useState<Screen>("profiles");
@@ -948,15 +952,15 @@ function App() {
       const data = await res.json();
 
       if (!data.ok) {
-        showToast(data.error || "백색 조명 제어 실패", "error");
+        showToast(data.error || "백색 LED 제어 실패", "error");
         return;
       }
 
       setWhiteLedOn(Boolean(data.white_led_is_on));
-      showToast(data.white_led_is_on ? "백색 조명 켜짐" : "백색 조명 꺼짐", "success");
+      showToast(data.white_led_is_on ? "백색 LED 켜짐" : "백색 LED 꺼짐", "success");
     } catch (error) {
       console.error(error);
-      showToast("백색 조명 제어 실패", "error");
+      showToast("백색 LED 제어 실패", "error");
     } finally {
       setIsChangingWhiteLed(false);
     }
@@ -1416,11 +1420,22 @@ function App() {
 
         .camera-live {
           position: absolute;
+<<<<<<< HEAD
           inset: 0;
           width: 100%;
           height: 100%;
           object-fit: cover;
           background: #000;
+=======
+          top: 50%;
+          left: 50%;
+          width: 100vh;
+          height: 100vw;
+          object-fit: cover;
+          background: #000;
+          transform: translate(-50%, -50%) rotate(90deg);
+          transform-origin: center center;
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
         }
 
         .camera-overlay {
@@ -2681,7 +2696,7 @@ function App() {
                   onClick={toggleWhiteLed}
                   disabled={isCapturing || isChangingWhiteLed}
                 >
-                  {whiteLedOn ? "백색 조명 끄기" : "백색 조명 켜기"}
+                  {whiteLedOn ? "백색 LED 끄기" : "백색 LED 켜기"}
                 </button>
 
                 <button

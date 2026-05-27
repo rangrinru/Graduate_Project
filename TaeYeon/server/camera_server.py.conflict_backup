@@ -37,9 +37,10 @@ from time import sleep, monotonic
 # 눈 감음 기준값 누적용 deque import
 from collections import deque
 
-# 릴레이와 RGB LED 제어용 GPIO import
-from gpiozero import LED, RGBLED
+# 릴레이 제어용 GPIO import
+from gpiozero import LED
 
+<<<<<<< HEAD
 # 외부 명령 실행용 import
 import subprocess
 
@@ -72,6 +73,13 @@ except Exception as e:
     mp_python = None
     vision = None
     MEDIAPIPE_IMPORT_ERROR = e
+=======
+# Picamera2 import
+from picamera2 import Picamera2
+
+# MediaPipe 대신 OpenCV Haar Cascade로 얼굴/눈 검출을 수행합니다.
+# 따라서 mediapipe 설치 없이 자동 촬영 조건 확인이 가능합니다.
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 # Flask 앱 생성
@@ -110,6 +118,7 @@ CURRENT_GAIN = 1.0
 SAVE_AS_PNG = True
 
 # 초기 노출 시간(ms)
+<<<<<<< HEAD
 INITIAL_EXPOSURE_MS = 100
 
 # 스트리밍 FPS
@@ -123,6 +132,21 @@ STREAM_HEIGHT = 1152
 
 # 스트리밍용 JPEG 품질
 STREAM_JPEG_QUALITY = 70
+=======
+INITIAL_EXPOSURE_MS = 20
+
+# 스트리밍 FPS
+STREAM_FPS = 20
+
+# 스트리밍용 화면 가로 크기
+STREAM_WIDTH = 640
+
+# 스트리밍용 화면 세로 크기
+STREAM_HEIGHT = 400
+
+# 스트리밍용 JPEG 품질
+STREAM_JPEG_QUALITY = 60
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 # 릴레이 연결 GPIO 번호
 RELAY_PIN = 17
@@ -131,24 +155,13 @@ RELAY_PIN = 17
 RELAY_ACTIVE_HIGH = False
 
 # 릴레이 켠 후 안정화 대기 시간
-RELAY_WARMUP_SEC = 1.0
+RELAY_WARMUP_SEC = 0.3
 
-# RGB LED 1 GPIO 번호
-RGB1_RED_PIN = 27
-RGB1_GREEN_PIN = 22
-RGB1_BLUE_PIN = 23
+# 백색 LED 연결 GPIO 번호
+WHITE_LED_PIN = 22
 
-# RGB LED 2 GPIO 번호
-RGB2_RED_PIN = 5
-RGB2_GREEN_PIN = 6
-RGB2_BLUE_PIN = 13
-
-# RGB LED active_high 여부
-# 사용자가 테스트한 RGBLED 예제와 동일하게 기본 active_high=True로 사용합니다.
-RGB_LED_ACTIVE_HIGH = True
-
-# 백색 조명으로 사용할 RGB 색상값
-WHITE_LED_COLOR = (1, 1, 1)
+# 백색 LED active_high 여부
+WHITE_LED_ACTIVE_HIGH = True
 
 # 자동 촬영 직전 백색 LED를 끈 뒤 대기하는 시간
 WHITE_LED_OFF_BEFORE_CAPTURE_SEC = 0.15
@@ -193,13 +206,18 @@ STABLE_FACE_HOLD_FRAMES = 6
 OPEN_EYE_BASELINE_SAMPLES = 15
 
 # 눈 감음이 유지되어야 하는 프레임 수
+<<<<<<< HEAD
 EYES_CLOSED_HOLD_FRAMES = 4
+=======
+EYES_CLOSED_HOLD_FRAMES = 2
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 # 자동 촬영 상태 갱신 주기
 AUTO_CAPTURE_INTERVAL_SEC = 0.12
 
 
 # =========================
+<<<<<<< HEAD
 # UC-788 Rev.B / Arducam Pivariety RAW 설정
 # =========================
 
@@ -248,31 +266,16 @@ uc788_media_configured = False
 
 
 # =========================
+=======
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 # 릴레이 객체 생성
 # =========================
 
 # 릴레이 LED 객체 생성
 relay = LED(RELAY_PIN, active_high=RELAY_ACTIVE_HIGH, initial_value=False)
 
-# RGB LED 1 객체 생성
-# initial_value=(0, 0, 0)이므로 서버가 켜져도 처음에는 LED가 켜지지 않습니다.
-rgb1 = RGBLED(
-    red=RGB1_RED_PIN,
-    green=RGB1_GREEN_PIN,
-    blue=RGB1_BLUE_PIN,
-    active_high=RGB_LED_ACTIVE_HIGH,
-    initial_value=(0, 0, 0)
-)
-
-# RGB LED 2 객체 생성
-# initial_value=(0, 0, 0)이므로 서버가 켜져도 처음에는 LED가 켜지지 않습니다.
-rgb2 = RGBLED(
-    red=RGB2_RED_PIN,
-    green=RGB2_GREEN_PIN,
-    blue=RGB2_BLUE_PIN,
-    active_high=RGB_LED_ACTIVE_HIGH,
-    initial_value=(0, 0, 0)
-)
+# 백색 LED 객체 생성
+white_led = LED(WHITE_LED_PIN, active_high=WHITE_LED_ACTIVE_HIGH, initial_value=False)
 
 # 백색 LED 상태값
 white_led_is_on = False
@@ -323,10 +326,20 @@ camera_lock = threading.Lock()
 # 카메라 준비 여부
 camera_ready = False
 
+<<<<<<< HEAD
 # 기존 코드 호환을 위해 남겨두는 자리값입니다.
 # UC-788 Rev.B는 Picamera2 대신 V4L2 raw 캡처를 사용합니다.
 picam2 = None
 preview_config = None
+=======
+# Picamera2 객체
+picam2 = None
+
+# 프리뷰 설정
+preview_config = None
+
+# 스틸 캡처 설정
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 still_config = None
 
 # 자동 촬영 스레드 객체
@@ -336,6 +349,7 @@ auto_capture_thread = None
 auto_state_lock = threading.Lock()
 
 # =========================
+<<<<<<< HEAD
 # MediaPipe Face Landmarker 설정
 # =========================
 
@@ -402,6 +416,64 @@ def init_mediapipe_face_landmarker():
 
 # 서버 시작 시 MediaPipe Face Landmarker 초기화
 init_mediapipe_face_landmarker()
+=======
+# OpenCV Haar Cascade 경로 설정
+# =========================
+
+def find_haar_file(filename: str) -> Path:
+    # OpenCV 패키지에서 haarcascades 경로를 제공하는 경우 먼저 확인
+    if hasattr(cv2, "data") and hasattr(cv2.data, "haarcascades"):
+        candidate = Path(cv2.data.haarcascades) / filename
+
+        if candidate.exists():
+            return candidate
+
+    # Raspberry Pi OS에서 opencv-data 설치 시 흔한 경로들을 순서대로 확인
+    candidates = [
+        Path("/usr/share/opencv4/haarcascades") / filename,
+        Path("/usr/share/opencv/haarcascades") / filename,
+        Path("/usr/local/share/opencv4/haarcascades") / filename,
+        Path(__file__).resolve().parent / "haarcascades" / filename,
+    ]
+
+    # 후보 경로 중 실제 존재하는 파일 반환
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    # 어디에도 없으면 오류 발생
+    raise RuntimeError(
+        f"Haar Cascade 파일을 찾을 수 없습니다: {filename}. "
+        f"sudo apt install opencv-data -y 명령으로 설치해 주세요."
+    )
+
+
+# 얼굴 검출용 분류기 경로
+FACE_CASCADE_PATH = find_haar_file("haarcascade_frontalface_default.xml")
+
+# 눈 검출용 분류기 경로
+EYE_CASCADE_PATH = find_haar_file("haarcascade_eye_tree_eyeglasses.xml")
+
+# 얼굴 검출용 분류기 객체
+face_cascade = cv2.CascadeClassifier(str(FACE_CASCADE_PATH))
+
+# 눈 검출용 분류기 객체
+eye_cascade = cv2.CascadeClassifier(str(EYE_CASCADE_PATH))
+
+# OpenCV 얼굴/눈 검출 준비 여부
+opencv_face_ready = (not face_cascade.empty()) and (not eye_cascade.empty())
+
+# 얼굴/눈 검출기 로드 실패 시 서버 시작 단계에서 바로 원인을 출력
+if face_cascade.empty():
+    raise RuntimeError(f"얼굴 Haar Cascade 로드 실패: {FACE_CASCADE_PATH}")
+
+if eye_cascade.empty():
+    raise RuntimeError(f"눈 Haar Cascade 로드 실패: {EYE_CASCADE_PATH}")
+
+# 눈 2개가 보이는 상태에서 얼굴 기울기를 확인할 수 있습니다.
+# 눈을 감으면 눈 검출이 사라지므로, 얼굴 안정 조건을 먼저 만족한 뒤에는
+# 눈이 안 보이는 상태를 눈 감음으로 판단합니다.
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 def make_default_auto_checks():
@@ -431,9 +503,12 @@ AUTO_STATE = {
     "last_update": None,
 }
 
+<<<<<<< HEAD
 # 열린 눈 EAR 기준값 계산용 샘플 저장소
 open_eye_ear_samples = deque(maxlen=OPEN_EYE_BASELINE_SAMPLES)
 
+=======
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 # =========================
 # 릴레이 제어 함수
@@ -453,9 +528,8 @@ def white_led_on():
     # 전역 백색 LED 상태값 사용 선언
     global white_led_is_on
 
-    # RGB LED 2개를 모두 흰색으로 켜기
-    rgb1.color = WHITE_LED_COLOR
-    rgb2.color = WHITE_LED_COLOR
+    # 백색 LED 켜기
+    white_led.on()
 
     # 백색 LED 상태값 갱신
     white_led_is_on = True
@@ -465,9 +539,8 @@ def white_led_off():
     # 전역 백색 LED 상태값 사용 선언
     global white_led_is_on
 
-    # RGB LED 2개를 모두 끄기
-    rgb1.off()
-    rgb2.off()
+    # 백색 LED 끄기
+    white_led.off()
 
     # 백색 LED 상태값 갱신
     white_led_is_on = False
@@ -478,9 +551,18 @@ def white_led_off():
 # =========================
 
 def set_manual_controls(camera, exposure_ms, gain):
+<<<<<<< HEAD
     # UC-788 Rev.B raw 캡처는 Picamera2 제어를 사용하지 않습니다.
     # 노출/게인 제어가 필요하면 v4l2-ctl --list-ctrls로 지원 컨트롤명을 확인한 뒤 별도 적용해야 합니다.
     return
+=======
+    # 자동 노출을 끄고 수동 노출/게인 적용
+    camera.set_controls({
+        "AeEnable": False,
+        "ExposureTime": exposure_ms * 1000,
+        "AnalogueGain": gain
+    })
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 # =========================
@@ -730,7 +812,11 @@ def save_one_camera_image(
         "filter_type": info["filter"],
         "display_name": info["display_name"],
         "sequence_order": info["sequence_order"],
+<<<<<<< HEAD
         "capture_type": "uc788_y10p_raw_v4l2_fullframe_then_crop",
+=======
+        "capture_type": "high_quality_still_fullframe_then_crop",
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
         "file_format": ext,
         "camera_mode": {
             "capture_width": CAPTURE_WIDTH,
@@ -762,6 +848,7 @@ def save_one_camera_image(
 
 
 # =========================
+<<<<<<< HEAD
 # UC-788 Rev.B RAW 카메라 유틸 함수
 # =========================
 
@@ -1096,11 +1183,14 @@ def read_uc788_full_frame_bgr():
 
 
 # =========================
+=======
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 # 카메라 초기화
 # =========================
 
 def init_camera():
     # 전역 변수 사용 선언
+<<<<<<< HEAD
     global camera_ready
 
     # Arducam media 장치 검색 및 포맷 설정
@@ -1112,21 +1202,68 @@ def init_camera():
     # 프레임 크기 검증
     if test_frame.shape[:2] != (CAPTURE_HEIGHT, CAPTURE_WIDTH):
         raise RuntimeError(f"카메라 프레임 크기가 올바르지 않습니다: {test_frame.shape}")
+=======
+    global picam2, preview_config, still_config, camera_ready
+
+    # 연결된 카메라 목록 조회
+    camera_list = Picamera2.global_camera_info()
+
+    # 카메라가 없으면 예외
+    if len(camera_list) == 0:
+        raise RuntimeError("카메라가 감지되지 않았습니다.")
+
+    # 첫 번째 카메라 사용
+    picam2 = Picamera2(0)
+
+    # 프리뷰 설정 생성
+    preview_config = picam2.create_preview_configuration(
+        main={"size": (CAPTURE_WIDTH, CAPTURE_HEIGHT), "format": "XRGB8888"}
+    )
+
+    # 스틸 설정 생성
+    still_config = picam2.create_still_configuration(
+        main={"size": (CAPTURE_WIDTH, CAPTURE_HEIGHT), "format": "RGB888"}
+    )
+
+    # 프리뷰 설정 적용
+    picam2.configure(preview_config)
+
+    # 품질 옵션 설정
+    picam2.options["quality"] = 100
+    picam2.options["compress_level"] = 0
+
+    # 카메라 시작
+    picam2.start()
+
+    # 초기 노출/게인 설정
+    set_manual_controls(picam2, INITIAL_EXPOSURE_MS, CURRENT_GAIN)
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
     # 카메라 준비 완료 표시
     camera_ready = True
 
+<<<<<<< HEAD
     # 상태 출력
     print(f"[UC-788] camera ready: {RAW_VIDEO_DEVICE}, media={arducam_media_device}, frame={test_frame.shape}")
 
+=======
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 # =========================
 # 프리뷰 프레임 읽기
 # =========================
 
 def read_preview_frame():
+<<<<<<< HEAD
     # UC-788 Rev.B Y10P raw를 직접 읽어서 BGR 이미지로 반환
     return read_uc788_full_frame_bgr()
+=======
+    # 현재 프레임 캡처
+    frame = picam2.capture_array()
+
+    # BGRA -> BGR 변환 후 반환
+    return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 # =========================
@@ -1134,6 +1271,12 @@ def read_preview_frame():
 # =========================
 
 def capture_high_quality_full_frame(exposure_ms, gain):
+<<<<<<< HEAD
+=======
+    # 전역 변수 사용
+    global picam2, preview_config, still_config
+
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
     # 릴레이 ON
     relay_on()
 
@@ -1141,13 +1284,51 @@ def capture_high_quality_full_frame(exposure_ms, gain):
     sleep(RELAY_WARMUP_SEC)
 
     try:
+<<<<<<< HEAD
         # UC-788 Rev.B raw 기반 전체 프레임 촬영
         full_frame_bgr = read_uc788_full_frame_bgr()
+=======
+        # 프리뷰 중지
+        picam2.stop()
+
+        # 스틸 설정 적용
+        picam2.configure(still_config)
+
+        # 카메라 재시작
+        picam2.start()
+
+        # 수동 노출/게인 적용
+        set_manual_controls(picam2, exposure_ms, gain)
+
+        # 노출 안정화 대기
+        sleep(1)
+
+        # 스틸 프레임 캡처
+        still_frame = picam2.capture_array()
+
+        # RGB -> BGR 변환
+        full_frame_bgr = cv2.cvtColor(still_frame, cv2.COLOR_RGB2BGR)
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
     finally:
         # 릴레이 OFF
         relay_off()
 
+<<<<<<< HEAD
+=======
+        # 카메라 정지
+        picam2.stop()
+
+        # 프리뷰 설정 복귀
+        picam2.configure(preview_config)
+
+        # 카메라 재시작
+        picam2.start()
+
+        # 프리뷰에도 동일 수동 제어 재적용
+        set_manual_controls(picam2, exposure_ms, gain)
+
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
     # 촬영 결과 반환
     return full_frame_bgr
 
@@ -1384,6 +1565,7 @@ def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Pa
 
 
 # =========================
+<<<<<<< HEAD
 # 자동 얼굴 촬영 유틸 함수 - MediaPipe Face Landmarker 방식
 # =========================
 
@@ -1401,6 +1583,51 @@ LEFT_EYE_CENTER_INDICES = [362, 263, 386, 374]
 
 # 코끝 랜드마크 인덱스
 NOSE_TIP_INDEX = 1
+=======
+# 자동 얼굴 촬영 유틸 함수 - OpenCV Haar Cascade 방식
+# =========================
+
+def largest_rect(rects):
+    # 검출된 사각형이 없으면 None 반환
+    if len(rects) == 0:
+        return None
+
+    # 면적이 가장 큰 사각형 반환
+    return max(rects, key=lambda r: int(r[2]) * int(r[3]))
+
+
+def pick_two_eyes(eyes_abs):
+    # 눈 후보가 2개 미만이면 None 반환
+    if len(eyes_abs) < 2:
+        return None
+
+    # 면적이 큰 눈 후보를 우선 사용
+    sorted_eyes = sorted(
+        eyes_abs,
+        key=lambda e: int(e[2]) * int(e[3]),
+        reverse=True
+    )
+
+    # 후보 중 x 위치가 충분히 떨어진 두 개를 선택
+    for i in range(len(sorted_eyes)):
+        for j in range(i + 1, len(sorted_eyes)):
+            e1 = sorted_eyes[i]
+            e2 = sorted_eyes[j]
+
+            # 각 눈 중심점 계산
+            c1x = e1[0] + e1[2] / 2.0
+            c2x = e2[0] + e2[2] / 2.0
+
+            # 너무 가까운 후보는 같은 눈으로 보고 제외
+            if abs(c1x - c2x) < 30:
+                continue
+
+            # 왼쪽/오른쪽 순서로 정렬해서 반환
+            return sorted([e1, e2], key=lambda e: e[0])
+
+    # 적절한 두 눈을 못 찾으면 None 반환
+    return None
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 def get_latched_angle_ok():
@@ -1409,6 +1636,7 @@ def get_latched_angle_ok():
         return AUTO_STATE["stable_face_count"] >= STABLE_FACE_HOLD_FRAMES
 
 
+<<<<<<< HEAD
 def landmark_to_xy(landmark, width, height):
     # 정규화 좌표를 픽셀 좌표로 변환
     return (float(landmark.x) * width, float(landmark.y) * height)
@@ -1485,6 +1713,13 @@ def update_dynamic_eye_threshold(avg_ear):
         # 샘플이 부족하면 기본 임계값 사용
         else:
             AUTO_STATE["dynamic_eye_threshold"] = DEFAULT_EYE_AR_THRESHOLD
+=======
+def update_dynamic_eye_threshold(avg_ear):
+    # OpenCV Haar 방식은 EAR 값을 계산하지 않습니다.
+    # React 상태 호환을 위해 함수만 유지합니다.
+    with auto_state_lock:
+        AUTO_STATE["dynamic_eye_threshold"] = 0.0
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
 
 def analyze_face_for_auto(cam2_bgr):
@@ -1513,6 +1748,7 @@ def analyze_face_for_auto(cam2_bgr):
         "guide_text": "얼굴을 화면에 맞춰주세요",
     }
 
+<<<<<<< HEAD
     # MediaPipe Face Landmarker가 준비되지 않았으면 분석 불가 처리
     if not mediapipe_face_ready or face_landmarker is None:
         result["guide_text"] = mediapipe_face_error or "MediaPipe 얼굴 랜드마커를 사용할 수 없습니다"
@@ -1553,6 +1789,43 @@ def analyze_face_for_auto(cam2_bgr):
     y1 = max(0, int(min(ys)))
     x2 = min(w - 1, int(max(xs)))
     y2 = min(h - 1, int(max(ys)))
+=======
+    # Haar Cascade 파일을 못 읽었으면 분석 불가 처리
+    if not opencv_face_ready:
+        result["guide_text"] = "OpenCV 얼굴/눈 검출 파일을 불러오지 못했습니다"
+        return result
+
+    # BGR 이미지를 그레이스케일로 변환
+    gray = cv2.cvtColor(cam2_bgr, cv2.COLOR_BGR2GRAY)
+
+    # 조명 변화에 조금 더 강하게 만들기 위해 히스토그램 평활화 적용
+    gray = cv2.equalizeHist(gray)
+
+    # 얼굴 검출
+    faces = face_cascade.detectMultiScale(
+        gray,
+        scaleFactor=1.1,
+        minNeighbors=5,
+        minSize=(120, 120)
+    )
+
+    # 가장 큰 얼굴 하나 선택
+    face = largest_rect(faces)
+
+    # 얼굴이 없으면 반환
+    if face is None:
+        result["guide_text"] = "얼굴이 감지되지 않습니다"
+        return result
+
+    # 얼굴 박스 좌표 읽기
+    x, y, bw, bh = [int(v) for v in face]
+
+    # 얼굴 박스 좌표 보정
+    x1 = max(0, x)
+    y1 = max(0, y)
+    x2 = min(w - 1, x + bw)
+    y2 = min(h - 1, y + bh)
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
     # 실제 박스 폭/높이 계산
     bw = max(1, x2 - x1)
@@ -1575,6 +1848,7 @@ def analyze_face_for_auto(cam2_bgr):
     # 얼굴 크기 적정 여부 계산
     size_ok = (FACE_MIN_AREA_RATIO <= area_ratio <= FACE_MAX_AREA_RATIO)
 
+<<<<<<< HEAD
     # 오른쪽 눈 EAR 계산
     ear_right = calculate_eye_aspect_ratio(
         landmarks,
@@ -1656,6 +1930,95 @@ def analyze_face_for_auto(cam2_bgr):
 
     # 안정 단계 이후에만 눈 감음을 촬영 조건으로 인정
     eyes_closed = bool(latched and avg_ear < eye_threshold)
+=======
+    # 얼굴 상단 영역에서 눈 검출
+    eye_roi_y1 = y1
+    eye_roi_y2 = y1 + int(bh * 0.62)
+    eye_roi_x1 = x1
+    eye_roi_x2 = x2
+
+    # ROI 좌표 보정
+    eye_roi_y2 = min(h, max(eye_roi_y1 + 1, eye_roi_y2))
+    eye_roi_x2 = min(w, max(eye_roi_x1 + 1, eye_roi_x2))
+
+    # 눈 검출용 ROI 생성
+    eye_roi_gray = gray[eye_roi_y1:eye_roi_y2, eye_roi_x1:eye_roi_x2]
+
+    # 눈 검출
+    eyes = eye_cascade.detectMultiScale(
+        eye_roi_gray,
+        scaleFactor=1.08,
+        minNeighbors=2,
+        minSize=(24, 18)
+    )
+
+    # ROI 기준 눈 좌표를 원본 이미지 좌표로 변환
+    eyes_abs = []
+    for ex, ey, ew, eh in eyes:
+        eyes_abs.append((
+            int(eye_roi_x1 + ex),
+            int(eye_roi_y1 + ey),
+            int(ew),
+            int(eh),
+        ))
+
+    # 적절한 두 눈 선택
+    two_eyes = pick_two_eyes(eyes_abs)
+
+    # 검출된 눈 개수
+    eye_count = len(eyes_abs)
+
+    # 기본값
+    eyes_visible = False
+
+    # 눈이 2개 이상 제대로 검출될 때만 눈 뜬 상태로 판단
+    if two_eyes is not None and eye_count >= 2:
+        eyes_visible = True
+
+    # 디버깅용 출력
+    print("eye_count =", eye_count)
+
+    # 얼굴 기울기 기본값
+    roll_deg = 0.0
+
+    # 눈이 보이면 기울기 계산
+    if eyes_visible:
+        left_eye, right_eye = two_eyes
+
+        # 왼쪽 눈 중심
+        lx = left_eye[0] + left_eye[2] / 2.0
+        ly = left_eye[1] + left_eye[3] / 2.0
+
+        # 오른쪽 눈 중심
+        rx = right_eye[0] + right_eye[2] / 2.0
+        ry = right_eye[1] + right_eye[3] / 2.0
+
+        # 양쪽 눈 중심선으로 얼굴 좌우 기울기 계산
+        roll_deg = math.degrees(math.atan2(ry - ly, rx - lx))
+
+        # 기울기 허용 여부 계산
+        roll_ok = abs(roll_deg) <= MAX_ABS_ROLL_DEG
+
+        # 눈이 보이면 아직 눈을 감은 상태가 아님
+        eyes_closed = False
+
+        # 각도는 roll만 간단히 판단
+        angles_ok = roll_ok
+
+    # 눈이 안 보이는 경우
+    else:
+        # 안정 단계가 완료된 이후에는 눈이 안 보이는 것을 눈 감음으로 판단
+        latched = get_latched_angle_ok()
+
+        # 안정 단계 이전에는 눈이 보이지 않으면 각도 확인 불가
+        roll_ok = latched
+
+        # 안정 단계 이후에만 눈 감음으로 인정
+        eyes_closed = latched
+
+        # 안정 단계 이후에는 직전 정렬 상태를 유지한 것으로 판단
+        angles_ok = latched
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
     # 분석 결과 갱신
     result.update({
@@ -1664,6 +2027,7 @@ def analyze_face_for_auto(cam2_bgr):
         "size_ok": size_ok,
         "eyes_closed": eyes_closed,
         "roll_ok": roll_ok,
+<<<<<<< HEAD
         "yaw_ok": yaw_ok,
         "pitch_ok": pitch_ok,
         "angles_ok": angles_ok,
@@ -1675,6 +2039,14 @@ def analyze_face_for_auto(cam2_bgr):
         "roll_deg": float(roll_deg),
         "yaw_score": float(yaw_score),
         "pitch_score": float(pitch_score),
+=======
+        "yaw_ok": True,
+        "pitch_ok": True,
+        "angles_ok": angles_ok,
+        "eyes_visible": eyes_visible,
+        "eye_count": len(eyes_abs),
+        "roll_deg": roll_deg,
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
         "bbox": (x1, y1, x2, y2),
     })
 
@@ -1685,10 +2057,15 @@ def analyze_face_for_auto(cam2_bgr):
         result["guide_text"] = "얼굴 거리를 조정해주세요"
     elif not angles_ok:
         result["guide_text"] = "눈을 뜬 상태로 정면을 맞춰주세요"
+<<<<<<< HEAD
     elif not latched:
         result["guide_text"] = "얼굴을 고정해주세요"
     elif not eyes_closed:
         result["guide_text"] = "얼굴을 유지한 채 눈을 감아주세요"
+=======
+    elif not eyes_closed:
+        result["guide_text"] = "얼굴을 고정한 뒤 눈을 감아주세요"
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
     else:
         result["guide_text"] = "조건 충족"
 
@@ -1781,12 +2158,18 @@ def snapshot_detection_for_metadata(detection):
         "roll_deg": float(detection.get("roll_deg", 0.0)),
         "yaw_score": float(detection.get("yaw_score", 0.0)),
         "pitch_score": float(detection.get("pitch_score", 0.0)),
+<<<<<<< HEAD
         "mediapipe_eye_count": int(detection.get("eye_count", 0)),
         "mediapipe_eyes_visible": bool(detection.get("eyes_visible", False)),
         "ear_left": float(detection.get("ear_left", 1.0)),
         "ear_right": float(detection.get("ear_right", 1.0)),
         "avg_ear": float(detection.get("avg_ear", 1.0)),
         "dynamic_eye_threshold": float(AUTO_STATE.get("dynamic_eye_threshold", DEFAULT_EYE_AR_THRESHOLD)),
+=======
+        "opencv_eye_count": int(detection.get("eye_count", 0)),
+        "opencv_eyes_visible": bool(detection.get("eyes_visible", False)),
+        "dynamic_eye_threshold": 0.0,
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
     }
 
 
@@ -1920,9 +2303,14 @@ def reset_auto_state(profile_id=None, running=False):
         # 눈 감음 카운트 초기화
         AUTO_STATE["eyes_closed_count"] = 0
 
+<<<<<<< HEAD
         # MediaPipe EAR 동적 기준값 초기화
         open_eye_ear_samples.clear()
         AUTO_STATE["dynamic_eye_threshold"] = DEFAULT_EYE_AR_THRESHOLD
+=======
+        # OpenCV 방식에서는 동적 EAR 기준값을 사용하지 않음
+        AUTO_STATE["dynamic_eye_threshold"] = 0.0
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
 
         # 상태 문구 초기화
         AUTO_STATE["status"] = "자동 촬영 조건 확인 중" if running else "자동 촬영 대기 중"
@@ -1962,7 +2350,11 @@ def auto_capture_worker(profile_id: str):
             # 얼굴 상태 분석
             detection = analyze_face_for_auto(cam2_bgr)
 
+<<<<<<< HEAD
             # MediaPipe EAR 값을 이용해 개인별 눈 감음 기준값 갱신
+=======
+            # OpenCV 방식은 눈이 보이면 각도를 확인하고, 안정 이후 눈이 안 보이면 눈 감음으로 판단
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             update_dynamic_eye_threshold(detection.get("avg_ear", 1.0))
 
             # 자동 촬영 조건 갱신 후 촬영 여부 판단
@@ -2284,13 +2676,20 @@ def generate_cam4_stream():
         start_time = monotonic()
 
         try:
+<<<<<<< HEAD
             # 스트리밍에서는 전체 BGR 변환을 하지 않고 1채널 gray에서 CAM4만 잘라냅니다.
             # 이렇게 해야 15.6인치 세로 키오스크에서도 프레임이 덜 끊깁니다.
             with camera_lock:
+=======
+            # 카메라 접근 구간은 최대한 짧게 유지
+            with camera_lock:
+                # 카메라 준비 안 되었으면 잠시 대기
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
                 if not camera_ready:
                     sleep(0.05)
                     continue
 
+<<<<<<< HEAD
                 full_gray8 = read_uc788_full_frame_gray8()
                 cam4_gray = extract_cam_frame(full_gray8, "cam4").copy()
 
@@ -2300,10 +2699,23 @@ def generate_cam4_stream():
             # 800x1280 원본 세로 프레임에서 720x1152로 약간만 줄여 품질과 부드러움을 균형 있게 맞춤
             cam4_gray = cv2.resize(
                 cam4_gray,
+=======
+                # 전체 프레임 읽기
+                full_frame_bgr = read_preview_frame()
+
+                # cam4 부분만 잘라 복사
+                cam4_frame = extract_cam_frame(full_frame_bgr, "cam4").copy()
+
+            # 스트리밍용으로만 크기 축소
+            # 저장 촬영 이미지는 이 resize의 영향을 받지 않습니다.
+            cam4_frame = cv2.resize(
+                cam4_frame,
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
                 (STREAM_WIDTH, STREAM_HEIGHT),
                 interpolation=cv2.INTER_AREA
             )
 
+<<<<<<< HEAD
             # 흑백 이미지는 BGR로 바꾸지 않고 그대로 JPEG 인코딩합니다.
             # 브라우저는 grayscale JPEG도 정상 표시합니다.
             ok, buffer = cv2.imencode(
@@ -2312,12 +2724,29 @@ def generate_cam4_stream():
                 [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY]
             )
 
+=======
+            # JPEG 품질을 낮춰서 실시간 송출 부담을 줄임
+            ok, buffer = cv2.imencode(
+                ".jpg",
+                cam4_frame,
+                [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY]
+            )
+
+            # 인코딩 실패 시 다음 프레임으로 넘어감
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             if not ok:
                 sleep(0.01)
                 continue
 
+<<<<<<< HEAD
             jpg_bytes = buffer.tobytes()
 
+=======
+            # 바이트 변환
+            jpg_bytes = buffer.tobytes()
+
+            # multipart 응답 데이터 yield
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             yield (
                 b"--frame\r\n"
                 b"Content-Type: image/jpeg\r\n"
@@ -2326,17 +2755,36 @@ def generate_cam4_stream():
                 b"\r\n"
             )
 
+<<<<<<< HEAD
             elapsed = monotonic() - start_time
             remain = frame_delay - elapsed
 
+=======
+            # 처리 시간을 뺀 만큼만 대기해서 실제 FPS를 최대한 일정하게 유지
+            elapsed = monotonic() - start_time
+            remain = frame_delay - elapsed
+
+            # 남은 시간이 있을 때만 대기
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             if remain > 0:
                 sleep(remain)
 
         except GeneratorExit:
+<<<<<<< HEAD
             break
 
         except Exception as e:
             print("[스트림 오류]", e)
+=======
+            # 브라우저가 스트림 연결을 끊으면 조용히 종료
+            break
+
+        except Exception as e:
+            # 스트리밍 오류 출력
+            print("[스트림 오류]", e)
+
+            # 잠시 쉬고 재시도
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             sleep(0.1)
 
 
@@ -2465,11 +2913,19 @@ def auto_capture_start_api():
                 "error": "존재하지 않는 프로필입니다."
             }), 400
 
+<<<<<<< HEAD
         # MediaPipe Face Landmarker 준비 여부 확인
         if not mediapipe_face_ready:
             return jsonify({
                 "ok": False,
                 "error": mediapipe_face_error or "MediaPipe 얼굴 랜드마커를 사용할 수 없어 자동 촬영을 사용할 수 없습니다."
+=======
+        # OpenCV 얼굴/눈 검출 분류기 준비 여부 확인
+        if not opencv_face_ready:
+            return jsonify({
+                "ok": False,
+                "error": "OpenCV 얼굴/눈 검출 파일을 불러오지 못해 자동 촬영을 사용할 수 없습니다."
+>>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
             }), 400
 
         # 카메라 준비 여부 확인
