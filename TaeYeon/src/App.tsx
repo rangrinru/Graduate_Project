@@ -1665,25 +1665,78 @@ function App() {
         .guide-wrap {
           position: absolute;
           inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
           pointer-events: none;
           z-index: 10;
         }
 
-        .guide-circle {
-          width: 220px;
-          height: 220px;
-          border-radius: 50%;
-          border: 3px dashed rgba(103,232,249,0.9);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: rgba(165,243,252,0.95);
-          font-weight: 600;
-          text-align: center;
-          background: rgba(255,255,255,0.02);
+        .guide-face {
+          position: absolute;
+          left: 50%;
+          top: clamp(120px, 14vh, 180px);
+          width: clamp(280px, 58vw, 470px);
+          height: clamp(420px, 50vh, 650px);
+          transform: translateX(-50%);
+          border: 4px dashed rgba(103,232,249,0.92);
+          border-radius: 47% 47% 43% 43% / 34% 34% 57% 57%;
+          background:
+            radial-gradient(ellipse at 50% 30%, rgba(103,232,249,0.08), transparent 56%),
+            rgba(255,255,255,0.018);
+          box-shadow:
+            0 0 0 999px rgba(0,0,0,0.08),
+            0 0 34px rgba(34,211,238,0.28);
+        }
+
+        .guide-face::before {
+          content: "";
+          position: absolute;
+          left: 8%;
+          right: 8%;
+          top: -2%;
+          height: 31%;
+          border-top: 4px solid rgba(103,232,249,0.64);
+          border-radius: 50% 50% 34% 34% / 80% 80% 24% 24%;
+        }
+
+        .guide-face::after {
+          content: "";
+          position: absolute;
+          left: 30%;
+          right: 30%;
+          bottom: -18%;
+          height: 24%;
+          border-left: 3px dashed rgba(103,232,249,0.56);
+          border-right: 3px dashed rgba(103,232,249,0.56);
+          border-bottom: 3px dashed rgba(103,232,249,0.46);
+          border-radius: 0 0 42% 42%;
+        }
+
+        .guide-eye-line,
+        .guide-nose-line,
+        .guide-mouth-line {
+          position: absolute;
+          left: 50%;
+          transform: translateX(-50%);
+          border-radius: 999px;
+          background: rgba(165,243,252,0.72);
+          box-shadow: 0 0 12px rgba(34,211,238,0.22);
+        }
+
+        .guide-eye-line {
+          top: 47%;
+          width: 48%;
+          height: 3px;
+        }
+
+        .guide-nose-line {
+          top: 51%;
+          width: 3px;
+          height: 16%;
+        }
+
+        .guide-mouth-line {
+          top: 69%;
+          width: 24%;
+          height: 3px;
         }
 
         .capture-area {
@@ -2249,10 +2302,11 @@ function App() {
             font-size: 24px;
           }
 
-          .guide-circle {
-            width: 190px;
-            height: 190px;
-            font-size: 14px;
+          .guide-face {
+            top: clamp(105px, 13vh, 145px);
+            width: clamp(250px, 58vw, 330px);
+            height: clamp(380px, 50vh, 520px);
+            border-width: 3px;
           }
 
           .selected-profile {
@@ -2346,11 +2400,11 @@ function App() {
           font-weight: 800;
         }
 
-        .guide-circle {
-          width: 290px;
-          height: 290px;
-          border-width: 4px;
-          font-size: 20px;
+        .guide-face {
+          top: clamp(135px, 14vh, 190px);
+          width: clamp(330px, 58vw, 500px);
+          height: clamp(500px, 51vh, 690px);
+          border-width: 5px;
         }
 
         .auto-check-panel {
@@ -2792,7 +2846,11 @@ function App() {
 
               {showGuide && (
                 <div className="guide-wrap">
-                  <div className="guide-circle">얼굴 위치 맞추기</div>
+                  <div className="guide-face" aria-label="얼굴 위치 기준선">
+                    <div className="guide-eye-line"></div>
+                    <div className="guide-nose-line"></div>
+                    <div className="guide-mouth-line"></div>
+                  </div>
                 </div>
               )}
 
