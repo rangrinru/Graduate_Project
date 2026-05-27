@@ -172,18 +172,31 @@ def list_images(folder: Path) -> list[Path]:
 
 def find_default_no_filter_root() -> Path:
     candidates = [
-        Path.home() / "Graduate_Project" / "captures" / "sessions" / "cam2_no_filter",
-        Path.home() / "Graduate_Project" / "TaeYeon" / "captures",
-        Path.cwd() / "captures" / "sessions" / "cam2_no_filter",
-        Path(r"C:\Users\kangm\PycharmProjects\PythonProject\Graduate_Project\captures\sessions\cam2_no_filter"),
-        Path(r"C:\Users\kangm\PycharmProjects\PythonProject\Graduate_Project\TaeYeon\captures"),
+        # Windows PyCharm 프로젝트 실제 경로
+        Path(r"C:\Users\kangm\PycharmProjects\PythonProject\Graduate_Project\captures\cam2_no_filter\Useful_nofilter_picture"),
+
+        # 혹시 sessions 구조를 쓰는 경우
+        Path(r"C:\Users\kangm\PycharmProjects\PythonProject\Graduate_Project\captures\sessions\cam2_no_filter\Useful_nofilter_picture"),
+
+        # 라즈베리파이에서 실행하는 경우
+        Path.home() / "Graduate_Project" / "captures" / "cam2_no_filter" / "Useful_nofilter_picture",
+        Path.home() / "Graduate_Project" / "captures" / "sessions" / "cam2_no_filter" / "Useful_nofilter_picture",
+
+        # 현재 실행 위치 기준
+        Path.cwd() / "captures" / "cam2_no_filter" / "Useful_nofilter_picture",
+        Path.cwd() / "captures" / "sessions" / "cam2_no_filter" / "Useful_nofilter_picture",
     ]
 
+    print("[no_filter 경로 탐색]")
     for p in candidates:
+        print("확인:", p)
         if p.exists():
+            print("선택:", p)
             return p
 
-    return candidates[0]
+    raise FileNotFoundError(
+        "Useful_nofilter_picture 폴더를 찾지 못했습니다. --image 또는 --base 옵션으로 직접 경로를 지정하세요."
+    )
 
 
 def find_latest_no_filter_image(base_path: Path) -> Path:
