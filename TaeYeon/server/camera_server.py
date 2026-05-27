@@ -102,16 +102,16 @@ SAVE_AS_PNG = True
 INITIAL_EXPOSURE_MS = 100
 
 # 스트리밍 FPS
-STREAM_FPS = 15
+STREAM_FPS = 10
 
 # 스트리밍용 화면 가로 크기
-STREAM_WIDTH = 720
+STREAM_WIDTH = 480
 
 # 스트리밍용 화면 세로 크기
-STREAM_HEIGHT = 1152
+STREAM_HEIGHT = 768
 
 # 스트리밍용 JPEG 품질
-STREAM_JPEG_QUALITY = 70
+STREAM_JPEG_QUALITY = 55
 
 # 릴레이 연결 GPIO 번호
 RELAY_PIN = 17
@@ -1044,6 +1044,23 @@ def read_uc788_full_frame_gray8():
     raise RuntimeError("UC-788 FIFO 프리뷰 프레임을 받지 못했습니다.")
 
 
+def read_uc788_cam_frame_gray8(cam_key):
+    # 스트리밍/자동감지에서는 전체 프레임 복사 대신 필요한 카메라 영역만 복사합니다.
+    start_uc788_stream()
+
+    info = CAMERA_INFO[cam_key]
+    deadline = monotonic() + 2.0
+
+    while monotonic() < deadline:
+        with raw_stream_lock:
+            if latest_preview_gray8 is not None:
+                return latest_preview_gray8[:, info["x_start"]:info["x_end"]].copy()
+
+        sleep(0.005)
+
+    raise RuntimeError("UC-788 FIFO 프리뷰 프레임을 받지 못했습니다.")
+
+
 def read_uc788_full_frame_bgr():
     # 기존 자동 촬영/저장 로직 호환용으로 필요할 때만 BGR 변환합니다.
     gray8 = read_uc788_full_frame_gray8()
@@ -1097,7 +1114,8 @@ def capture_high_quality_full_frame(exposure_ms, gain):
 
     try:
         # UC-788 Rev.B raw 기반 전체 프레임 촬영
-        full_frame_bgr = read_uc788_full_frame_bgr()
+        with camera_lock:
+            full_frame_bgr = read_uc788_full_frame_bgr()
 
     finally:
         # 릴레이 OFF
@@ -1732,12 +1750,11 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
     # 저장 확장자 결정
     ext = "png" if SAVE_AS_PNG else "jpg"
 
-    # 카메라 락을 잡고 고화질 전체 프레임 촬영
-    with camera_lock:
-        full_frame_bgr = capture_high_quality_full_frame(
-            exposure_ms=exposure_ms,
-            gain=gain
-        )
+    # 릴레이 예열 중에는 스트리밍이 멈추지 않도록 실제 프레임 읽기 순간에만 카메라 락을 잡습니다.
+    full_frame_bgr = capture_high_quality_full_frame(
+        exposure_ms=exposure_ms,
+        gain=gain
+    )
 
     # 촬영 시각 기록
     capture_timestamp = datetime.now()
@@ -1866,12 +1883,12 @@ def auto_capture_worker(profile_id: str):
                 sleep(0.3)
                 continue
 
-            # 카메라 락을 잡고 프리뷰 프레임 읽기
+            # 카메라 락을 잡고 자동감지에 필요한 cam2 영역만 읽기
             with camera_lock:
-                full_frame_bgr = read_preview_frame()
+                cam2_gray = read_uc788_cam_frame_gray8(AUTO_DETECTION_CAM_KEY)
 
             # rpicam_03_eye_closed_auto.py와 동일하게 cam2 영역을 얼굴/눈 인식용으로 사용
-            cam2_bgr = extract_cam_frame(full_frame_bgr, AUTO_DETECTION_CAM_KEY).copy()
+            cam2_bgr = cv2.cvtColor(cam2_gray, cv2.COLOR_GRAY2BGR)
 
             # 얼굴 상태 분석
             detection = analyze_face_for_auto(cam2_bgr)
@@ -2208,8 +2225,7 @@ def generate_cam4_stream():
                     sleep(0.05)
                     continue
 
-                full_gray8 = read_uc788_full_frame_gray8()
-                cam4_gray = extract_cam_frame(full_gray8, "cam4").copy()
+                cam4_gray = read_uc788_cam_frame_gray8("cam4")
 
             # 세로 키오스크 화면에 맞게 CAM4 영상을 서버에서 세로 방향으로 회전
             cam4_gray = cv2.rotate(cam4_gray, cv2.ROTATE_90_CLOCKWISE)
