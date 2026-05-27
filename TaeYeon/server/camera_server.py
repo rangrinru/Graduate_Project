@@ -2607,6 +2607,29 @@ def normalize_region_percentages(region_area, total_area):
     return rounded
 
 
+def classify_face_region(x, y, face_rect):
+    fx, fy, fw, fh = face_rect
+    rel_x = (x - fx) / float(fw) if fw else 0.5
+    rel_y = (y - fy) / float(fh) if fh else 0.5
+
+    if rel_y < 0.27:
+        return "forehead"
+
+    if 0.40 <= rel_x <= 0.60 and 0.27 <= rel_y < 0.56:
+        return "nose"
+
+    if 0.43 <= rel_x <= 0.57 and 0.56 <= rel_y < 0.68:
+        return "philtrum"
+
+    if rel_y >= 0.68:
+        return "chin"
+
+    if rel_x < 0.50:
+        return "right_cheek"
+
+    return "left_cheek"
+
+
 def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     img = cv2.imread(str(image_path))
     if img is None:
@@ -2622,6 +2645,12 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     if face_pixels <= 0:
         face_mask = np.full_like(gray, 255)
         face_pixels = gray.size
+
+    face_points = cv2.findNonZero(face_mask)
+    if face_points is not None:
+        face_rect = cv2.boundingRect(face_points)
+    else:
+        face_rect = (0, 0, gray.shape[1], gray.shape[0])
 
     face_values = blur[face_mask > 0]
     heat_low = np.percentile(face_values, 50)
@@ -2652,8 +2681,8 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
 
     h, w = gray.shape
 
-    count = 0
-    total_area = 0.0
+    clean_mask = np.zeros_like(gray)
+    accepted_count = 0
     region_area = {
         "forehead": 0.0,
         "nose": 0.0,
@@ -2668,28 +2697,15 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
         if area < 20 or area > 4000:
             continue
 
-        x, y, cw, ch = cv2.boundingRect(cnt)
-        cx = x + cw // 2
-        cy = y + ch // 2
+        cv2.drawContours(clean_mask, [cnt], -1, 255, -1)
+        accepted_count += 1
 
-        count += 1
-        total_area += float(area)
+    ys, xs = np.where(clean_mask > 0)
+    total_area = float(len(xs))
 
-        rel_x = cx / float(w)
-        rel_y = cy / float(h)
-
-        if rel_y < 0.34:
-            region_area["forehead"] += area
-        elif 0.40 <= rel_x <= 0.60 and rel_y < 0.60:
-            region_area["nose"] += area
-        elif 0.36 <= rel_x <= 0.64 and rel_y < 0.72:
-            region_area["philtrum"] += area
-        elif rel_y >= 0.72:
-            region_area["chin"] += area
-        elif rel_x < 0.50:
-            region_area["right_cheek"] += area
-        else:
-            region_area["left_cheek"] += area
+    for x, y in zip(xs, ys):
+        region_key = classify_face_region(int(x), int(y), face_rect)
+        region_area[region_key] += 1.0
 
     detection_rate = (total_area / face_pixels) * 100 if face_pixels else 0.0
     if detection_rate < 1:
@@ -2708,7 +2724,7 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     cv2.imwrite(str(heatmap_path), heatmap)
 
     report = {
-        "porphyrin_count": int(count),
+        "porphyrin_count": int(accepted_count),
         "porphyrin_area": float(total_area),
         "detection_rate_percent": float(detection_rate),
         "face_area_pixels": int(face_pixels),
