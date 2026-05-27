@@ -6,6 +6,7 @@ from flask_cors import CORS
 
 # 이미지 저장/변환을 위한 OpenCV import
 import cv2
+import numpy as np
 
 # JSON 파일 읽기/쓰기용 import
 import json
@@ -56,11 +57,7 @@ CAPTURE_HEIGHT = 800
 SINGLE_WIDTH = CAPTURE_WIDTH // 4
 
 # 저장 루트 경로 설정
-<<<<<<< HEAD
-SAVE_ROOT = Path.home() / "Graduate_Project" / "Final_Project" / "captures"
-=======
-SAVE_ROOT = Path.home() / "Graduate_Project" / "TaeYeon" / "captures"
->>>>>>> 00b1a35732c14ae8aa9c5bf4e62e81badb28c0c4
+SAVE_ROOT = Path(__file__).resolve().parent / "captures"
 
 # 저장 루트 폴더가 없으면 생성
 SAVE_ROOT.mkdir(parents=True, exist_ok=True)
@@ -804,6 +801,167 @@ def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Pa
 # 기본 상태 확인 API
 # =========================
 
+def imread_unicode(path: Path):
+    data = np.fromfile(str(path), dtype=np.uint8)
+    return cv2.imdecode(data, cv2.IMREAD_COLOR)
+
+
+def imwrite_unicode(path: Path, img):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ok, encoded = cv2.imencode(path.suffix, img)
+    if ok:
+        encoded.tofile(str(path))
+    return ok
+
+
+def detect_porphyrin_heatmap(img):
+    if img is None:
+        raise ValueError("분석할 이미지를 읽을 수 없습니다.")
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    blur = cv2.GaussianBlur(enhanced, (5, 5), 0)
+
+    threshold_value = np.percentile(blur, 99)
+    _, thresh = cv2.threshold(blur, threshold_value, 255, cv2.THRESH_BINARY)
+
+    kernel = np.ones((3, 3), np.uint8)
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    thresh = cv2.dilate(thresh, kernel, iterations=1)
+
+    contours, _ = cv2.findContours(
+        thresh,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    heatmap = cv2.applyColorMap(blur, cv2.COLORMAP_JET)
+    h, w = gray.shape
+    face_pixels = gray.size
+
+    count = 0
+    total_area = 0
+    upper = middle = lower = 0
+    left = center_area = right = 0
+
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < 20 or area > 4000:
+            continue
+
+        x, y, cw, ch = cv2.boundingRect(cnt)
+        cx = x + cw // 2
+        cy = y + ch // 2
+
+        cv2.drawContours(heatmap, [cnt], -1, (255, 255, 255), 2)
+
+        count += 1
+        total_area += area
+
+        if cy < h // 3:
+            upper += area
+        elif cy < h * 2 // 3:
+            middle += area
+        else:
+            lower += area
+
+        if cx < w // 3:
+            left += area
+        elif cx < w * 2 // 3:
+            center_area += area
+        else:
+            right += area
+
+    detection_rate = (total_area / face_pixels) * 100
+
+    if detection_rate < 1:
+        grade = "Low"
+    elif detection_rate < 3:
+        grade = "Medium"
+    else:
+        grade = "High"
+
+    region_data = {
+        "Upper": upper / face_pixels * 100,
+        "Middle": middle / face_pixels * 100,
+        "Lower": lower / face_pixels * 100,
+        "Left": left / face_pixels * 100,
+        "Center": center_area / face_pixels * 100,
+        "Right": right / face_pixels * 100,
+    }
+
+    analysis_data = {
+        "porphyrin_count": int(count),
+        "detection_rate_percent": float(detection_rate),
+        "grade": grade,
+        "region_analysis": {
+            key: float(value)
+            for key, value in region_data.items()
+        },
+        "threshold_percentile": 99,
+        "threshold_value": float(threshold_value),
+        "min_area": 20,
+        "max_area": 4000
+    }
+
+    return heatmap, analysis_data
+
+
+def analyze_history_porphyrin(profile_id: str, capture_id: str):
+    image_path = resolve_image_path(profile_id, capture_id, "660nm_filter")
+    img = imread_unicode(image_path)
+    heatmap, analysis_data = detect_porphyrin_heatmap(img)
+
+    analysis_dir = image_path.parent / "analysis"
+    heatmap_path = analysis_dir / "porphyrin_heatmap.png"
+    metadata_path = analysis_dir / "porphyrin_analysis_metadata.json"
+
+    if not imwrite_unicode(heatmap_path, heatmap):
+        raise RuntimeError("히트맵 이미지를 저장하지 못했습니다.")
+
+    metadata = {
+        "metadata_type": "porphyrin_analysis",
+        "analyzed_at": datetime.now().isoformat(),
+        "source_filter": "660nm_filter",
+        "source_image": str(image_path),
+        "heatmap_image": str(heatmap_path),
+        "analysis_result": {
+            "porphyrin_count": analysis_data["porphyrin_count"],
+            "detection_rate_percent": round(
+                analysis_data["detection_rate_percent"],
+                4
+            ),
+            "grade": analysis_data["grade"],
+            "region_analysis": {
+                key: round(float(value), 4)
+                for key, value in analysis_data["region_analysis"].items()
+            },
+            "threshold_percentile": analysis_data["threshold_percentile"],
+            "threshold_value": round(analysis_data["threshold_value"], 4),
+            "min_area": analysis_data["min_area"],
+            "max_area": analysis_data["max_area"]
+        }
+    }
+
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=4)
+
+    return {
+        "heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin/heatmap",
+        "metadata_path": str(metadata_path),
+        "analysis": metadata["analysis_result"]
+    }
+
+
+def resolve_porphyrin_heatmap_path(profile_id: str, capture_id: str) -> Path:
+    image_path = resolve_image_path(profile_id, capture_id, "660nm_filter")
+    heatmap_path = image_path.parent / "analysis" / "porphyrin_heatmap.png"
+    if not heatmap_path.exists():
+        raise ValueError("저장된 포르피린 히트맵이 없습니다. 먼저 분석을 실행하세요.")
+    return heatmap_path
+
+
 @app.route("/health")
 def health():
     # 서버 상태 반환
@@ -1129,6 +1287,35 @@ def delete_history_api(profile_id, capture_id):
 # =========================
 # 특정 기록 이미지 직접 반환 API
 # =========================
+
+@app.route("/profiles/<profile_id>/history/<capture_id>/analyze/porphyrin", methods=["POST"])
+def analyze_history_porphyrin_api(profile_id, capture_id):
+    try:
+        result = analyze_history_porphyrin(profile_id, capture_id)
+        return jsonify({
+            "ok": True,
+            **result
+        })
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 400
+
+
+@app.route("/profiles/<profile_id>/history/<capture_id>/analysis/porphyrin/heatmap", methods=["GET"])
+def get_history_porphyrin_heatmap_api(profile_id, capture_id):
+    try:
+        heatmap_path = resolve_porphyrin_heatmap_path(profile_id, capture_id)
+        return send_file(heatmap_path)
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 404
+
 
 @app.route("/profiles/<profile_id>/history/<capture_id>/image/<filter_type>", methods=["GET"])
 def get_history_image_api(profile_id, capture_id, filter_type):

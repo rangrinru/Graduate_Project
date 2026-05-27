@@ -43,6 +43,21 @@ type HistoryDetail = {
   };
 };
 
+type PorphyrinAnalysisResult = {
+  heatmap_url: string;
+  metadata_path?: string;
+  analysis: {
+    porphyrin_count: number;
+    detection_rate_percent: number;
+    grade: string;
+    region_analysis: Record<string, number>;
+    threshold_percentile: number;
+    threshold_value: number;
+    min_area: number;
+    max_area: number;
+  };
+};
+
 type Toast = {
   message: string;
   type: "success" | "error" | "info";
@@ -216,6 +231,9 @@ function App() {
 
   const [selectedHistory, setSelectedHistory] = useState<HistoryDetail | null>(null);
   const [isLoadingHistoryDetail, setIsLoadingHistoryDetail] = useState(false);
+  const [porphyrinAnalysis, setPorphyrinAnalysis] =
+    useState<PorphyrinAnalysisResult | null>(null);
+  const [isAnalyzingPorphyrin, setIsAnalyzingPorphyrin] = useState(false);
 
   const [selectedFilter, setSelectedFilter] = useState<
     "no_filter" | "405nm_filter" | "660nm_filter"
@@ -721,6 +739,7 @@ function App() {
 
       setSelectedHistory(data);
       setSelectedFilter("no_filter");
+      setPorphyrinAnalysis(null);
       setScreen("historyDetail");
     } catch (error) {
       console.error(error);
@@ -787,6 +806,7 @@ function App() {
   };
 
   const backToHistory = () => {
+    setPorphyrinAnalysis(null);
     setScreen("history");
   };
 
@@ -798,6 +818,49 @@ function App() {
     }
 
     return `${API_BASE}${imageUrl}`;
+  };
+
+  const analyzePorphyrin = async () => {
+    if (!selectedProfile || !selectedHistory) {
+      showToast("분석할 기록을 먼저 선택하세요.", "error");
+      return;
+    }
+
+    const porphyrinImage = selectedHistory.images["660nm_filter"];
+    if (!porphyrinImage?.exists) {
+      showToast("660nm 필터 이미지가 없어 포르피린 분석을 할 수 없습니다.", "error");
+      return;
+    }
+
+    try {
+      setIsAnalyzingPorphyrin(true);
+
+      const encodedProfileId = encodeURIComponent(selectedProfile.folderId);
+      const encodedCaptureId = encodeURIComponent(selectedHistory.captureId);
+
+      const res = await fetch(
+        `${API_BASE}/profiles/${encodedProfileId}/history/${encodedCaptureId}/analyze/porphyrin`,
+        {
+          method: "POST",
+        }
+      );
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        showToast(data.error || "분석 실패", "error");
+        return;
+      }
+
+      setSelectedFilter("660nm_filter");
+      setPorphyrinAnalysis(data);
+      showToast("포르피린 분석 완료", "success");
+    } catch (error) {
+      console.error(error);
+      showToast("분석 실패", "error");
+    } finally {
+      setIsAnalyzingPorphyrin(false);
+    }
   };
 
   return (
@@ -1515,6 +1578,82 @@ function App() {
           padding: 12px;
         }
 
+        .analysis-action-row {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-top: 14px;
+        }
+
+        .analysis-btn {
+          border: 0;
+          border-radius: 999px;
+          padding: 12px 18px;
+          background: #22d3ee;
+          color: #0f172a;
+          box-shadow: 0 14px 32px rgba(34, 211, 238, 0.22);
+        }
+
+        .analysis-btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+          box-shadow: none;
+        }
+
+        .analysis-hint {
+          color: rgba(255,255,255,0.62);
+          font-size: 13px;
+        }
+
+        .analysis-result-panel {
+          margin-top: 16px;
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(15, 23, 42, 0.78);
+          border-radius: 18px;
+          padding: 16px;
+        }
+
+        .analysis-result-title {
+          margin: 0 0 12px;
+          color: #e0f2fe;
+          font-size: 18px;
+          font-weight: 700;
+        }
+
+        .analysis-text-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .analysis-text-item {
+          border-radius: 14px;
+          background: rgba(255,255,255,0.06);
+          padding: 12px;
+        }
+
+        .analysis-label {
+          color: rgba(255,255,255,0.55);
+          font-size: 12px;
+          margin-bottom: 6px;
+        }
+
+        .analysis-value {
+          color: white;
+          font-size: 18px;
+          font-weight: 700;
+        }
+
+        .region-list {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+          margin-top: 12px;
+          color: rgba(255,255,255,0.78);
+          font-size: 13px;
+        }
+
         .history-image {
           width: 100%;
           max-height: 70vh;
@@ -1572,6 +1711,11 @@ function App() {
 
           .filter-row {
             flex-direction: column;
+          }
+
+          .analysis-text-grid,
+          .region-list {
+            grid-template-columns: 1fr;
           }
         }
       `}</style>
@@ -1881,10 +2025,33 @@ function App() {
                           660nm_Filter
                         </button>
                       </div>
+
+                      <div className="analysis-action-row">
+                        <button
+                          className="analysis-btn"
+                          onClick={analyzePorphyrin}
+                          disabled={
+                            isAnalyzingPorphyrin ||
+                            !selectedHistory?.images["660nm_filter"]?.exists
+                          }
+                        >
+                          {isAnalyzingPorphyrin ? "분석 중..." : "분석하기"}
+                        </button>
+
+                        <div className="analysis-hint">
+                          660nm 필터 사진으로 포르피린 히트맵을 생성합니다.
+                        </div>
+                      </div>
                     </div>
 
                     <div className="image-viewer">
-                      {currentImage?.exists && currentImage?.image_url ? (
+                      {selectedFilter === "660nm_filter" && porphyrinAnalysis?.heatmap_url ? (
+                        <img
+                          className="history-image"
+                          src={getImageSrc(porphyrinAnalysis.heatmap_url)}
+                          alt="Porphyrin heatmap"
+                        />
+                      ) : currentImage?.exists && currentImage?.image_url ? (
                         <img
                           className="history-image"
                           src={getImageSrc(currentImage.image_url)}
@@ -1896,6 +2063,47 @@ function App() {
                         </div>
                       )}
                     </div>
+
+                    {porphyrinAnalysis && (
+                      <div className="analysis-result-panel">
+                        <h3 className="analysis-result-title">
+                          Porphyrin Analysis
+                        </h3>
+
+                        <div className="analysis-text-grid">
+                          <div className="analysis-text-item">
+                            <div className="analysis-label">Detected Count</div>
+                            <div className="analysis-value">
+                              {porphyrinAnalysis.analysis.porphyrin_count}
+                            </div>
+                          </div>
+
+                          <div className="analysis-text-item">
+                            <div className="analysis-label">Detection Rate</div>
+                            <div className="analysis-value">
+                              {porphyrinAnalysis.analysis.detection_rate_percent.toFixed(2)}%
+                            </div>
+                          </div>
+
+                          <div className="analysis-text-item">
+                            <div className="analysis-label">Grade</div>
+                            <div className="analysis-value">
+                              {porphyrinAnalysis.analysis.grade}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="region-list">
+                          {Object.entries(porphyrinAnalysis.analysis.region_analysis).map(
+                            ([key, value]) => (
+                              <div key={key}>
+                                {key}: {value.toFixed(2)}%
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
