@@ -2553,6 +2553,30 @@ def delete_history_api(profile_id, capture_id):
 # 특정 촬영 기록 포르피린 분석 API
 # =========================
 
+def make_porphyrin_face_mask(gray):
+    h, w = gray.shape
+    non_black = cv2.inRange(gray, 8, 255)
+    kernel = np.ones((21, 21), np.uint8)
+    non_black = cv2.morphologyEx(non_black, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    contours, _ = cv2.findContours(non_black, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    mask = np.zeros_like(gray)
+
+    if contours:
+        largest = max(contours, key=cv2.contourArea)
+        x, y, bw, bh = cv2.boundingRect(largest)
+        if bw * bh > gray.size * 0.08:
+            center = (x + bw // 2, y + bh // 2)
+            axes = (max(1, int(bw * 0.36)), max(1, int(bh * 0.46)))
+            cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
+            return mask
+
+    center = (w // 2, int(h * 0.52))
+    axes = (int(w * 0.32), int(h * 0.42))
+    cv2.ellipse(mask, center, axes, 0, 0, 360, 255, -1)
+    return mask
+
+
 def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     img = cv2.imread(str(image_path))
     if img is None:
@@ -2563,8 +2587,30 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     enhanced = clahe.apply(gray)
     blur = cv2.GaussianBlur(enhanced, (5, 5), 0)
 
-    threshold_value = np.percentile(blur, 99)
+    face_mask = make_porphyrin_face_mask(gray)
+    face_pixels = int(np.count_nonzero(face_mask))
+    if face_pixels <= 0:
+        face_mask = np.full_like(gray, 255)
+        face_pixels = gray.size
+
+    face_values = blur[face_mask > 0]
+    heat_low = np.percentile(face_values, 50)
+    heat_high = np.percentile(face_values, 98.2)
+    if heat_high <= heat_low:
+        heat_high = heat_low + 1
+
+    heat_scaled = np.clip(
+        (blur.astype(np.float32) - heat_low) * 255.0 / (heat_high - heat_low),
+        0,
+        255
+    ).astype(np.uint8)
+    heat_scaled = cv2.bitwise_and(heat_scaled, heat_scaled, mask=face_mask)
+    heatmap = cv2.applyColorMap(heat_scaled, cv2.COLORMAP_JET)
+    heatmap[face_mask == 0] = (0, 0, 0)
+
+    threshold_value = np.percentile(face_values, 98.5)
     _, thresh = cv2.threshold(blur, threshold_value, 255, cv2.THRESH_BINARY)
+    thresh = cv2.bitwise_and(thresh, thresh, mask=face_mask)
 
     kernel = np.ones((3, 3), np.uint8)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
@@ -2576,9 +2622,7 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
         cv2.CHAIN_APPROX_SIMPLE
     )
 
-    heatmap = cv2.applyColorMap(blur, cv2.COLORMAP_JET)
     h, w = gray.shape
-    face_pixels = gray.size
 
     count = 0
     total_area = 0.0
@@ -2593,8 +2637,6 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
         x, y, cw, ch = cv2.boundingRect(cnt)
         cx = x + cw // 2
         cy = y + ch // 2
-
-        cv2.drawContours(heatmap, [cnt], -1, (255, 255, 255), 2)
 
         count += 1
         total_area += float(area)
@@ -2622,12 +2664,12 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
         grade = "High"
 
     region_analysis = {
-        "Upper": upper / face_pixels * 100 if face_pixels else 0.0,
-        "Middle": middle / face_pixels * 100 if face_pixels else 0.0,
-        "Lower": lower / face_pixels * 100 if face_pixels else 0.0,
-        "Left": left / face_pixels * 100 if face_pixels else 0.0,
-        "Center": center_area / face_pixels * 100 if face_pixels else 0.0,
-        "Right": right / face_pixels * 100 if face_pixels else 0.0,
+        "Upper": upper / total_area * 100 if total_area else 0.0,
+        "Middle": middle / total_area * 100 if total_area else 0.0,
+        "Lower": lower / total_area * 100 if total_area else 0.0,
+        "Left": left / total_area * 100 if total_area else 0.0,
+        "Center": center_area / total_area * 100 if total_area else 0.0,
+        "Right": right / total_area * 100 if total_area else 0.0,
     }
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -2640,6 +2682,7 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
         "porphyrin_count": int(count),
         "porphyrin_area": float(total_area),
         "detection_rate_percent": float(detection_rate),
+        "face_area_pixels": int(face_pixels),
         "grade": grade,
         "region_analysis": {
             key: float(value)
@@ -2690,6 +2733,7 @@ def analyze_porphyrin_api(profile_id, capture_id):
             "porphyrin_count": report["porphyrin_count"],
             "porphyrin_area": report["porphyrin_area"],
             "detection_rate_percent": report["detection_rate_percent"],
+            "face_area_pixels": report["face_area_pixels"],
             "grade": report["grade"],
             "region_analysis": report["region_analysis"],
             "threshold_percentile": report["threshold_percentile"],

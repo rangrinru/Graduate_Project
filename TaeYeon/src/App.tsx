@@ -49,7 +49,6 @@ type Toast = {
 };
 
 type PorphyrinResult = {
-  porphyrin_count: number;
   porphyrin_area: number;
   detection_rate_percent: number;
   grade: string;
@@ -102,6 +101,15 @@ const AUTO_CHECK_LABELS: Array<{ key: keyof AutoCaptureChecks; label: string }> 
   { key: "eyes_closed", label: "눈 감음" },
   { key: "stable_ok", label: "안정 유지" },
 ];
+
+const REGION_LABELS: Record<string, string> = {
+  Upper: "상단",
+  Middle: "중앙",
+  Lower: "하단",
+  Left: "왼쪽",
+  Center: "가운데",
+  Right: "오른쪽",
+};
 
 type KeyboardMode = "ko" | "en" | "num";
 
@@ -909,7 +917,6 @@ function App() {
       }
 
       setPorphyrinResult({
-        porphyrin_count: data.porphyrin_count,
         porphyrin_area: data.porphyrin_area,
         detection_rate_percent: data.detection_rate_percent,
         grade: data.grade,
@@ -923,7 +930,7 @@ function App() {
       setShowAnalysisResultModal(false);
 
       setSelectedFilter("660nm_filter");
-      showToast(`분석 완료: ${data.porphyrin_count}개 검출`, "success");
+      showToast("포르피린 분석 완료", "success");
     } catch (error) {
       console.error(error);
       showToast("포르피린 분석 실패", "error");
@@ -2990,10 +2997,10 @@ function App() {
                         {isAnalyzingPorphyrin ? "포르피린 분석 중..." : "포르피린 분석하기"}
                       </button>
 
-                      {porphyrinResult && (
+                      {false && porphyrinResult && (
                         <div className="analysis-result-compact">
                           <div className="analysis-compact-text">
-                            분석 완료: {porphyrinResult.porphyrin_count}개 검출
+                            분석 완료
                           </div>
 
                           <button
@@ -3009,21 +3016,14 @@ function App() {
                         <div className="analysis-result-box">
                           <div className="analysis-result-grid">
                             <div className="analysis-stat">
-                              <div className="analysis-stat-label">Detected Count</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.porphyrin_count}
-                              </div>
-                            </div>
-
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">Detection Rate</div>
+                              <div className="analysis-stat-label">얼굴 영역 대비 포르피린</div>
                               <div className="analysis-stat-value">
                                 {porphyrinResult.detection_rate_percent.toFixed(2)}%
                               </div>
                             </div>
 
                             <div className="analysis-stat">
-                              <div className="analysis-stat-label">Grade</div>
+                              <div className="analysis-stat-label">등급</div>
                               <div className="analysis-stat-value">
                                 {porphyrinResult.grade}
                               </div>
@@ -3034,8 +3034,8 @@ function App() {
                             {Object.entries(porphyrinResult.region_analysis).map(
                               ([key, value]) => (
                                 <div className="analysis-region-item" key={key}>
-                                  <span>{key}</span>
-                                  <strong>{value.toFixed(2)}%</strong>
+                                  <span>{REGION_LABELS[key] || key}</span>
+                                  <strong>{Math.round(value)}%</strong>
                                 </div>
                               )
                             )}
@@ -3073,7 +3073,7 @@ function App() {
             <div className="analysis-full-stat">
               <div className="analysis-full-stat-label">검출 개수</div>
               <div className="analysis-full-stat-value">
-                {porphyrinResult.porphyrin_count}개
+                {porphyrinResult.detection_rate_percent.toFixed(2)}%
               </div>
             </div>
 
