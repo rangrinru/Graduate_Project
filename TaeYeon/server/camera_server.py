@@ -2577,6 +2577,36 @@ def make_porphyrin_face_mask(gray):
     return mask
 
 
+def normalize_region_percentages(region_area, total_area):
+    if total_area <= 0:
+        return {
+            key: 0
+            for key in region_area
+        }
+
+    raw = {
+        key: value / total_area * 100
+        for key, value in region_area.items()
+    }
+    rounded = {
+        key: int(round(value))
+        for key, value in raw.items()
+    }
+
+    diff = 100 - sum(rounded.values())
+    if diff != 0:
+        order = sorted(
+            raw,
+            key=lambda key: abs(raw[key] - rounded[key]),
+            reverse=True
+        )
+        step = 1 if diff > 0 else -1
+        for idx in range(abs(diff)):
+            rounded[order[idx % len(order)]] += step
+
+    return rounded
+
+
 def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     img = cv2.imread(str(image_path))
     if img is None:
@@ -2624,8 +2654,14 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
 
     count = 0
     total_area = 0.0
-    upper = middle = lower = 0.0
-    left = center_area = right = 0.0
+    region_area = {
+        "forehead": 0.0,
+        "nose": 0.0,
+        "philtrum": 0.0,
+        "chin": 0.0,
+        "right_cheek": 0.0,
+        "left_cheek": 0.0,
+    }
 
     for cnt in contours:
         area = cv2.contourArea(cnt)
@@ -2639,19 +2675,21 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
         count += 1
         total_area += float(area)
 
-        if cy < h // 3:
-            upper += area
-        elif cy < h * 2 // 3:
-            middle += area
-        else:
-            lower += area
+        rel_x = cx / float(w)
+        rel_y = cy / float(h)
 
-        if cx < w // 3:
-            left += area
-        elif cx < w * 2 // 3:
-            center_area += area
+        if rel_y < 0.34:
+            region_area["forehead"] += area
+        elif 0.40 <= rel_x <= 0.60 and rel_y < 0.60:
+            region_area["nose"] += area
+        elif 0.36 <= rel_x <= 0.64 and rel_y < 0.72:
+            region_area["philtrum"] += area
+        elif rel_y >= 0.72:
+            region_area["chin"] += area
+        elif rel_x < 0.50:
+            region_area["right_cheek"] += area
         else:
-            right += area
+            region_area["left_cheek"] += area
 
     detection_rate = (total_area / face_pixels) * 100 if face_pixels else 0.0
     if detection_rate < 1:
@@ -2661,14 +2699,7 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     else:
         grade = "High"
 
-    region_analysis = {
-        "Upper": upper / total_area * 100 if total_area else 0.0,
-        "Middle": middle / total_area * 100 if total_area else 0.0,
-        "Lower": lower / total_area * 100 if total_area else 0.0,
-        "Left": left / total_area * 100 if total_area else 0.0,
-        "Center": center_area / total_area * 100 if total_area else 0.0,
-        "Right": right / total_area * 100 if total_area else 0.0,
-    }
+    region_analysis = normalize_region_percentages(region_area, total_area)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     heatmap_path = output_dir / "porphyrin_heatmap.jpg"

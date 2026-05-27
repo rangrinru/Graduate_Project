@@ -103,12 +103,12 @@ const AUTO_CHECK_LABELS: Array<{ key: keyof AutoCaptureChecks; label: string }> 
 ];
 
 const REGION_LABELS: Record<string, string> = {
-  Upper: "상단",
-  Middle: "중앙",
-  Lower: "하단",
-  Left: "왼쪽",
-  Center: "가운데",
-  Right: "오른쪽",
+  forehead: "이마",
+  nose: "코",
+  philtrum: "인중",
+  chin: "턱",
+  right_cheek: "오른쪽 볼",
+  left_cheek: "왼쪽 볼",
 };
 
 type KeyboardMode = "ko" | "en" | "num";
@@ -3093,7 +3093,7 @@ function App() {
                               ([key, value]) => (
                                 <div className="analysis-region-item" key={key}>
                                   <span>{REGION_LABELS[key] || key}</span>
-                                  <strong>{Math.round(value)}%</strong>
+                                  <strong>{value}%</strong>
                                 </div>
                               )
                             )}
