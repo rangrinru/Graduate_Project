@@ -2113,6 +2113,7 @@ def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: s
         "porphyrin-overlay": "porphyrin_overlay.jpg",
         "porphyrin-mask": "porphyrin_mask.jpg",
         "porphyrin-compare": "porphyrin_compare.jpg",
+        "porphyrin-heatmap": "porphyrin_heatmap.jpg",
     }
 
     # 유효하지 않은 요청이면 예외 발생
@@ -2552,6 +2553,112 @@ def delete_history_api(profile_id, capture_id):
 # 특정 촬영 기록 포르피린 분석 API
 # =========================
 
+def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
+    img = cv2.imread(str(image_path))
+    if img is None:
+        raise RuntimeError("이미지 로드 실패")
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    blur = cv2.GaussianBlur(enhanced, (5, 5), 0)
+
+    threshold_value = np.percentile(blur, 99)
+    _, thresh = cv2.threshold(blur, threshold_value, 255, cv2.THRESH_BINARY)
+
+    kernel = np.ones((3, 3), np.uint8)
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    thresh = cv2.dilate(thresh, kernel, iterations=1)
+
+    contours, _ = cv2.findContours(
+        thresh,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    heatmap = cv2.applyColorMap(blur, cv2.COLORMAP_JET)
+    h, w = gray.shape
+    face_pixels = gray.size
+
+    count = 0
+    total_area = 0.0
+    upper = middle = lower = 0.0
+    left = center_area = right = 0.0
+
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if area < 20 or area > 4000:
+            continue
+
+        x, y, cw, ch = cv2.boundingRect(cnt)
+        cx = x + cw // 2
+        cy = y + ch // 2
+
+        cv2.drawContours(heatmap, [cnt], -1, (255, 255, 255), 2)
+
+        count += 1
+        total_area += float(area)
+
+        if cy < h // 3:
+            upper += area
+        elif cy < h * 2 // 3:
+            middle += area
+        else:
+            lower += area
+
+        if cx < w // 3:
+            left += area
+        elif cx < w * 2 // 3:
+            center_area += area
+        else:
+            right += area
+
+    detection_rate = (total_area / face_pixels) * 100 if face_pixels else 0.0
+    if detection_rate < 1:
+        grade = "Low"
+    elif detection_rate < 3:
+        grade = "Medium"
+    else:
+        grade = "High"
+
+    region_analysis = {
+        "Upper": upper / face_pixels * 100 if face_pixels else 0.0,
+        "Middle": middle / face_pixels * 100 if face_pixels else 0.0,
+        "Lower": lower / face_pixels * 100 if face_pixels else 0.0,
+        "Left": left / face_pixels * 100 if face_pixels else 0.0,
+        "Center": center_area / face_pixels * 100 if face_pixels else 0.0,
+        "Right": right / face_pixels * 100 if face_pixels else 0.0,
+    }
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    heatmap_path = output_dir / "porphyrin_heatmap.jpg"
+    report_path = output_dir / "porphyrin_report.json"
+
+    cv2.imwrite(str(heatmap_path), heatmap)
+
+    report = {
+        "porphyrin_count": int(count),
+        "porphyrin_area": float(total_area),
+        "detection_rate_percent": float(detection_rate),
+        "grade": grade,
+        "region_analysis": {
+            key: float(value)
+            for key, value in region_analysis.items()
+        },
+        "threshold_percentile": 99,
+        "threshold_value": float(threshold_value),
+        "min_area": 20,
+        "max_area": 4000,
+        "heatmap_path": str(heatmap_path),
+        "report_path": str(report_path),
+    }
+
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+
+    return report
+
+
 @app.route("/profiles/<profile_id>/history/<capture_id>/analyze-porphyrin", methods=["POST"])
 def analyze_porphyrin_api(profile_id, capture_id):
     try:
@@ -2574,7 +2681,7 @@ def analyze_porphyrin_api(profile_id, capture_id):
         )
 
         # 포르피린 분석 실행
-        report = analyze_porphyrin_image(image_path, analysis_dir)
+        report = analyze_porphyrin_heatmap_v04(image_path, analysis_dir)
 
         # 성공 응답 반환
         return jsonify({
@@ -2582,10 +2689,14 @@ def analyze_porphyrin_api(profile_id, capture_id):
             "captureId": capture_id,
             "porphyrin_count": report["porphyrin_count"],
             "porphyrin_area": report["porphyrin_area"],
+            "detection_rate_percent": report["detection_rate_percent"],
+            "grade": report["grade"],
+            "region_analysis": report["region_analysis"],
+            "threshold_percentile": report["threshold_percentile"],
             "threshold_value": report["threshold_value"],
-            "overlay_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-overlay",
-            "mask_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-mask",
-            "compare_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-compare"
+            "min_area": report["min_area"],
+            "max_area": report["max_area"],
+            "heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-heatmap"
         })
 
     except Exception as e:

@@ -51,10 +51,14 @@ type Toast = {
 type PorphyrinResult = {
   porphyrin_count: number;
   porphyrin_area: number;
+  detection_rate_percent: number;
+  grade: string;
+  region_analysis: Record<string, number>;
+  threshold_percentile: number;
   threshold_value: number;
-  overlay_url: string;
-  mask_url: string;
-  compare_url: string;
+  min_area: number;
+  max_area: number;
+  heatmap_url: string;
 };
 
 type AutoCaptureChecks = {
@@ -907,12 +911,16 @@ function App() {
       setPorphyrinResult({
         porphyrin_count: data.porphyrin_count,
         porphyrin_area: data.porphyrin_area,
+        detection_rate_percent: data.detection_rate_percent,
+        grade: data.grade,
+        region_analysis: data.region_analysis || {},
+        threshold_percentile: data.threshold_percentile,
         threshold_value: data.threshold_value,
-        overlay_url: data.overlay_url,
-        mask_url: data.mask_url,
-        compare_url: data.compare_url,
+        min_area: data.min_area,
+        max_area: data.max_area,
+        heatmap_url: data.heatmap_url,
       });
-      setShowAnalysisResultModal(true);
+      setShowAnalysisResultModal(false);
 
       setSelectedFilter("660nm_filter");
       showToast(`분석 완료: ${data.porphyrin_count}개 검출`, "success");
@@ -2054,6 +2062,30 @@ function App() {
           font-weight: 800;
         }
 
+        .analysis-region-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+          margin-top: 12px;
+        }
+
+        .analysis-region-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          border-radius: 12px;
+          background: rgba(255,255,255,0.06);
+          color: rgba(255,255,255,0.72);
+          font-size: 13px;
+          padding: 10px 12px;
+        }
+
+        .analysis-region-item strong {
+          color: white;
+          font-size: 14px;
+        }
+
         .analysis-image {
           width: 100%;
           max-height: 70vh;
@@ -2924,7 +2956,13 @@ function App() {
                     </div>
 
                     <div className="image-viewer">
-                      {currentImage?.exists && currentImage?.image_url ? (
+                      {selectedFilter === "660nm_filter" && porphyrinResult?.heatmap_url ? (
+                        <img
+                          className="history-image"
+                          src={getImageSrc(porphyrinResult.heatmap_url)}
+                          alt="Porphyrin heatmap"
+                        />
+                      ) : currentImage?.exists && currentImage?.image_url ? (
                         <img
                           className="history-image"
                           src={getImageSrc(currentImage.image_url)}
@@ -2964,6 +3002,44 @@ function App() {
                           >
                             분석 결과 크게 보기
                           </button>
+                        </div>
+                      )}
+
+                      {porphyrinResult && (
+                        <div className="analysis-result-box">
+                          <div className="analysis-result-grid">
+                            <div className="analysis-stat">
+                              <div className="analysis-stat-label">Detected Count</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_count}
+                              </div>
+                            </div>
+
+                            <div className="analysis-stat">
+                              <div className="analysis-stat-label">Detection Rate</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.detection_rate_percent.toFixed(2)}%
+                              </div>
+                            </div>
+
+                            <div className="analysis-stat">
+                              <div className="analysis-stat-label">Grade</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.grade}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="analysis-region-grid">
+                            {Object.entries(porphyrinResult.region_analysis).map(
+                              ([key, value]) => (
+                                <div className="analysis-region-item" key={key}>
+                                  <span>{key}</span>
+                                  <strong>{value.toFixed(2)}%</strong>
+                                </div>
+                              )
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3019,7 +3095,7 @@ function App() {
           <div className="analysis-full-image-wrap">
             <img
               className="analysis-full-image"
-              src={getImageSrc(porphyrinResult.compare_url)}
+              src={getImageSrc(porphyrinResult.heatmap_url)}
               alt="포르피린 분석 결과"
             />
           </div>
