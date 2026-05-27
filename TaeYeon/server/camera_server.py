@@ -2604,9 +2604,7 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
         0,
         255
     ).astype(np.uint8)
-    heat_scaled = cv2.bitwise_and(heat_scaled, heat_scaled, mask=face_mask)
     heatmap = cv2.applyColorMap(heat_scaled, cv2.COLORMAP_JET)
-    heatmap[face_mask == 0] = (0, 0, 0)
 
     threshold_value = np.percentile(face_values, 98.5)
     _, thresh = cv2.threshold(blur, threshold_value, 255, cv2.THRESH_BINARY)
