@@ -1672,9 +1672,9 @@ function App() {
         .guide-face {
           position: absolute;
           left: 50%;
-          top: clamp(120px, 14vh, 180px);
-          width: clamp(280px, 58vw, 470px);
-          height: clamp(420px, 50vh, 650px);
+          top: clamp(105px, 12vh, 155px);
+          width: clamp(360px, 76vw, 540px);
+          height: clamp(540px, 61vh, 760px);
           transform: translateX(-50%);
           border: 4px dashed rgba(103,232,249,0.92);
           border-radius: 47% 47% 43% 43% / 34% 34% 57% 57%;
@@ -2303,10 +2303,10 @@ function App() {
           }
 
           .guide-face {
-            top: clamp(105px, 13vh, 145px);
-            width: clamp(250px, 58vw, 330px);
-            height: clamp(380px, 50vh, 520px);
-            border-width: 3px;
+            top: clamp(95px, 11vh, 125px);
+            width: clamp(390px, 78vw, 440px);
+            height: clamp(575px, 61vh, 650px);
+            border-width: 4px;
           }
 
           .selected-profile {
@@ -2401,9 +2401,9 @@ function App() {
         }
 
         .guide-face {
-          top: clamp(135px, 14vh, 190px);
-          width: clamp(330px, 58vw, 500px);
-          height: clamp(500px, 51vh, 690px);
+          top: clamp(110px, 12vh, 165px);
+          width: clamp(430px, 76vw, 590px);
+          height: clamp(630px, 62vh, 820px);
           border-width: 5px;
         }
 
