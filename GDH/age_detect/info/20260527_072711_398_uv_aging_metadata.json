@@ -1,0 +1,155 @@
+{
+    "metadata_type": "uv_aging_analysis",
+    "created_at": "2026-05-27T16:37:19.375603",
+    "date_folder": "2026-05-27",
+    "capture_key": "20260527_072711_398",
+    "input_images": {
+        "no_filter": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\captures\\2026-05-27\\no_filter_2026-05-27\\20260527_072711_398_cam2.png",
+        "405nm": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\captures\\2026-05-27\\405nm_2026-05-27\\20260527_072711_398_cam3.png"
+    },
+    "output": {
+        "result_image": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\GDH\\age_detect\\info\\20260527_072711_398_uv_aging_result.png",
+        "metadata_file": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\GDH\\age_detect\\info\\20260527_072711_398_uv_aging_metadata.json"
+    },
+    "analysis_result": {
+        "aging_region_count": 12,
+        "detection_rate_percent": 3.2347,
+        "grade": "High",
+        "coordinates": [
+            {
+                "x": 201,
+                "y": 836,
+                "width": 50,
+                "height": 23,
+                "center_x": 226,
+                "center_y": 847,
+                "area": 419.5
+            },
+            {
+                "x": 446,
+                "y": 727,
+                "width": 33,
+                "height": 71,
+                "center_x": 462,
+                "center_y": 762,
+                "area": 1024.0
+            },
+            {
+                "x": 471,
+                "y": 700,
+                "width": 12,
+                "height": 19,
+                "center_x": 477,
+                "center_y": 709,
+                "area": 131.0
+            },
+            {
+                "x": 58,
+                "y": 686,
+                "width": 51,
+                "height": 137,
+                "center_x": 83,
+                "center_y": 754,
+                "area": 2826.5
+            },
+            {
+                "x": 346,
+                "y": 663,
+                "width": 37,
+                "height": 15,
+                "center_x": 364,
+                "center_y": 670,
+                "area": 385.5
+            },
+            {
+                "x": 293,
+                "y": 650,
+                "width": 21,
+                "height": 14,
+                "center_x": 303,
+                "center_y": 657,
+                "area": 207.5
+            },
+            {
+                "x": 209,
+                "y": 638,
+                "width": 28,
+                "height": 14,
+                "center_x": 223,
+                "center_y": 645,
+                "area": 250.0
+            },
+            {
+                "x": 425,
+                "y": 623,
+                "width": 13,
+                "height": 11,
+                "center_x": 431,
+                "center_y": 628,
+                "area": 93.5
+            },
+            {
+                "x": 108,
+                "y": 617,
+                "width": 33,
+                "height": 21,
+                "center_x": 124,
+                "center_y": 627,
+                "area": 405.5
+            },
+            {
+                "x": 324,
+                "y": 585,
+                "width": 24,
+                "height": 12,
+                "center_x": 336,
+                "center_y": 591,
+                "area": 161.0
+            },
+            {
+                "x": 385,
+                "y": 539,
+                "width": 58,
+                "height": 37,
+                "center_x": 414,
+                "center_y": 557,
+                "area": 1327.5
+            },
+            {
+                "x": 99,
+                "y": 527,
+                "width": 115,
+                "height": 54,
+                "center_x": 156,
+                "center_y": 554,
+                "area": 2416.0
+            }
+        ]
+    },
+    "alignment_info": {
+        "no_filter_face_bbox": {
+            "x": 0,
+            "y": 399,
+            "width": 516,
+            "height": 578
+        },
+        "uv_405_face_bbox": {
+            "x": 292,
+            "y": 394,
+            "width": 508,
+            "height": 577
+        },
+        "threshold_percentile": 97,
+        "threshold_value": 125.0,
+        "analysis_method": "face_roi_aligned_405nm_to_no_filter"
+    },
+    "solution": {
+        "summary": "자외선 노화 의심 영역이 비교적 많이 검출되었습니다.",
+        "recommendation": [
+            "자외선 노출 시간을 줄이세요.",
+            "외출 시 자외선 차단제와 모자 사용을 권장합니다.",
+            "피부 진정 및 재생 관리가 필요할 수 있습니다.",
+            "지속적으로 악화되면 피부 전문가 상담을 권장합니다."
+        ]
+    }
+}

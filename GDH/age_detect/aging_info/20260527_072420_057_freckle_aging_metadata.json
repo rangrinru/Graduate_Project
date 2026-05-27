@@ -1,0 +1,51 @@
+{
+    "metadata_type": "freckle_aging_analysis",
+    "created_at": "2026-05-27T17:39:23",
+    "analysis_note": "This is an image-processing estimate, not a medical diagnosis.",
+    "analysis_result": {
+        "freckle_count": 3,
+        "freckle_area_rate_percent": 0.0085,
+        "aging_level": "Low",
+        "aging_score": 2,
+        "summary": "Small amount of freckle-like pigmentation detected.",
+        "face_detection_method": "center_fallback",
+        "face_bbox": {
+            "x": 73,
+            "y": 0,
+            "width": 654,
+            "height": 1239
+        },
+        "freckle_coordinates": [
+            {
+                "x": 609,
+                "y": 968,
+                "width": 10,
+                "height": 8,
+                "center_x": 614,
+                "center_y": 972,
+                "area": 31.0
+            },
+            {
+                "x": 618,
+                "y": 948,
+                "width": 7,
+                "height": 6,
+                "center_x": 621,
+                "center_y": 951,
+                "area": 19.0
+            },
+            {
+                "x": 633,
+                "y": 887,
+                "width": 8,
+                "height": 6,
+                "center_x": 637,
+                "center_y": 890,
+                "area": 19.0
+            }
+        ]
+    },
+    "input_image": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\captures\\2026-05-27\\no_filter_2026-05-27\\20260527_072420_057_cam2.png",
+    "output_image": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\GDH\\age_detect\\aging_info\\20260527_072420_057_freckle_aging_result.png",
+    "metadata_file": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\GDH\\age_detect\\aging_info\\20260527_072420_057_freckle_aging_metadata.json"
+}

@@ -1,0 +1,78 @@
+{
+    "metadata_type": "freckle_aging_analysis",
+    "created_at": "2026-05-27T17:39:22",
+    "analysis_note": "This is an image-processing estimate, not a medical diagnosis.",
+    "analysis_result": {
+        "freckle_count": 6,
+        "freckle_area_rate_percent": 0.0113,
+        "aging_level": "Low",
+        "aging_score": 5,
+        "summary": "Small amount of freckle-like pigmentation detected.",
+        "face_detection_method": "haar_face",
+        "face_bbox": {
+            "x": 0,
+            "y": 304,
+            "width": 591,
+            "height": 653
+        },
+        "freckle_coordinates": [
+            {
+                "x": 102,
+                "y": 784,
+                "width": 3,
+                "height": 3,
+                "center_x": 103,
+                "center_y": 785,
+                "area": 4.0
+            },
+            {
+                "x": 68,
+                "y": 674,
+                "width": 7,
+                "height": 6,
+                "center_x": 71,
+                "center_y": 677,
+                "area": 15.5
+            },
+            {
+                "x": 125,
+                "y": 673,
+                "width": 4,
+                "height": 5,
+                "center_x": 127,
+                "center_y": 675,
+                "area": 10.0
+            },
+            {
+                "x": 58,
+                "y": 667,
+                "width": 3,
+                "height": 3,
+                "center_x": 59,
+                "center_y": 668,
+                "area": 4.0
+            },
+            {
+                "x": 123,
+                "y": 664,
+                "width": 4,
+                "height": 3,
+                "center_x": 125,
+                "center_y": 665,
+                "area": 6.0
+            },
+            {
+                "x": 415,
+                "y": 659,
+                "width": 3,
+                "height": 3,
+                "center_x": 416,
+                "center_y": 660,
+                "area": 4.0
+            }
+        ]
+    },
+    "input_image": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\captures\\2026-05-27\\no_filter_2026-05-27\\20260527_072140_508_cam2.png",
+    "output_image": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\GDH\\age_detect\\aging_info\\20260527_072140_508_freckle_aging_result.png",
+    "metadata_file": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\GDH\\age_detect\\aging_info\\20260527_072140_508_freckle_aging_metadata.json"
+}

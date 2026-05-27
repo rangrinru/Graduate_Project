@@ -1,0 +1,100 @@
+{
+    "metadata_type": "uv_aging_analysis",
+    "created_at": "2026-05-27T16:37:20.073950",
+    "date_folder": "2026-05-27",
+    "capture_key": "20260527_073725_035",
+    "input_images": {
+        "no_filter": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\captures\\2026-05-27\\no_filter_2026-05-27\\20260527_073725_035_cam2.png",
+        "405nm": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\captures\\2026-05-27\\405nm_2026-05-27\\20260527_073725_035_cam3.png"
+    },
+    "output": {
+        "result_image": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\GDH\\age_detect\\info\\20260527_073725_035_uv_aging_result.png",
+        "metadata_file": "C:\\Users\\고대현\\Desktop\\Graduate_Project\\GDH\\age_detect\\info\\20260527_073725_035_uv_aging_metadata.json"
+    },
+    "analysis_result": {
+        "aging_region_count": 6,
+        "detection_rate_percent": 1.5393,
+        "grade": "Medium",
+        "coordinates": [
+            {
+                "x": 103,
+                "y": 821,
+                "width": 47,
+                "height": 53,
+                "center_x": 126,
+                "center_y": 847,
+                "area": 1561.0
+            },
+            {
+                "x": 476,
+                "y": 812,
+                "width": 16,
+                "height": 33,
+                "center_x": 484,
+                "center_y": 828,
+                "area": 272.0
+            },
+            {
+                "x": 474,
+                "y": 704,
+                "width": 68,
+                "height": 95,
+                "center_x": 508,
+                "center_y": 751,
+                "area": 2869.0
+            },
+            {
+                "x": 471,
+                "y": 676,
+                "width": 25,
+                "height": 75,
+                "center_x": 483,
+                "center_y": 713,
+                "area": 764.5
+            },
+            {
+                "x": 477,
+                "y": 645,
+                "width": 14,
+                "height": 19,
+                "center_x": 484,
+                "center_y": 654,
+                "area": 140.0
+            },
+            {
+                "x": 498,
+                "y": 550,
+                "width": 11,
+                "height": 14,
+                "center_x": 503,
+                "center_y": 557,
+                "area": 91.5
+            }
+        ]
+    },
+    "alignment_info": {
+        "no_filter_face_bbox": {
+            "x": 0,
+            "y": 382,
+            "width": 566,
+            "height": 654
+        },
+        "uv_405_face_bbox": {
+            "x": 233,
+            "y": 376,
+            "width": 567,
+            "height": 665
+        },
+        "threshold_percentile": 97,
+        "threshold_value": 189.0,
+        "analysis_method": "face_roi_aligned_405nm_to_no_filter"
+    },
+    "solution": {
+        "summary": "일부 부위에서 자외선 노화 의심 영역이 검출되었습니다.",
+        "recommendation": [
+            "자외선 차단제를 더 꼼꼼히 사용하세요.",
+            "건조한 부위에는 보습 관리를 강화하세요.",
+            "비타민 C 또는 항산화 성분 기반 관리를 고려하세요."
+        ]
+    }
+}
