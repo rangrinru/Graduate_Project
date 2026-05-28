@@ -2607,21 +2607,52 @@ def normalize_region_percentages(region_area, total_area):
     return rounded
 
 
+def normalize_region_scores(region_score):
+    total_score = float(sum(region_score.values()))
+    if total_score <= 0:
+        return {
+            key: 0
+            for key in region_score
+        }
+
+    raw = {
+        key: value / total_score * 100.0
+        for key, value in region_score.items()
+    }
+    rounded = {
+        key: int(round(value))
+        for key, value in raw.items()
+    }
+
+    diff = 100 - sum(rounded.values())
+    if diff != 0:
+        order = sorted(
+            raw,
+            key=lambda key: abs(raw[key] - rounded[key]),
+            reverse=True
+        )
+        step = 1 if diff > 0 else -1
+        for idx in range(abs(diff)):
+            rounded[order[idx % len(order)]] += step
+
+    return rounded
+
+
 def classify_face_region(x, y, face_rect):
     fx, fy, fw, fh = face_rect
     rel_x = (x - fx) / float(fw) if fw else 0.5
     rel_y = (y - fy) / float(fh) if fh else 0.5
 
-    if rel_y < 0.27:
-        return "forehead"
-
-    if 0.40 <= rel_x <= 0.60 and 0.27 <= rel_y < 0.56:
+    if 0.39 <= rel_x <= 0.61 and 0.29 <= rel_y < 0.58:
         return "nose"
 
-    if 0.43 <= rel_x <= 0.57 and 0.56 <= rel_y < 0.68:
+    if rel_y < 0.35:
+        return "forehead"
+
+    if 0.42 <= rel_x <= 0.58 and 0.58 <= rel_y < 0.70:
         return "philtrum"
 
-    if rel_y >= 0.68:
+    if rel_y >= 0.70:
         return "chin"
 
     if rel_x < 0.50:
@@ -2665,25 +2696,26 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     ).astype(np.uint8)
     heatmap = cv2.applyColorMap(heat_scaled, cv2.COLORMAP_JET)
 
-    threshold_value = np.percentile(face_values, 98.5)
-    _, thresh = cv2.threshold(blur, threshold_value, 255, cv2.THRESH_BINARY)
+    visible_threshold = 85
+    _, thresh = cv2.threshold(heat_scaled, visible_threshold, 255, cv2.THRESH_BINARY)
     thresh = cv2.bitwise_and(thresh, thresh, mask=face_mask)
 
     kernel = np.ones((3, 3), np.uint8)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-    thresh = cv2.dilate(thresh, kernel, iterations=1)
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
 
-    contours, _ = cv2.findContours(
-        thresh,
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE
-    )
-
-    h, w = gray.shape
-
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(thresh, connectivity=8)
     clean_mask = np.zeros_like(gray)
     accepted_count = 0
-    region_area = {
+    for label_idx in range(1, num_labels):
+        area = int(stats[label_idx, cv2.CC_STAT_AREA])
+        if area < 12:
+            continue
+
+        clean_mask[labels == label_idx] = 255
+        accepted_count += 1
+
+    region_score = {
         "forehead": 0.0,
         "nose": 0.0,
         "philtrum": 0.0,
@@ -2692,20 +2724,13 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
         "left_cheek": 0.0,
     }
 
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area < 20 or area > 4000:
-            continue
-
-        cv2.drawContours(clean_mask, [cnt], -1, 255, -1)
-        accepted_count += 1
-
     ys, xs = np.where(clean_mask > 0)
     total_area = float(len(xs))
+    intensity_values = heat_scaled[ys, xs].astype(np.float32) / 255.0 if len(xs) else []
 
-    for x, y in zip(xs, ys):
+    for x, y, intensity in zip(xs, ys, intensity_values):
         region_key = classify_face_region(int(x), int(y), face_rect)
-        region_area[region_key] += 1.0
+        region_score[region_key] += float(intensity)
 
     detection_rate = (total_area / face_pixels) * 100 if face_pixels else 0.0
     if detection_rate < 1:
@@ -2715,13 +2740,15 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     else:
         grade = "High"
 
-    region_analysis = normalize_region_percentages(region_area, total_area)
+    region_analysis = normalize_region_scores(region_score)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     heatmap_path = output_dir / "porphyrin_heatmap.jpg"
+    mask_path = output_dir / "porphyrin_mask.jpg"
     report_path = output_dir / "porphyrin_report.json"
 
     cv2.imwrite(str(heatmap_path), heatmap)
+    cv2.imwrite(str(mask_path), clean_mask)
 
     report = {
         "porphyrin_count": int(accepted_count),
@@ -2733,11 +2760,12 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
             key: float(value)
             for key, value in region_analysis.items()
         },
-        "threshold_percentile": 99,
-        "threshold_value": float(threshold_value),
-        "min_area": 20,
-        "max_area": 4000,
+        "threshold_percentile": 0,
+        "threshold_value": float(visible_threshold),
+        "min_area": 12,
+        "max_area": 0,
         "heatmap_path": str(heatmap_path),
+        "mask_path": str(mask_path),
         "report_path": str(report_path),
     }
 
