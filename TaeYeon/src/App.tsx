@@ -68,6 +68,7 @@ function App() {
   const [isAnalyzingPorphyrin, setIsAnalyzingPorphyrin] = useState(false);
   const [porphyrinResult, setPorphyrinResult] = useState<PorphyrinResult | null>(null);
   const [showAnalysisResultModal, setShowAnalysisResultModal] = useState(false);
+  const historyScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [whiteLedOn, setWhiteLedOn] = useState(false);
   const [isChangingWhiteLed, setIsChangingWhiteLed] = useState(false);
@@ -874,6 +875,17 @@ function App() {
     setScreen("history");
   };
 
+  const scrollHistoryList = (direction: "up" | "down") => {
+    const target = historyScrollRef.current;
+    if (!target) return;
+
+    const distance = Math.max(260, Math.floor(target.clientHeight * 0.72));
+    target.scrollBy({
+      top: direction === "up" ? -distance : distance,
+      behavior: "smooth",
+    });
+  };
+
   const getImageSrc = (imageUrl: string | null | undefined) => {
     if (!imageUrl) return "";
 
@@ -1147,7 +1159,26 @@ function App() {
                 </div>
               </div>
 
-              <div className="history-container">
+              <div className="history-scroll-controls" aria-label="이전 기록 스크롤">
+                <button
+                  className="history-scroll-btn"
+                  type="button"
+                  onClick={() => scrollHistoryList("up")}
+                  aria-label="이전 기록 위로 스크롤"
+                >
+                  ▲
+                </button>
+                <button
+                  className="history-scroll-btn"
+                  type="button"
+                  onClick={() => scrollHistoryList("down")}
+                  aria-label="이전 기록 아래로 스크롤"
+                >
+                  ▼
+                </button>
+              </div>
+
+              <div className="history-container" ref={historyScrollRef}>
                 <button className="mini-back-btn" onClick={backToCamera}>
                   카메라로 돌아가기
                 </button>
