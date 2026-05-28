@@ -2762,16 +2762,18 @@ def classify_face_region_by_landmarks(x, y, face_rect, metrics):
 
     forehead_bottom = max(fy + fh * 0.34, metrics["eye_y"] + fh * 0.04)
     mouth_y = metrics["mouth_y"]
+    philtrum_top = metrics["nose_y"] + fh * 0.08
+    philtrum_bottom = mouth_y + fh * 0.04
 
     if y < forehead_bottom:
         return "forehead"
 
-    nose_half_width = fw * 0.13
-    if abs(x - metrics["nose_x"]) <= nose_half_width and y < mouth_y:
-        return "nose"
-
-    if abs(x - metrics["nose_x"]) <= fw * 0.10 and mouth_y <= y < fy + fh * 0.72:
+    if abs(x - metrics["nose_x"]) <= fw * 0.14 and philtrum_top <= y < philtrum_bottom:
         return "philtrum"
+
+    nose_half_width = fw * 0.13
+    if abs(x - metrics["nose_x"]) <= nose_half_width and y < philtrum_top:
+        return "nose"
 
     if y >= fy + fh * 0.72:
         return "chin"
@@ -2837,6 +2839,21 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path, face_refer
     visible_threshold = 155
     _, thresh = cv2.threshold(heat_scaled, visible_threshold, 255, cv2.THRESH_BINARY)
     thresh = cv2.bitwise_and(thresh, thresh, mask=face_mask)
+
+    if landmark_pts is not None:
+        philtrum_threshold = 105
+        philtrum_mask = np.zeros_like(gray)
+        face_ys, face_xs = np.where((face_mask > 0) & (heat_scaled >= philtrum_threshold))
+        for px, py in zip(face_xs, face_ys):
+            region_key = classify_face_region_by_landmarks(
+                int(px),
+                int(py),
+                face_rect,
+                landmark_metrics
+            )
+            if region_key == "philtrum":
+                philtrum_mask[int(py), int(px)] = 255
+        thresh = cv2.bitwise_or(thresh, philtrum_mask)
 
     kernel = np.ones((3, 3), np.uint8)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
