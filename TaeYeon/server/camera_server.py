@@ -325,7 +325,8 @@ def start_uc788_stream():
     raw_stream_process = subprocess.Popen(
         command,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
     )
 
     # FIFO reader 스레드 시작
@@ -344,6 +345,16 @@ def read_exact_from_fifo(size, timeout_sec=2.0):
 
     # 필요한 크기만큼 반복해서 읽기
     while received < size:
+        if raw_stream_process is not None and raw_stream_process.poll() is not None:
+            stderr = ""
+            try:
+                stderr = raw_stream_process.stderr.read() if raw_stream_process.stderr else ""
+            except Exception:
+                stderr = ""
+            raise RuntimeError(
+                f"v4l2-ctl 스트림이 종료되었습니다: code={raw_stream_process.returncode}, stderr={stderr.strip()}"
+            )
+
         remaining_time = deadline - monotonic()
         if remaining_time <= 0:
             raise TimeoutError(f"FIFO raw 프레임 수신 시간 초과: {received}/{size}")
@@ -411,6 +422,36 @@ def capture_y10p_raw_bytes():
     return read_exact_from_fifo(RAW_EXPECTED_BYTES, timeout_sec=2.0)
 
 
+def capture_y10p_raw_bytes_direct():
+    stop_uc788_stream()
+    configure_uc788_media(force=True)
+    apply_uc788_controls()
+
+    try:
+        RAW_FRAME_PATH.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    command = [
+        "v4l2-ctl",
+        "-d", RAW_VIDEO_DEVICE,
+        "--set-fmt-video=width=5120,height=800,pixelformat=Y10P",
+        "--stream-mmap=3",
+        "--stream-skip=5",
+        "--stream-count=1",
+        f"--stream-to={RAW_FRAME_PATH}",
+    ]
+    result = subprocess.run(command, text=True, capture_output=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"v4l2-ctl 단발 캡처 실패: {result.stderr.strip()}")
+
+    raw_bytes = RAW_FRAME_PATH.read_bytes()
+    if len(raw_bytes) != RAW_EXPECTED_BYTES:
+        raise RuntimeError(f"raw 크기 오류: expected={RAW_EXPECTED_BYTES}, actual={len(raw_bytes)}")
+
+    return raw_bytes
+
+
 def read_uc788_full_frame_gray8():
     # 스트림 시작
     start_uc788_stream()
@@ -425,7 +466,9 @@ def read_uc788_full_frame_gray8():
 
         sleep(0.005)
 
-    raise RuntimeError("UC-788 FIFO 프리뷰 프레임을 받지 못했습니다.")
+    print("[UC-788] FIFO 프리뷰 프레임을 받지 못해 단발 캡처로 확인합니다.")
+    raw_bytes = capture_y10p_raw_bytes_direct()
+    return y10p_high8_to_gray8(raw_bytes)
 
 
 def read_uc788_cam_frame_gray8(cam_key):
