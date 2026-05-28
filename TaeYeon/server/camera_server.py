@@ -1472,6 +1472,26 @@ def extract_face_landmarks_for_auto(frame_bgr):
     return pts
 
 
+def extract_face_landmarks_for_analysis(frame_bgr):
+    if face_mesh is None:
+        return None
+
+    h, w = frame_bgr.shape[:2]
+    rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    result = face_mesh.process(rgb)
+
+    if not result.multi_face_landmarks:
+        return None
+
+    pts = []
+    for lm in result.multi_face_landmarks[0].landmark:
+        pts.append((
+            clamp(int(lm.x * w), 0, w - 1),
+            clamp(int(lm.y * h), 0, h - 1),
+        ))
+    return pts
+
+
 def bbox_from_landmark_points(pts, width, height):
     if not pts:
         return None
@@ -2112,6 +2132,7 @@ def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: s
     file_map = {
         "porphyrin-overlay": "porphyrin_overlay.jpg",
         "porphyrin-mask": "porphyrin_mask.jpg",
+        "porphyrin-face-mask": "porphyrin_face_mask.jpg",
         "porphyrin-compare": "porphyrin_compare.jpg",
         "porphyrin-heatmap": "porphyrin_heatmap.jpg",
     }
@@ -2638,6 +2659,78 @@ def normalize_region_scores(region_score):
     return rounded
 
 
+def rescale_landmarks(pts, source_shape, target_shape):
+    if not pts:
+        return None
+
+    source_h, source_w = source_shape[:2]
+    target_h, target_w = target_shape[:2]
+    if source_w <= 0 or source_h <= 0:
+        return None
+
+    scale_x = target_w / float(source_w)
+    scale_y = target_h / float(source_h)
+
+    return [
+        (
+            clamp(int(round(x * scale_x)), 0, target_w - 1),
+            clamp(int(round(y * scale_y)), 0, target_h - 1),
+        )
+        for x, y in pts
+    ]
+
+
+def make_landmark_face_mask(shape, pts):
+    mask = np.zeros(shape, dtype=np.uint8)
+    if not pts or len(pts) < 20:
+        return None
+
+    points = np.array(pts, dtype=np.int32)
+    hull = cv2.convexHull(points)
+    cv2.fillConvexPoly(mask, hull, 255)
+
+    kernel = np.ones((9, 9), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+    return mask
+
+
+def get_landmark_metrics(pts, fallback_rect):
+    fx, fy, fw, fh = fallback_rect
+    metrics = {
+        "eye_y": fy + fh * 0.32,
+        "nose_y": fy + fh * 0.50,
+        "mouth_y": fy + fh * 0.66,
+        "face_mid_x": fx + fw * 0.50,
+        "nose_x": fx + fw * 0.50,
+    }
+
+    if not pts or len(pts) < 469:
+        return metrics
+
+    def avg(indices, axis):
+        values = [pts[index][axis] for index in indices if index < len(pts)]
+        if not values:
+            return None
+        return sum(values) / float(len(values))
+
+    eye_y = avg([33, 133, 159, 145, 263, 362, 386, 374], 1)
+    mouth_y = avg([13, 14, 61, 291, 0, 17], 1)
+    nose_y = avg([1, 2, 4, 5], 1)
+    nose_x = avg([1, 2, 4, 5], 0)
+
+    if eye_y is not None:
+        metrics["eye_y"] = eye_y
+    if mouth_y is not None:
+        metrics["mouth_y"] = mouth_y
+    if nose_y is not None:
+        metrics["nose_y"] = nose_y
+    if nose_x is not None:
+        metrics["nose_x"] = nose_x
+
+    return metrics
+
+
 def classify_face_region(x, y, face_rect):
     fx, fy, fw, fh = face_rect
     rel_x = (x - fx) / float(fw) if fw else 0.5
@@ -2661,7 +2754,35 @@ def classify_face_region(x, y, face_rect):
     return "left_cheek"
 
 
-def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
+def classify_face_region_by_landmarks(x, y, face_rect, metrics):
+    fx, fy, fw, fh = face_rect
+    rel_x = (x - fx) / float(fw) if fw else 0.5
+    rel_y = (y - fy) / float(fh) if fh else 0.5
+    nose_rel_x = (metrics["nose_x"] - fx) / float(fw) if fw else 0.5
+
+    forehead_bottom = max(fy + fh * 0.34, metrics["eye_y"] + fh * 0.04)
+    mouth_y = metrics["mouth_y"]
+
+    if y < forehead_bottom:
+        return "forehead"
+
+    nose_half_width = fw * 0.13
+    if abs(x - metrics["nose_x"]) <= nose_half_width and y < mouth_y:
+        return "nose"
+
+    if abs(x - metrics["nose_x"]) <= fw * 0.10 and mouth_y <= y < fy + fh * 0.72:
+        return "philtrum"
+
+    if y >= fy + fh * 0.72:
+        return "chin"
+
+    if rel_x < nose_rel_x:
+        return "right_cheek"
+
+    return "left_cheek"
+
+
+def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path, face_reference_path: Path = None):
     img = cv2.imread(str(image_path))
     if img is None:
         raise RuntimeError("이미지 로드 실패")
@@ -2671,7 +2792,23 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     enhanced = clahe.apply(gray)
     blur = cv2.GaussianBlur(enhanced, (5, 5), 0)
 
-    face_mask = make_porphyrin_face_mask(gray)
+    landmark_pts = None
+    landmark_source_shape = None
+    if face_reference_path is not None:
+        reference_img = cv2.imread(str(face_reference_path))
+        if reference_img is not None:
+            landmark_pts = extract_face_landmarks_for_analysis(reference_img)
+            landmark_source_shape = reference_img.shape
+
+    if landmark_pts is None:
+        landmark_pts = extract_face_landmarks_for_analysis(img)
+        landmark_source_shape = img.shape
+
+    if landmark_pts is not None and landmark_source_shape is not None:
+        landmark_pts = rescale_landmarks(landmark_pts, landmark_source_shape, gray.shape)
+
+    landmark_mask = make_landmark_face_mask(gray.shape, landmark_pts)
+    face_mask = landmark_mask if landmark_mask is not None else make_porphyrin_face_mask(gray)
     face_pixels = int(np.count_nonzero(face_mask))
     if face_pixels <= 0:
         face_mask = np.full_like(gray, 255)
@@ -2682,6 +2819,7 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
         face_rect = cv2.boundingRect(face_points)
     else:
         face_rect = (0, 0, gray.shape[1], gray.shape[0])
+    landmark_metrics = get_landmark_metrics(landmark_pts, face_rect)
 
     face_values = blur[face_mask > 0]
     heat_low = np.percentile(face_values, 50)
@@ -2696,7 +2834,7 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     ).astype(np.uint8)
     heatmap = cv2.applyColorMap(heat_scaled, cv2.COLORMAP_JET)
 
-    visible_threshold = 85
+    visible_threshold = 155
     _, thresh = cv2.threshold(heat_scaled, visible_threshold, 255, cv2.THRESH_BINARY)
     thresh = cv2.bitwise_and(thresh, thresh, mask=face_mask)
 
@@ -2729,7 +2867,10 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     intensity_values = heat_scaled[ys, xs].astype(np.float32) / 255.0 if len(xs) else []
 
     for x, y, intensity in zip(xs, ys, intensity_values):
-        region_key = classify_face_region(int(x), int(y), face_rect)
+        if landmark_pts is not None:
+            region_key = classify_face_region_by_landmarks(int(x), int(y), face_rect, landmark_metrics)
+        else:
+            region_key = classify_face_region(int(x), int(y), face_rect)
         region_score[region_key] += float(intensity)
 
     detection_rate = (total_area / face_pixels) * 100 if face_pixels else 0.0
@@ -2745,10 +2886,12 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
     output_dir.mkdir(parents=True, exist_ok=True)
     heatmap_path = output_dir / "porphyrin_heatmap.jpg"
     mask_path = output_dir / "porphyrin_mask.jpg"
+    face_mask_path = output_dir / "porphyrin_face_mask.jpg"
     report_path = output_dir / "porphyrin_report.json"
 
     cv2.imwrite(str(heatmap_path), heatmap)
     cv2.imwrite(str(mask_path), clean_mask)
+    cv2.imwrite(str(face_mask_path), face_mask)
 
     report = {
         "porphyrin_count": int(accepted_count),
@@ -2764,8 +2907,10 @@ def analyze_porphyrin_heatmap_v04(image_path: Path, output_dir: Path):
         "threshold_value": float(visible_threshold),
         "min_area": 12,
         "max_area": 0,
+        "face_landmarks_used": bool(landmark_pts is not None),
         "heatmap_path": str(heatmap_path),
         "mask_path": str(mask_path),
+        "face_mask_path": str(face_mask_path),
         "report_path": str(report_path),
     }
 
@@ -2784,6 +2929,14 @@ def analyze_porphyrin_api(profile_id, capture_id):
             capture_id=capture_id,
             filter_type="660nm_filter"
         )
+        try:
+            face_reference_path = resolve_image_path(
+                profile_id=profile_id,
+                capture_id=capture_id,
+                filter_type="no_filter"
+            )
+        except Exception:
+            face_reference_path = None
 
         # 프로필 루트 경로 가져오기
         profile_root = get_profile_root(profile_id)
@@ -2797,7 +2950,7 @@ def analyze_porphyrin_api(profile_id, capture_id):
         )
 
         # 포르피린 분석 실행
-        report = analyze_porphyrin_heatmap_v04(image_path, analysis_dir)
+        report = analyze_porphyrin_heatmap_v04(image_path, analysis_dir, face_reference_path)
 
         # 성공 응답 반환
         return jsonify({
@@ -2813,6 +2966,7 @@ def analyze_porphyrin_api(profile_id, capture_id):
             "threshold_value": report["threshold_value"],
             "min_area": report["min_area"],
             "max_area": report["max_area"],
+            "face_landmarks_used": report["face_landmarks_used"],
             "heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-heatmap"
         })
 
