@@ -11,6 +11,41 @@ import cv2
 import numpy as np
 
 from porphyrin_analysis import analyze_porphyrin_heatmap_v04
+from config import *
+from state import *
+from led_controller import (
+    get_white_led_status,
+    relay_off,
+    relay_on,
+    white_led_off,
+    white_led_on,
+)
+from profile_service import (
+    create_profile,
+    delete_profile,
+    ensure_profile_dirs,
+    find_profile_by_id,
+    load_profiles,
+    make_folder_id,
+    sanitize_profile_name,
+    save_profiles,
+)
+from capture_service import extract_cam_frame, save_image, save_one_camera_image
+from camera_uc788 import run_command, unpack_y10p_to_gray8, y10p_high8_to_gray8
+from history_service import (
+    delete_capture_history,
+    format_capture_id_to_text,
+    get_capture_detail,
+    get_capture_history,
+    get_profile_root,
+    resolve_analysis_image_path,
+    resolve_image_path,
+)
+from auto_capture_service import (
+    calculate_eye_aspect_ratio_from_points,
+    clamp,
+    point_distance,
+)
 
 # JSON 파일 읽기/쓰기용 import
 import json
@@ -73,238 +108,6 @@ CORS(app)
 
 
 # =========================
-# 기본 설정값
-# =========================
-
-# 전체 캡처 이미지 가로 해상도
-CAPTURE_WIDTH = 5120
-
-# 전체 캡처 이미지 세로 해상도
-CAPTURE_HEIGHT = 800
-
-# 전체 이미지가 4분할 구조라고 가정하고 단일 폭 계산
-SINGLE_WIDTH = CAPTURE_WIDTH // 4
-
-# 저장 루트 경로 설정
-SAVE_ROOT = Path.home() / "Graduate_Project" / "TaeYeon" / "captures"
-
-# 저장 루트 폴더가 없으면 생성
-SAVE_ROOT.mkdir(parents=True, exist_ok=True)
-
-# 프로필 목록을 저장하는 JSON 파일 경로
-PROFILES_FILE = SAVE_ROOT / "profiles.json"
-
-# 현재 고정 gain 값
-CURRENT_GAIN = 1.0
-
-# PNG 저장 여부
-SAVE_AS_PNG = True
-
-# 초기 노출 시간(ms)
-INITIAL_EXPOSURE_MS = 100
-
-# 스트리밍 FPS
-STREAM_FPS = 15
-
-# 스트리밍용 화면 가로 크기
-STREAM_WIDTH = 720
-
-# 스트리밍용 화면 세로 크기
-STREAM_HEIGHT = 1152
-
-# 스트리밍용 JPEG 품질
-STREAM_JPEG_QUALITY = 70
-
-# 릴레이 연결 GPIO 번호
-RELAY_PIN = 17
-
-# active_high 여부
-RELAY_ACTIVE_HIGH = False
-
-# 릴레이 켠 후 안정화 대기 시간
-RELAY_WARMUP_SEC = 2.4
-
-# RGB LED 1 GPIO 번호
-RGB1_RED_PIN = 27
-RGB1_GREEN_PIN = 22
-RGB1_BLUE_PIN = 23
-
-# RGB LED 2 GPIO 번호
-RGB2_RED_PIN = 5
-RGB2_GREEN_PIN = 6
-RGB2_BLUE_PIN = 13
-
-# RGB LED active_high 여부
-# 사용자가 테스트한 RGBLED 예제와 동일하게 기본 active_high=True로 사용합니다.
-RGB_LED_ACTIVE_HIGH = True
-
-# 백색 조명으로 사용할 RGB 색상값
-WHITE_LED_COLOR = (1, 1, 1)
-
-# 자동 촬영 직전 백색 LED를 끈 뒤 대기하는 시간
-WHITE_LED_OFF_BEFORE_CAPTURE_SEC = 0.15
-
-# 기본 눈 감음 EAR 기준값
-DEFAULT_EYE_AR_THRESHOLD = 0.20
-
-# rpicam_03_eye_closed_auto.py와 동일한 눈 감음 자동 촬영 대기 시간
-EYES_CLOSED_DELAY_SEC = 2.0
-
-# 자동 촬영 얼굴/눈 인식에 사용할 카메라 영역
-AUTO_DETECTION_CAM_KEY = "cam2"
-
-# MediaPipe 처리 속도를 위해 cam2 영역을 줄일 목표 폭
-AUTO_DETECTION_PROCESS_WIDTH = 960
-
-# 자동 촬영 상태 갱신 주기
-AUTO_CAPTURE_INTERVAL_SEC = 0.12
-
-
-# =========================
-# UC-788 Rev.B / Arducam Pivariety RAW 설정
-# =========================
-
-# UC-788 Rev.B 전체 raw 가로 해상도
-RAW_WIDTH = CAPTURE_WIDTH
-
-# UC-788 Rev.B 전체 raw 세로 해상도
-RAW_HEIGHT = CAPTURE_HEIGHT
-
-# V4L2 카메라 장치 경로
-RAW_VIDEO_DEVICE = "/dev/video0"
-
-# Y10P raw 임시 저장 경로
-RAW_FRAME_PATH = Path("/dev/shm/uc788_raw_frame.bin")
-
-# Y10P 한 프레임의 정상 바이트 크기: 5120 * 800 * 10bit / 8 = 5,120,000 bytes
-RAW_EXPECTED_BYTES = RAW_WIDTH * RAW_HEIGHT * 5 // 4
-
-# 부드러운 스트리밍을 위해 v4l2-ctl이 raw를 계속 써주는 FIFO 경로
-RAW_FIFO_PATH = Path("/dev/shm/uc788_y10p_fifo")
-
-# FIFO 스트림 상태값
-raw_stream_process = None
-raw_stream_thread = None
-raw_stream_stop_event = threading.Event()
-raw_stream_lock = threading.Lock()
-latest_preview_gray8 = None
-latest_preview_frame_time = 0.0
-raw_fifo_fd = None
-
-# CAM4 미리보기는 백그라운드에서 최신 JPEG만 만들어두고 스트림 응답은 이를 재사용합니다.
-cam4_jpeg_thread = None
-cam4_jpeg_stop_event = threading.Event()
-cam4_jpeg_condition = threading.Condition()
-latest_cam4_jpeg = None
-latest_cam4_jpeg_time = 0.0
-latest_cam4_jpeg_seq = 0
-
-# raw 프레임을 화면용 8bit로 만들 때 사용할 하위/상위 퍼센타일
-RAW_NORMALIZE_LOW_PERCENTILE = 1
-RAW_NORMALIZE_HIGH_PERCENTILE = 99
-
-# UC-788 직접 V4L2 캡처용 기본 노출값
-# 너무 밝으면 400~600, 너무 어두우면 1000~2000 정도로 조정하세요.
-UC788_TRIGGER_MODE = 0
-UC788_EXPOSURE = 800
-UC788_ANALOGUE_GAIN = 100
-
-# 현재 검색된 Arducam media device 경로
-arducam_media_device = None
-
-# media-ctl 포맷 설정 완료 여부
-uc788_media_configured = False
-
-
-# =========================
-# 릴레이 객체 생성
-# =========================
-
-# 릴레이 LED 객체 생성
-relay = LED(RELAY_PIN, active_high=RELAY_ACTIVE_HIGH, initial_value=False)
-
-# RGB LED 1 객체 생성
-# initial_value=(0, 0, 0)이므로 서버가 켜져도 처음에는 LED가 켜지지 않습니다.
-rgb1 = RGBLED(
-    red=RGB1_RED_PIN,
-    green=RGB1_GREEN_PIN,
-    blue=RGB1_BLUE_PIN,
-    active_high=RGB_LED_ACTIVE_HIGH,
-    initial_value=(0, 0, 0)
-)
-
-# RGB LED 2 객체 생성
-# initial_value=(0, 0, 0)이므로 서버가 켜져도 처음에는 LED가 켜지지 않습니다.
-rgb2 = RGBLED(
-    red=RGB2_RED_PIN,
-    green=RGB2_GREEN_PIN,
-    blue=RGB2_BLUE_PIN,
-    active_high=RGB_LED_ACTIVE_HIGH,
-    initial_value=(0, 0, 0)
-)
-
-# 백색 LED 상태값
-white_led_is_on = False
-
-
-# =========================
-# 카메라별 설정 정보
-# =========================
-
-CAMERA_INFO = {
-    "cam2": {
-        "label": "CAM 2 - NO FILTER",
-        "folder": "cam2_no_filter",
-        "filter": "no_filter",
-        "display_name": "No_Filter",
-        "x_start": SINGLE_WIDTH * 1,
-        "x_end": SINGLE_WIDTH * 2,
-        "sequence_order": 1
-    },
-    "cam3": {
-        "label": "CAM 3 - 405nm FILTER",
-        "folder": "cam3_405nm",
-        "filter": "405nm_filter",
-        "display_name": "405nm_Filter",
-        "x_start": SINGLE_WIDTH * 2,
-        "x_end": SINGLE_WIDTH * 3,
-        "sequence_order": 2
-    },
-    "cam4": {
-        "label": "CAM 4 - 660nm FILTER",
-        "folder": "cam4_660nm",
-        "filter": "660nm_filter",
-        "display_name": "660nm_Filter",
-        "x_start": SINGLE_WIDTH * 3,
-        "x_end": SINGLE_WIDTH * 4,
-        "sequence_order": 3
-    }
-}
-
-
-# =========================
-# 전역 카메라 상태값
-# =========================
-
-# 카메라 동시 접근 방지를 위한 락
-camera_lock = threading.Lock()
-
-# 카메라 준비 여부
-camera_ready = False
-
-# 기존 코드 호환을 위해 남겨두는 자리값입니다.
-# UC-788 Rev.B는 Picamera2 대신 V4L2 raw 캡처를 사용합니다.
-picam2 = None
-preview_config = None
-still_config = None
-
-# 자동 촬영 스레드 객체
-auto_capture_thread = None
-
-# 자동 촬영 상태 동기화용 락
-auto_state_lock = threading.Lock()
-
-# =========================
 # MediaPipe FaceMesh 설정
 # =========================
 
@@ -360,82 +163,6 @@ def init_mediapipe_face_mesh():
 init_mediapipe_face_mesh()
 
 
-def make_default_auto_checks():
-    # 자동 촬영 조건 기본값 생성
-    return {
-        "face_found": False,
-        "center_ok": False,
-        "size_ok": False,
-        "angle_ok": False,
-        "eyes_closed": False,
-        "stable_ok": False,
-    }
-
-
-# 자동 촬영 상태값
-AUTO_STATE = {
-    "running": False,
-    "captured": False,
-    "profile_id": None,
-    "capture_id": None,
-    "status": "자동 촬영 대기 중",
-    "error": None,
-    "checks": make_default_auto_checks(),
-    "stable_face_count": 0,
-    "eyes_closed_count": 0,
-    "dynamic_eye_threshold": DEFAULT_EYE_AR_THRESHOLD,
-    "last_update": None,
-}
-
-# rpicam_03_eye_closed_auto.py의 눈 감음 타이머 상태
-AUTO_EYE_STATE = {
-    "blink_count": 0,
-    "closed_frame_count": 0,
-    "prev_eye_closed": False,
-    "eyes_closed_started_at": None,
-    "eye_state": "Unknown",
-    "gaze_direction": "Unknown",
-}
-
-
-# =========================
-# 릴레이 제어 함수
-# =========================
-
-def relay_on():
-    # 릴레이 켜기
-    relay.on()
-
-
-def relay_off():
-    # 릴레이 끄기
-    relay.off()
-
-
-def white_led_on():
-    # 전역 백색 LED 상태값 사용 선언
-    global white_led_is_on
-
-    # RGB LED 2개를 모두 흰색으로 켜기
-    rgb1.color = WHITE_LED_COLOR
-    rgb2.color = WHITE_LED_COLOR
-
-    # 백색 LED 상태값 갱신
-    white_led_is_on = True
-
-
-def white_led_off():
-    # 전역 백색 LED 상태값 사용 선언
-    global white_led_is_on
-
-    # RGB LED 2개를 모두 끄기
-    rgb1.off()
-    rgb2.off()
-
-    # 백색 LED 상태값 갱신
-    white_led_is_on = False
-
-
 # =========================
 # 카메라 수동 제어 함수
 # =========================
@@ -447,298 +174,8 @@ def set_manual_controls(camera, exposure_ms, gain):
 
 
 # =========================
-# 전체 프레임에서 개별 카메라 영역 자르기
-# =========================
-
-def extract_cam_frame(full_frame_bgr, cam_key):
-    # 해당 카메라 정보 읽기
-    info = CAMERA_INFO[cam_key]
-
-    # 전체 프레임에서 해당 영역만 잘라서 반환
-    return full_frame_bgr[:, info["x_start"]:info["x_end"]]
-
-
-# =========================
-# 이미지 저장 함수
-# =========================
-
-def save_image(path, img_bgr):
-    # PNG 저장일 경우 무압축 저장
-    if path.suffix.lower() == ".png":
-        cv2.imwrite(str(path), img_bgr, [cv2.IMWRITE_PNG_COMPRESSION, 0])
-
-    # JPG 저장일 경우 고품질 저장
-    else:
-        cv2.imwrite(str(path), img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 100])
-
-
-# =========================
-# 프로필 이름 정리
-# =========================
-
-def sanitize_profile_name(profile_name: str) -> str:
-    # 앞뒤 공백 제거
-    cleaned = profile_name.strip()
-
-    # 연속 공백을 하나로 정리
-    cleaned = re.sub(r"\s+", " ", cleaned)
-
-    # 비어 있으면 예외 발생
-    if not cleaned:
-        raise ValueError("유효한 프로필 이름이 아닙니다.")
-
-    # 정리된 이름 반환
-    return cleaned
-
-
-# =========================
-# 실제 폴더용 profile 폴더 ID 생성
-# =========================
-
-def make_folder_id() -> str:
-    # 현재 timestamp 기반으로 고유 폴더 ID 생성
-    return f"profile_{int(datetime.now().timestamp() * 1000)}"
-
-
-# =========================
-# 프로필 목록 로드
-# =========================
-
-def load_profiles():
-    # 프로필 파일이 없으면 빈 리스트 반환
-    if not PROFILES_FILE.exists():
-        return []
-
-    try:
-        # UTF-8로 JSON 읽기
-        with open(PROFILES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    except Exception:
-        # 파싱 실패 시 빈 리스트 반환
-        return []
-
-
-# =========================
-# 프로필 목록 저장
-# =========================
-
-def save_profiles(profiles):
-    # UTF-8로 JSON 저장
-    with open(PROFILES_FILE, "w", encoding="utf-8") as f:
-        json.dump(profiles, f, ensure_ascii=False, indent=2)
-
-
-# =========================
-# 프로필 기본 폴더 구조 생성
-# =========================
-
-def ensure_profile_dirs(folder_id: str):
-    # 프로필 루트 폴더 경로 생성
-    profile_root = SAVE_ROOT / folder_id
-
-    # 프로필 루트 생성
-    profile_root.mkdir(parents=True, exist_ok=True)
-
-    # 카메라별 폴더 생성
-    for cam in CAMERA_INFO.values():
-        (profile_root / cam["folder"]).mkdir(parents=True, exist_ok=True)
-
-    # 생성된 프로필 루트 반환
-    return profile_root
-
-
-# =========================
-# ID로 프로필 찾기
-# =========================
-
-def find_profile_by_id(profile_id: str):
-    # 현재 프로필 목록 로드
-    profiles = load_profiles()
-
-    # 일치하는 folderId 탐색
-    for profile in profiles:
-        if profile["folderId"] == profile_id:
-            return profile
-
-    # 없으면 None 반환
-    return None
-
-
-# =========================
-# 프로필 생성
-# =========================
-
-def create_profile(profile_name: str):
-    # 사용자 표시용 이름 정리
-    display_name = sanitize_profile_name(profile_name)
-
-    # 기존 프로필 목록 로드
-    profiles = load_profiles()
-
-    # 이름 중복 검사
-    exists = any(p["name"] == display_name for p in profiles)
-
-    # 이미 있으면 예외
-    if exists:
-        raise ValueError("이미 존재하는 프로필입니다.")
-
-    # 생성 날짜 문자열
-    created_at = datetime.now().strftime("%Y.%m.%d")
-
-    # 화면용 숫자 ID
-    profile_id = int(datetime.now().timestamp() * 1000)
-
-    # 실제 폴더용 안전한 ID
-    folder_id = make_folder_id()
-
-    # 새 프로필 정보 구성
-    new_profile = {
-        "id": profile_id,
-        "name": display_name,
-        "folderId": folder_id,
-        "createdAt": created_at
-    }
-
-    # 목록에 추가
-    profiles.append(new_profile)
-
-    # JSON 저장
-    save_profiles(profiles)
-
-    # 폴더 생성
-    ensure_profile_dirs(folder_id)
-
-    # 생성된 프로필 반환
-    return new_profile
-
-
-# =========================
-# 프로필 삭제
-# =========================
-
-def delete_profile(profile_id: str):
-    # 프로필 목록 로드
-    profiles = load_profiles()
-
-    # 삭제 대상 초기화
-    target = None
-
-    # 삭제할 프로필 찾기
-    for p in profiles:
-        if p["folderId"] == profile_id:
-            target = p
-            break
-
-    # 없으면 예외
-    if target is None:
-        raise ValueError("삭제할 프로필이 없습니다.")
-
-    # 삭제 대상 제외한 목록 생성
-    new_profiles = [p for p in profiles if p["folderId"] != profile_id]
-
-    # 프로필 루트 경로
-    profile_root = SAVE_ROOT / target["folderId"]
-
-    # 실제 폴더가 있으면 전체 삭제
-    if profile_root.exists() and profile_root.is_dir():
-        shutil.rmtree(profile_root)
-
-    # 갱신된 목록 저장
-    save_profiles(new_profiles)
-
-
-# =========================
-# 개별 카메라 이미지 저장
-# =========================
-
-def save_one_camera_image(
-    cam_key,
-    frame_bgr,
-    profile_root,
-    capture_id,
-    timestamp,
-    exposure_ms,
-    gain,
-    ext,
-    profile_name,
-    folder_id,
-    trigger_metadata=None
-):
-    # 카메라 정보 조회
-    info = CAMERA_INFO[cam_key]
-
-    # 세로 미러 형태에 맞게 시계 방향 90도 회전
-    frame_bgr = cv2.rotate(frame_bgr, cv2.ROTATE_90_CLOCKWISE)
-
-    # 해당 캡처 시각 폴더 생성
-    target_dir = profile_root / info["folder"] / capture_id
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    # 이미지 경로 생성
-    image_path = target_dir / f"{cam_key}.{ext}"
-
-    # 메타데이터 경로 생성
-    meta_path = target_dir / "metadata.json"
-
-    # 이미지 저장
-    save_image(image_path, frame_bgr)
-
-    # 메타데이터 구성
-    metadata = {
-        "captured_at": timestamp.isoformat(),
-        "profile_name": profile_name,
-        "profile_folder_id": folder_id,
-        "camera_name": cam_key,
-        "camera_label": info["label"],
-        "filter_type": info["filter"],
-        "display_name": info["display_name"],
-        "sequence_order": info["sequence_order"],
-        "capture_type": "uc788_y10p_raw_v4l2_fullframe_then_crop",
-        "file_format": ext,
-        "camera_mode": {
-            "capture_width": CAPTURE_WIDTH,
-            "capture_height": CAPTURE_HEIGHT,
-            "single_width": SINGLE_WIDTH
-        },
-        "camera_control": {
-            "AeEnable": False,
-            "ExposureTime_ms": exposure_ms,
-            "ExposureTime_us": exposure_ms * 1000,
-            "AnalogueGain": gain
-        },
-        "saved_file": str(image_path),
-        "rotation_applied": "ROTATE_90_CLOCKWISE",
-        "auto_capture_trigger": trigger_metadata,
-    }
-
-    # 메타데이터 저장
-    with open(meta_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, ensure_ascii=False, indent=4)
-
-    # 저장 결과 반환
-    return {
-        "camera": cam_key,
-        "filter_type": info["filter"],
-        "display_name": info["display_name"],
-        "image_path": str(image_path),
-        "metadata_path": str(meta_path)
-    }
-
-
-# =========================
 # UC-788 Rev.B RAW 카메라 유틸 함수
 # =========================
-
-def run_command(command, check=True, capture_output=True):
-    # 외부 명령을 실행하고 결과를 반환
-    return subprocess.run(
-        command,
-        check=check,
-        text=True,
-        stdout=subprocess.PIPE if capture_output else subprocess.DEVNULL,
-        stderr=subprocess.PIPE if capture_output else subprocess.DEVNULL,
-    )
 
 
 def find_arducam_media_device():
@@ -806,69 +243,6 @@ def apply_uc788_controls():
             run_command(command, check=False, capture_output=True)
         except Exception as e:
             print(f"[UC-788 컨트롤 적용 경고] {command}: {e}")
-
-def y10p_high8_to_gray8(raw_bytes):
-    # Y10P는 4픽셀을 5바이트에 저장합니다.
-    # 화면 프리뷰는 속도를 위해 하위 2비트를 버리고 상위 8비트만 사용합니다.
-    data = np.frombuffer(raw_bytes, dtype=np.uint8)
-
-    # 크기 확인
-    if data.size != RAW_EXPECTED_BYTES:
-        raise RuntimeError(f"raw 크기 오류: expected={RAW_EXPECTED_BYTES}, actual={data.size}")
-
-    # 한 줄 바이트 수 계산
-    row_stride = RAW_WIDTH * 5 // 4
-
-    # 행 단위로 재구성
-    packed = data.reshape(RAW_HEIGHT, row_stride)
-
-    # 5바이트 그룹 중 앞 4바이트가 각 픽셀의 상위 8비트입니다.
-    groups = packed.reshape(RAW_HEIGHT, RAW_WIDTH // 4, 5)
-    gray8 = groups[:, :, :4].reshape(RAW_HEIGHT, RAW_WIDTH).copy()
-
-    # 화면 확인용 밝기 보정
-    gray8 = cv2.convertScaleAbs(gray8, alpha=1.35, beta=0)
-
-    return gray8
-
-
-def unpack_y10p_to_gray8(raw_bytes):
-    # 저장/분석용으로 10비트를 복원한 뒤 보기 좋게 정규화합니다.
-    data = np.frombuffer(raw_bytes, dtype=np.uint8)
-
-    # Y10P는 4픽셀을 5바이트에 저장하므로 5바이트 단위로 재구성
-    data = data.reshape(-1, 5)
-
-    # 5바이트에서 10비트 픽셀 4개 복원
-    p0 = (data[:, 0].astype(np.uint16) << 2) | ((data[:, 4] >> 0) & 0x03)
-    p1 = (data[:, 1].astype(np.uint16) << 2) | ((data[:, 4] >> 2) & 0x03)
-    p2 = (data[:, 2].astype(np.uint16) << 2) | ((data[:, 4] >> 4) & 0x03)
-    p3 = (data[:, 3].astype(np.uint16) << 2) | ((data[:, 4] >> 6) & 0x03)
-
-    # 전체 10비트 이미지 배열 생성
-    img10 = np.empty(RAW_WIDTH * RAW_HEIGHT, dtype=np.uint16)
-
-    # 4픽셀씩 순서대로 배치
-    img10[0::4] = p0
-    img10[1::4] = p1
-    img10[2::4] = p2
-    img10[3::4] = p3
-
-    # 2차원 이미지로 변환
-    img10 = img10.reshape(RAW_HEIGHT, RAW_WIDTH)
-
-    # 화면에서 잘 보이도록 퍼센타일 기반 자동 대비 계산
-    low = np.percentile(img10, RAW_NORMALIZE_LOW_PERCENTILE)
-    high = np.percentile(img10, RAW_NORMALIZE_HIGH_PERCENTILE)
-
-    # 대비 계산이 불가능하면 단순 8비트 축소 사용
-    if high <= low:
-        return np.clip(img10 >> 2, 0, 255).astype(np.uint8)
-
-    # 10비트 raw를 0~255 화면용 gray 이미지로 변환
-    gray8 = np.clip((img10.astype(np.float32) - low) * 255.0 / (high - low), 0, 255).astype(np.uint8)
-
-    return gray8
 
 
 def stop_uc788_stream():
@@ -1136,237 +510,6 @@ def capture_high_quality_full_frame(exposure_ms, gain):
 
 
 # =========================
-# 촬영 기록 유틸 함수
-# =========================
-
-def format_capture_id_to_text(capture_id: str) -> str:
-    # 예: 20260408_132215_123 -> 2026-04-08 13:22:15.123 형태로 변환 시도
-    try:
-        dt = datetime.strptime(capture_id, "%Y%m%d_%H%M%S_%f")
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return capture_id
-
-
-def get_profile_root(profile_id: str) -> Path:
-    # 프로필 존재 여부 확인
-    profile = find_profile_by_id(profile_id)
-
-    # 없으면 예외
-    if profile is None:
-        raise ValueError("존재하지 않는 프로필입니다.")
-
-    # 루트 경로 반환
-    return SAVE_ROOT / profile["folderId"]
-
-
-def get_capture_history(profile_id: str):
-    # 프로필 루트 경로 가져오기
-    profile_root = get_profile_root(profile_id)
-
-    # 프로필 조회
-    profile = find_profile_by_id(profile_id)
-
-    # 프로필 루트가 없으면 빈 배열 반환
-    if not profile_root.exists():
-        return []
-
-    # 기준이 되는 cam2 폴더 경로
-    cam2_root = profile_root / CAMERA_INFO["cam2"]["folder"]
-
-    # cam2 폴더가 없으면 빈 배열 반환
-    if not cam2_root.exists():
-        return []
-
-    # 기록 목록 저장 배열
-    history = []
-
-    # capture_id 폴더 순회
-    for capture_dir in cam2_root.iterdir():
-        # 폴더만 처리
-        if not capture_dir.is_dir():
-            continue
-
-        # capture ID는 폴더 이름
-        capture_id = capture_dir.name
-
-        # 기본 captured_at 값
-        captured_at = None
-
-        # 메타데이터 파일 경로
-        meta_path = capture_dir / "metadata.json"
-
-        # 메타데이터가 있으면 실제 촬영 시각 사용
-        if meta_path.exists():
-            try:
-                with open(meta_path, "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-                    captured_at = meta.get("captured_at")
-            except Exception:
-                captured_at = None
-
-        # 메타데이터에서 못 읽었으면 capture_id를 기반으로 표시 문자열 구성
-        if not captured_at:
-            captured_at = capture_id
-
-        # 목록에 추가
-        history.append({
-            "captureId": capture_id,
-            "capturedAt": captured_at,
-            "displayTime": format_capture_id_to_text(capture_id),
-            "profileId": profile["folderId"],
-            "profileName": profile["name"]
-        })
-
-    # 최신 촬영이 위로 오도록 정렬
-    history.sort(key=lambda x: x["captureId"], reverse=True)
-
-    # 정렬된 기록 반환
-    return history
-
-
-def get_capture_detail(profile_id: str, capture_id: str):
-    # 프로필 루트 확인
-    profile_root = get_profile_root(profile_id)
-
-    # 프로필 정보 조회
-    profile = find_profile_by_id(profile_id)
-
-    # 결과 이미지 딕셔너리
-    images = {}
-
-    # 대표 촬영 시각
-    captured_at = None
-
-    # 각 카메라 폴더 순회
-    for cam_key, info in CAMERA_INFO.items():
-        # 해당 캡처 폴더 경로
-        target_dir = profile_root / info["folder"] / capture_id
-
-        # 파일 확장자 후보 목록
-        candidates = [
-            target_dir / f"{cam_key}.png",
-            target_dir / f"{cam_key}.jpg",
-            target_dir / f"{cam_key}.jpeg",
-        ]
-
-        # 실제 존재하는 이미지 파일 찾기
-        image_path = None
-        for candidate in candidates:
-            if candidate.exists():
-                image_path = candidate
-                break
-
-        # 메타데이터 경로
-        meta_path = target_dir / "metadata.json"
-
-        # 메타데이터 읽기
-        meta_data = {}
-        if meta_path.exists():
-            try:
-                with open(meta_path, "r", encoding="utf-8") as f:
-                    meta_data = json.load(f)
-            except Exception:
-                meta_data = {}
-
-        # captured_at은 하나만 대표로 사용
-        if captured_at is None:
-            captured_at = meta_data.get("captured_at")
-
-        # 이미지가 있으면 응답용 정보 생성
-        images[info["filter"]] = {
-            "camera": cam_key,
-            "display_name": info["display_name"],
-            "filter_type": info["filter"],
-            "exists": image_path is not None,
-            "image_url": f"/profiles/{profile_id}/history/{capture_id}/image/{info['filter']}" if image_path else None,
-            "metadata": meta_data
-        }
-
-    # 대표 촬영 시각이 없으면 capture_id 기반 문자열 사용
-    if captured_at is None:
-        captured_at = capture_id
-
-    # 최소 하나라도 이미지가 있어야 유효한 기록으로 판단
-    has_any = any(item["exists"] for item in images.values())
-
-    # 하나도 없으면 예외
-    if not has_any:
-        raise ValueError("해당 촬영 기록을 찾을 수 없습니다.")
-
-    # 최종 상세 정보 반환
-    return {
-        "captureId": capture_id,
-        "capturedAt": captured_at,
-        "displayTime": format_capture_id_to_text(capture_id),
-        "profileId": profile["folderId"],
-        "profileName": profile["name"],
-        "images": images
-    }
-
-
-def delete_capture_history(profile_id: str, capture_id: str):
-    # 프로필 루트 경로 가져오기
-    profile_root = get_profile_root(profile_id)
-
-    # 하나라도 삭제되었는지 확인하기 위한 플래그
-    deleted_any = False
-
-    # cam2, cam3, cam4의 동일 capture_id 폴더를 모두 삭제
-    for cam_key, info in CAMERA_INFO.items():
-        # 삭제 대상 폴더 경로 생성
-        target_dir = profile_root / info["folder"] / capture_id
-
-        # 실제 폴더가 있으면 내부 이미지와 metadata.json까지 전체 삭제
-        if target_dir.exists() and target_dir.is_dir():
-            shutil.rmtree(target_dir)
-            deleted_any = True
-
-    # 하나도 삭제되지 않았으면 잘못된 기록으로 판단
-    if not deleted_any:
-        raise ValueError("삭제할 촬영 기록이 없습니다.")
-
-
-def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Path:
-    # 프로필 루트 확인
-    profile_root = get_profile_root(profile_id)
-
-    # filter_type에 맞는 카메라 찾기
-    matched_cam_key = None
-    matched_info = None
-
-    for cam_key, info in CAMERA_INFO.items():
-        if info["filter"] == filter_type:
-            matched_cam_key = cam_key
-            matched_info = info
-            break
-
-    # 없으면 예외
-    if matched_cam_key is None:
-        raise ValueError("유효하지 않은 필터 타입입니다.")
-
-    # 캡처 폴더 경로
-    target_dir = profile_root / matched_info["folder"] / capture_id
-
-    # 후보 파일 목록
-    candidates = [
-        target_dir / f"{matched_cam_key}.png",
-        target_dir / f"{matched_cam_key}.jpg",
-        target_dir / f"{matched_cam_key}.jpeg",
-    ]
-
-    # 존재하는 파일 찾기
-    for candidate in candidates:
-        if candidate.exists() and candidate.is_file():
-            return candidate
-
-    # 없으면 예외
-    raise ValueError("이미지 파일이 존재하지 않습니다.")
-
-
-
-
-# =========================
 # 자동 얼굴 촬영 유틸 함수 - rpicam_03_eye_closed_auto.py 방식
 # =========================
 
@@ -1381,9 +524,6 @@ AUTO_ROI_EXPAND_Y = 0.18
 # 너무 짧은 깜빡임을 blink로 세기 위한 최소 프레임
 MIN_CLOSED_FRAMES_FOR_BLINK = 2
 
-
-def clamp(value: int, low: int, high: int) -> int:
-    return max(low, min(high, value))
 
 
 def expand_auto_bbox(x1: int, y1: int, x2: int, y2: int, w: int, h: int):
@@ -1516,20 +656,6 @@ def bbox_from_landmark_points(pts, width, height):
         height,
     )
 
-
-def point_distance(p1, p2):
-    return math.hypot(p1[0] - p2[0], p1[1] - p2[1])
-
-
-def calculate_eye_aspect_ratio_from_points(eye_pts):
-    vertical_1 = point_distance(eye_pts[1], eye_pts[5])
-    vertical_2 = point_distance(eye_pts[2], eye_pts[4])
-    horizontal = point_distance(eye_pts[0], eye_pts[3])
-
-    if horizontal <= 0:
-        return 1.0
-
-    return (vertical_1 + vertical_2) / (2.0 * horizontal)
 
 
 def estimate_eye_state_and_motion(pts):
@@ -1844,7 +970,7 @@ def get_auto_state_copy():
             "stable_face_count": AUTO_STATE["stable_face_count"],
             "eyes_closed_count": AUTO_STATE["eyes_closed_count"],
             "dynamic_eye_threshold": AUTO_STATE["dynamic_eye_threshold"],
-            "white_led_is_on": white_led_is_on,
+            "white_led_is_on": get_white_led_status(),
             "last_update": AUTO_STATE["last_update"],
         }
 
@@ -1975,191 +1101,6 @@ def auto_capture_worker(profile_id: str):
             AUTO_STATE["error"] = str(e)
             AUTO_STATE["status"] = f"자동 촬영 오류: {e}"
             AUTO_STATE["last_update"] = datetime.now().isoformat()
-
-
-# =========================
-# 포르피린 분석 함수
-# =========================
-
-def analyze_porphyrin_image(image_path: Path, output_dir: Path):
-    # 분석할 이미지 읽기
-    img = cv2.imread(str(image_path))
-
-    # 이미지가 없으면 예외 발생
-    if img is None:
-        raise RuntimeError("이미지 로드 실패")
-
-    # 결과 표시용 원본 복사
-    output = img.copy()
-
-    # BGR 이미지를 그레이스케일로 변환
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # CLAHE로 국소 대비 강화
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-
-    # 대비 강화 이미지 생성
-    enhanced = clahe.apply(gray)
-
-    # 작은 노이즈 완화를 위한 Gaussian Blur
-    blur = cv2.GaussianBlur(enhanced, (5, 5), 0)
-
-    # 상위 밝기 영역만 추출
-    threshold_value = np.percentile(blur, 97)
-
-    # 이진화
-    _, thresh = cv2.threshold(blur, threshold_value, 255, cv2.THRESH_BINARY)
-
-    # 노이즈 제거용 커널 생성
-    kernel = np.ones((3, 3), np.uint8)
-
-    # 작은 점 노이즈 제거
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-
-    # 외곽선 검출
-    contours, _ = cv2.findContours(
-        thresh,
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE
-    )
-
-    # 검출 개수 초기화
-    count = 0
-
-    # 검출 면적 초기화
-    total_area = 0.0
-
-    # 각 컨투어 순회
-    for cnt in contours:
-        # 컨투어 면적 계산
-        area = cv2.contourArea(cnt)
-
-        # 너무 작은 노이즈 제거
-        if area < 10:
-            continue
-
-        # 컨투어를 감싸는 최소 원 계산
-        (x, y), radius = cv2.minEnclosingCircle(cnt)
-
-        # 포르피린 후보 점 크기 범위 제한
-        if 3 < radius < 15:
-            # 중심 좌표 정수화
-            center = (int(x), int(y))
-
-            # 결과 이미지에 빨간 원 표시
-            cv2.circle(output, center, int(radius), (0, 0, 255), 2)
-
-            # 검출 개수 증가
-            count += 1
-
-            # 검출 면적 누적
-            total_area += float(area)
-
-    # 분석 결과 폴더 생성
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # 결과 이미지 경로
-    overlay_path = output_dir / "porphyrin_overlay.jpg"
-
-    # 마스크 이미지 경로
-    mask_path = output_dir / "porphyrin_mask.jpg"
-
-    # 비교 이미지 경로
-    compare_path = output_dir / "porphyrin_compare.jpg"
-
-    # 리포트 JSON 경로
-    report_path = output_dir / "porphyrin_report.json"
-
-    # 결과 이미지 저장
-    cv2.imwrite(str(overlay_path), output)
-
-    # 마스크 이미지 저장
-    cv2.imwrite(str(mask_path), thresh)
-
-    # 원본과 결과 비교 이미지 생성
-    combined = np.hstack((img, output))
-
-    # 원본 이미지 크기 읽기
-    h, w = img.shape[:2]
-
-    # 원본 텍스트 표시
-    cv2.putText(
-        combined,
-        "Original",
-        (20, 40),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1,
-        (255, 255, 255),
-        2
-    )
-
-    # 검출 결과 텍스트 표시
-    cv2.putText(
-        combined,
-        "Detection",
-        (w + 20, 40),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        1,
-        (0, 0, 255),
-        2
-    )
-
-    # 비교 이미지 저장
-    cv2.imwrite(str(compare_path), combined)
-
-    # 분석 결과 구성
-    report = {
-        "porphyrin_count": count,
-        "porphyrin_area": total_area,
-        "threshold_value": float(threshold_value),
-        "overlay_path": str(overlay_path),
-        "mask_path": str(mask_path),
-        "compare_path": str(compare_path),
-        "report_path": str(report_path)
-    }
-
-    # 리포트 JSON 저장
-    with open(report_path, "w", encoding="utf-8") as f:
-        json.dump(report, f, ensure_ascii=False, indent=2)
-
-    # 분석 결과 반환
-    return report
-
-
-def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: str) -> Path:
-    # 프로필 루트 경로 가져오기
-    profile_root = get_profile_root(profile_id)
-
-    # 분석 결과 폴더 경로
-    analysis_dir = (
-        profile_root
-        / CAMERA_INFO["cam4"]["folder"]
-        / capture_id
-        / "analysis"
-    )
-
-    # 요청 타입별 파일명 매핑
-    file_map = {
-        "porphyrin-overlay": "porphyrin_overlay.jpg",
-        "porphyrin-mask": "porphyrin_mask.jpg",
-        "porphyrin-face-mask": "porphyrin_face_mask.jpg",
-        "porphyrin-compare": "porphyrin_compare.jpg",
-        "porphyrin-heatmap": "porphyrin_heatmap.jpg",
-    }
-
-    # 유효하지 않은 요청이면 예외 발생
-    if result_type not in file_map:
-        raise ValueError("유효하지 않은 분석 이미지 타입입니다.")
-
-    # 실제 이미지 경로 생성
-    image_path = analysis_dir / file_map[result_type]
-
-    # 이미지 존재 확인
-    if not image_path.exists() or not image_path.is_file():
-        raise ValueError("분석 결과 이미지가 없습니다. 먼저 포르피린 분석을 실행하세요.")
-
-    # 이미지 경로 반환
-    return image_path
 
 
 # =========================
@@ -2509,7 +1450,7 @@ def white_led_status_api():
     # 현재 백색 LED 상태 반환
     return jsonify({
         "ok": True,
-        "white_led_is_on": white_led_is_on
+        "white_led_is_on": get_white_led_status()
     })
 
 
@@ -2820,5 +1761,8 @@ if __name__ == "__main__":
 
     # Flask 서버 실행
     app.run(host="0.0.0.0", port=8000, threaded=True)
+
+
+
 
 
