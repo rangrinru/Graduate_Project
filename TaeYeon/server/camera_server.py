@@ -249,6 +249,8 @@ def stop_uc788_stream():
     # 전역 스트림 상태값 사용 선언
     global raw_stream_process, raw_stream_thread, raw_fifo_fd
 
+    thread_to_join = raw_stream_thread
+
     # 종료 요청
     raw_stream_stop_event.set()
 
@@ -271,6 +273,16 @@ def stop_uc788_stream():
             except Exception:
                 pass
         raw_stream_process = None
+
+    if (
+        thread_to_join is not None
+        and thread_to_join.is_alive()
+        and thread_to_join is not threading.current_thread()
+    ):
+        try:
+            thread_to_join.join(timeout=1.0)
+        except Exception:
+            pass
 
     # 스레드 참조 초기화
     raw_stream_thread = None
@@ -394,9 +406,7 @@ def uc788_fifo_reader_loop():
         try:
             # v4l2-ctl이 죽었으면 재시작
             if raw_stream_process is None or raw_stream_process.poll() is not None:
-                sleep(0.05)
-                start_uc788_stream()
-                continue
+                break
 
             # FIFO에서 raw 프레임 1장 읽기
             raw_bytes = read_exact_from_fifo(RAW_EXPECTED_BYTES, timeout_sec=2.0)
@@ -413,7 +423,7 @@ def uc788_fifo_reader_loop():
 
         except Exception as e:
             print("[UC-788 FIFO 스트림 오류]", e)
-            sleep(0.05)
+            break
 
 
 def capture_y10p_raw_bytes():
