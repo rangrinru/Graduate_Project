@@ -1672,9 +1672,9 @@ function App() {
         .guide-face {
           position: absolute;
           left: 50%;
-          top: clamp(105px, 12vh, 155px);
-          width: clamp(360px, 76vw, 540px);
-          height: clamp(540px, 61vh, 760px);
+          top: clamp(135px, 15vh, 205px);
+          width: clamp(430px, 86vw, 640px);
+          height: clamp(660px, 72vh, 920px);
           transform: translateX(-50%);
           border: 4px dashed rgba(103,232,249,0.92);
           border-radius: 47% 47% 43% 43% / 34% 34% 57% 57%;
@@ -1722,19 +1722,19 @@ function App() {
         }
 
         .guide-eye-line {
-          top: 47%;
+          top: 35%;
           width: 48%;
           height: 3px;
         }
 
         .guide-nose-line {
-          top: 51%;
+          top: 39%;
           width: 3px;
-          height: 16%;
+          height: 15%;
         }
 
         .guide-mouth-line {
-          top: 69%;
+          top: 55%;
           width: 24%;
           height: 3px;
         }
@@ -2303,9 +2303,9 @@ function App() {
           }
 
           .guide-face {
-            top: clamp(95px, 11vh, 125px);
-            width: clamp(390px, 78vw, 440px);
-            height: clamp(575px, 61vh, 650px);
+            top: clamp(145px, 16vh, 190px);
+            width: clamp(470px, 92vw, 520px);
+            height: clamp(720px, 75vh, 830px);
             border-width: 4px;
           }
 
@@ -2401,9 +2401,9 @@ function App() {
         }
 
         .guide-face {
-          top: clamp(110px, 12vh, 165px);
-          width: clamp(430px, 76vw, 590px);
-          height: clamp(630px, 62vh, 820px);
+          top: clamp(150px, 15vh, 210px);
+          width: clamp(500px, 92vw, 700px);
+          height: clamp(720px, 74vh, 940px);
           border-width: 5px;
         }
 
