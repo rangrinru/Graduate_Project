@@ -102,16 +102,16 @@ SAVE_AS_PNG = True
 INITIAL_EXPOSURE_MS = 100
 
 # 스트리밍 FPS
-STREAM_FPS = 10
+STREAM_FPS = 15
 
 # 스트리밍용 화면 가로 크기
-STREAM_WIDTH = 480
+STREAM_WIDTH = 720
 
 # 스트리밍용 화면 세로 크기
-STREAM_HEIGHT = 768
+STREAM_HEIGHT = 1152
 
 # 스트리밍용 JPEG 품질
-STREAM_JPEG_QUALITY = 55
+STREAM_JPEG_QUALITY = 70
 
 # 릴레이 연결 GPIO 번호
 RELAY_PIN = 17
@@ -188,6 +188,14 @@ raw_stream_lock = threading.Lock()
 latest_preview_gray8 = None
 latest_preview_frame_time = 0.0
 raw_fifo_fd = None
+
+# CAM4 미리보기는 백그라운드에서 최신 JPEG만 만들어두고 스트림 응답은 이를 재사용합니다.
+cam4_jpeg_thread = None
+cam4_jpeg_stop_event = threading.Event()
+cam4_jpeg_condition = threading.Condition()
+latest_cam4_jpeg = None
+latest_cam4_jpeg_time = 0.0
+latest_cam4_jpeg_seq = 0
 
 # raw 프레임을 화면용 8bit로 만들 때 사용할 하위/상위 퍼센타일
 RAW_NORMALIZE_LOW_PERCENTILE = 1
@@ -2230,7 +2238,119 @@ def delete_profile_api(profile_id):
 # CAM4 스트리밍 생성기
 # =========================
 
+def build_cam4_preview_jpeg():
+    # 스트리밍용 CAM4 프레임을 만들고 JPEG로 인코딩합니다.
+    with camera_lock:
+        if not camera_ready:
+            return None
+
+        cam4_gray = read_uc788_cam_frame_gray8("cam4")
+
+    # 세로 키오스크 화면에 맞게 CAM4 영상을 서버에서 세로 방향으로 회전
+    cam4_gray = cv2.rotate(cam4_gray, cv2.ROTATE_90_CLOCKWISE)
+
+    # 화면 표시용 크기로 리사이즈
+    cam4_gray = cv2.resize(
+        cam4_gray,
+        (STREAM_WIDTH, STREAM_HEIGHT),
+        interpolation=cv2.INTER_AREA
+    )
+
+    # 브라우저에 바로 보낼 grayscale JPEG로 인코딩
+    ok, buffer = cv2.imencode(
+        ".jpg",
+        cam4_gray,
+        [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY]
+    )
+
+    if not ok:
+        return None
+
+    return buffer.tobytes()
+
+
+def cam4_jpeg_worker():
+    # 백그라운드에서 최신 CAM4 JPEG만 계속 갱신합니다.
+    global latest_cam4_jpeg, latest_cam4_jpeg_time, latest_cam4_jpeg_seq
+
+    frame_delay = 1.0 / STREAM_FPS
+
+    while not cam4_jpeg_stop_event.is_set():
+        start_time = monotonic()
+
+        try:
+            jpg_bytes = build_cam4_preview_jpeg()
+
+            if jpg_bytes is not None:
+                with cam4_jpeg_condition:
+                    latest_cam4_jpeg = jpg_bytes
+                    latest_cam4_jpeg_time = monotonic()
+                    latest_cam4_jpeg_seq += 1
+                    cam4_jpeg_condition.notify_all()
+
+            elapsed = monotonic() - start_time
+            remain = frame_delay - elapsed
+
+            if remain > 0:
+                cam4_jpeg_stop_event.wait(remain)
+
+        except Exception as e:
+            print("[CAM4 JPEG worker error]", e)
+            cam4_jpeg_stop_event.wait(0.1)
+
+
+def start_cam4_jpeg_worker():
+    # CAM4 JPEG 백그라운드 스레드 시작
+    global cam4_jpeg_thread
+
+    if cam4_jpeg_thread is not None and cam4_jpeg_thread.is_alive():
+        return
+
+    cam4_jpeg_stop_event.clear()
+    cam4_jpeg_thread = threading.Thread(target=cam4_jpeg_worker, daemon=True)
+    cam4_jpeg_thread.start()
+
+
 def generate_cam4_stream():
+    # 스트리밍 요청은 직접 인코딩하지 않고 백그라운드 스레드의 최신 JPEG를 내보냅니다.
+    start_cam4_jpeg_worker()
+
+    last_seq = -1
+
+    while True:
+        try:
+            with cam4_jpeg_condition:
+                has_new_frame = cam4_jpeg_condition.wait_for(
+                    lambda: latest_cam4_jpeg is not None and latest_cam4_jpeg_seq != last_seq,
+                    timeout=1.0
+                )
+
+                if not has_new_frame and latest_cam4_jpeg is None:
+                    continue
+
+                jpg_bytes = latest_cam4_jpeg
+                last_seq = latest_cam4_jpeg_seq
+
+            if jpg_bytes is None:
+                continue
+
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n"
+                b"Cache-Control: no-cache\r\n\r\n" +
+                jpg_bytes +
+                b"\r\n"
+            )
+
+        except GeneratorExit:
+            break
+
+        except Exception as e:
+            print("[stream error]", e)
+            sleep(0.1)
+
+
+def generate_cam4_stream_inline():
     # 목표 프레임 간격 계산
     frame_delay = 1.0 / STREAM_FPS
 
@@ -3050,6 +3170,9 @@ if __name__ == "__main__":
 
     # 카메라 초기화
     init_camera()
+
+    # CAM4 미리보기 JPEG를 백그라운드에서 미리 만들어 화면 지연을 줄입니다.
+    start_cam4_jpeg_worker()
 
     # Flask 서버 실행
     app.run(host="0.0.0.0", port=8000, threaded=True)
