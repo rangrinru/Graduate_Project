@@ -1672,9 +1672,9 @@ function App() {
         .guide-face {
           position: absolute;
           left: 50%;
-          top: clamp(135px, 15vh, 205px);
-          width: clamp(430px, 86vw, 640px);
-          height: clamp(660px, 72vh, 920px);
+          top: clamp(165px, 18vh, 245px);
+          width: clamp(480px, 92vw, 720px);
+          height: clamp(740px, 80vh, 980px);
           transform: translateX(-50%);
           border: 4px dashed rgba(103,232,249,0.92);
           border-radius: 47% 47% 43% 43% / 34% 34% 57% 57%;
@@ -2303,9 +2303,9 @@ function App() {
           }
 
           .guide-face {
-            top: clamp(145px, 16vh, 190px);
-            width: clamp(470px, 92vw, 520px);
-            height: clamp(720px, 75vh, 830px);
+            top: clamp(175px, 19vh, 230px);
+            width: clamp(520px, 98vw, 560px);
+            height: clamp(800px, 84vh, 900px);
             border-width: 4px;
           }
 
@@ -2401,9 +2401,9 @@ function App() {
         }
 
         .guide-face {
-          top: clamp(150px, 15vh, 210px);
-          width: clamp(500px, 92vw, 700px);
-          height: clamp(720px, 74vh, 940px);
+          top: clamp(185px, 18vh, 250px);
+          width: clamp(535px, 98vw, 760px);
+          height: clamp(800px, 82vh, 1020px);
           border-width: 5px;
         }
 
