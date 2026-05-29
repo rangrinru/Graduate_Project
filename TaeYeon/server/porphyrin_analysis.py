@@ -278,37 +278,30 @@ def analyze_porphyrin_heatmap_v04(
     if landmark_pts is not None and landmark_source_shape is not None:
         landmark_pts = rescale_landmarks(landmark_pts, landmark_source_shape, gray.shape)
 
-    landmark_mask = make_landmark_face_mask(gray.shape, landmark_pts)
-    face_mask = landmark_mask if landmark_mask is not None else make_porphyrin_face_mask(gray)
-    face_pixels = int(np.count_nonzero(face_mask))
-    if face_pixels <= 0:
-        face_mask = np.full_like(gray, 255)
-        face_pixels = gray.size
-
-    face_points = cv2.findNonZero(face_mask)
-    if face_points is not None:
-        face_rect = cv2.boundingRect(face_points)
-    else:
-        face_rect = (0, 0, gray.shape[1], gray.shape[0])
-    landmark_metrics = get_landmark_metrics(landmark_pts, face_rect)
+    # Do not crop to a face silhouette for porphyrin analysis.
+    # The 660nm frame is evaluated directly with fixed absolute thresholds.
+    face_mask = np.full_like(gray, 255)
+    face_pixels = gray.size
+    face_rect = (0, 0, gray.shape[1], gray.shape[0])
+    landmark_metrics = get_landmark_metrics(None, face_rect)
+    landmark_pts = None
 
     # Fixed-scale heatmap: red now means a comparable absolute 660nm response,
     # instead of the top percentile within each individual image.
     heat_scaled = blur.copy()
     heat_scaled = cv2.bitwise_and(heat_scaled, heat_scaled, mask=face_mask)
-    heatmap_min_value = 15.0
-    heatmap_max_value = 75.0
+    heatmap_min_value = 8.0
+    heatmap_max_value = 55.0
     heatmap_source = np.clip(
         (heat_scaled.astype(np.float32) - heatmap_min_value) * 255.0 / (heatmap_max_value - heatmap_min_value),
         0,
         255
     ).astype(np.uint8)
     heatmap = cv2.applyColorMap(heatmap_source, cv2.COLORMAP_JET)
-    heatmap[face_mask == 0] = (0, 0, 0)
 
-    visible_threshold = 22
-    local_contrast_threshold = 4
-    strong_absolute_threshold = 55
+    visible_threshold = 14
+    local_contrast_threshold = 2
+    strong_absolute_threshold = 32
     local_background = cv2.GaussianBlur(heat_scaled, (21, 21), 0)
     bright_detail = cv2.subtract(heat_scaled, local_background)
     thresh = np.where(
@@ -319,37 +312,16 @@ def analyze_porphyrin_heatmap_v04(
     ).astype(np.uint8)
     thresh = cv2.bitwise_and(thresh, thresh, mask=face_mask)
 
-    if landmark_pts is not None:
-        philtrum_threshold = 18
-        philtrum_mask = np.zeros_like(gray)
-        face_ys, face_xs = np.where(
-            (face_mask > 0)
-            & (heat_scaled >= philtrum_threshold)
-            & (bright_detail >= local_contrast_threshold)
-        )
-        for px, py in zip(face_xs, face_ys):
-            region_key = classify_face_region_by_landmarks(
-                int(px),
-                int(py),
-                face_rect,
-                landmark_metrics
-            )
-            if region_key == "philtrum":
-                philtrum_mask[int(py), int(px)] = 255
-        thresh = cv2.bitwise_or(thresh, philtrum_mask)
-
     kernel = np.ones((2, 2), np.uint8)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
 
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(thresh, connectivity=8)
     clean_mask = np.zeros_like(gray)
     accepted_count = 0
-    max_component_area = 350
+    max_component_area = 0
     for label_idx in range(1, num_labels):
         area = int(stats[label_idx, cv2.CC_STAT_AREA])
         if area < 2:
-            continue
-        if area > max_component_area:
             continue
 
         clean_mask[labels == label_idx] = 255
@@ -375,10 +347,7 @@ def analyze_porphyrin_heatmap_v04(
     intensity_values = heatmap_source[ys, xs].astype(np.float32) / 255.0 if len(xs) else []
 
     for x, y, intensity in zip(xs, ys, intensity_values):
-        if landmark_pts is not None:
-            region_key = classify_face_region_by_landmarks(int(x), int(y), face_rect, landmark_metrics)
-        else:
-            region_key = classify_face_region(int(x), int(y), face_rect)
+        region_key = classify_face_region(int(x), int(y), face_rect)
         region_score[region_key] += float(intensity)
 
     detection_rate = (total_area / face_pixels) * 100 if face_pixels else 0.0
