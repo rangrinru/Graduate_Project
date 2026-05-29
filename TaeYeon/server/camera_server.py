@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 
 from porphyrin_analysis import analyze_porphyrin_heatmap_v04
+from trouble_risk_analysis import analyze_trouble_risk_map
 from skin_aging_analysis import analyze_skin_aging_405nm
 from config import *
 from state import *
@@ -174,6 +175,37 @@ def set_manual_controls(camera, exposure_ms, gain):
     return
 
 
+def exposure_ms_to_uc788_value(exposure_ms):
+    if exposure_ms is None:
+        return UC788_EXPOSURE
+
+    if exposure_ms == REFERENCE_EXPOSURE_MS:
+        return UC788_REFERENCE_EXPOSURE
+
+    if exposure_ms == FLUORESCENCE_EXPOSURE_MS:
+        return UC788_FLUORESCENCE_EXPOSURE
+
+    if exposure_ms == PREVIEW_EXPOSURE_MS:
+        return UC788_PREVIEW_EXPOSURE
+
+    if INITIAL_EXPOSURE_MS <= 0:
+        return max(0, int(round(exposure_ms)))
+
+    scale = UC788_EXPOSURE / float(INITIAL_EXPOSURE_MS)
+    return max(0, int(round(float(exposure_ms) * scale)))
+
+
+def gain_to_uc788_value(gain):
+    if gain is None:
+        return UC788_ANALOGUE_GAIN
+
+    if CURRENT_GAIN <= 0:
+        return UC788_ANALOGUE_GAIN
+
+    scale = UC788_ANALOGUE_GAIN / float(CURRENT_GAIN)
+    return max(0, int(round(float(gain) * scale)))
+
+
 # =========================
 # UC-788 Rev.B RAW 카메라 유틸 함수
 # =========================
@@ -230,19 +262,24 @@ def configure_uc788_media(force=False):
 
 
 
-def apply_uc788_controls():
+def apply_uc788_controls(exposure_ms=None, gain=None, strict=False):
     # UC-788 Rev.B 직접 V4L2 캡처용 노출/게인/트리거 기본값 적용
     # /dev/v4l-subdev0 컨트롤이 순간적으로 준비되지 않을 수 있으므로 실패해도 서버는 계속 실행합니다.
+    exposure_value = exposure_ms_to_uc788_value(exposure_ms)
+    gain_value = gain_to_uc788_value(gain)
+
     commands = [
         ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"trigger_mode={UC788_TRIGGER_MODE}"],
-        ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"exposure={UC788_EXPOSURE}"],
-        ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"analogue_gain={UC788_ANALOGUE_GAIN}"],
+        ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"exposure={exposure_value}"],
+        ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"analogue_gain={gain_value}"],
     ]
 
     for command in commands:
         try:
-            run_command(command, check=False, capture_output=True)
+            run_command(command, check=strict, capture_output=True)
         except Exception as e:
+            if strict:
+                raise RuntimeError(f"UC-788 컨트롤 적용 실패: {command}: {e}") from e
             print(f"[UC-788 컨트롤 적용 경고] {command}: {e}")
 
 
@@ -309,8 +346,8 @@ def start_uc788_stream():
     # media 포맷 설정
     configure_uc788_media(force=True)
 
-    # UC-788 직접 V4L2 캡처용 노출/게인/트리거 기본값 적용
-    apply_uc788_controls()
+    # 위치 확인 프리뷰는 저장용 0ms가 아니라 얼굴을 볼 수 있는 별도 노출로 유지합니다.
+    apply_uc788_controls(exposure_ms=PREVIEW_EXPOSURE_MS, gain=CURRENT_GAIN)
 
     # 기존 FIFO 삭제 후 새로 생성
     try:
@@ -433,10 +470,11 @@ def capture_y10p_raw_bytes():
     return read_exact_from_fifo(RAW_EXPECTED_BYTES, timeout_sec=2.0)
 
 
-def capture_y10p_raw_bytes_direct():
+def capture_y10p_raw_bytes_direct(exposure_ms=None, gain=None, strict_controls=False):
     stop_uc788_stream()
     configure_uc788_media(force=True)
-    apply_uc788_controls()
+    apply_uc788_controls(exposure_ms=exposure_ms, gain=gain, strict=strict_controls)
+    sleep(DIRECT_CAPTURE_EXPOSURE_SETTLE_SEC)
 
     try:
         RAW_FRAME_PATH.unlink(missing_ok=True)
@@ -448,7 +486,7 @@ def capture_y10p_raw_bytes_direct():
         "-d", RAW_VIDEO_DEVICE,
         "--set-fmt-video=width=5120,height=800,pixelformat=Y10P",
         "--stream-mmap=3",
-        "--stream-skip=5",
+        f"--stream-skip={DIRECT_CAPTURE_STREAM_SKIP}",
         "--stream-count=1",
         f"--stream-to={RAW_FRAME_PATH}",
     ]
@@ -461,6 +499,16 @@ def capture_y10p_raw_bytes_direct():
         raise RuntimeError(f"raw 크기 오류: expected={RAW_EXPECTED_BYTES}, actual={len(raw_bytes)}")
 
     return raw_bytes
+
+
+def capture_uc788_full_frame_bgr_direct(exposure_ms, gain):
+    raw_bytes = capture_y10p_raw_bytes_direct(
+        exposure_ms=exposure_ms,
+        gain=gain,
+        strict_controls=True
+    )
+    gray8 = y10p_high8_to_gray8(raw_bytes)
+    return cv2.cvtColor(gray8, cv2.COLOR_GRAY2BGR)
 
 
 def read_uc788_full_frame_gray8():
@@ -553,7 +601,7 @@ def capture_high_quality_full_frame(exposure_ms, gain):
     try:
         # UC-788 Rev.B raw 기반 전체 프레임 촬영
         with camera_lock:
-            full_frame_bgr = read_uc788_full_frame_bgr()
+            full_frame_bgr = capture_uc788_full_frame_bgr_direct(exposure_ms, gain)
 
     finally:
         # 릴레이 OFF
@@ -561,6 +609,26 @@ def capture_high_quality_full_frame(exposure_ms, gain):
 
     # 촬영 결과 반환
     return full_frame_bgr
+
+
+def capture_high_quality_full_frames_by_exposure(exposure_values_ms, gain):
+    relay_on()
+    sleep(RELAY_WARMUP_SEC)
+
+    frames_by_exposure = {}
+
+    try:
+        with camera_lock:
+            for exposure_ms in exposure_values_ms:
+                frames_by_exposure[exposure_ms] = capture_uc788_full_frame_bgr_direct(
+                    exposure_ms=exposure_ms,
+                    gain=gain
+                )
+
+    finally:
+        relay_off()
+
+    return frames_by_exposure
 
 
 # =========================
@@ -951,18 +1019,21 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
     if not profile_root.exists():
         raise ValueError("프로필 폴더가 존재하지 않습니다.")
 
-    # 촬영 노출 시간 설정
-    exposure_ms = INITIAL_EXPOSURE_MS
-
     # 촬영 gain 설정
     gain = CURRENT_GAIN
 
     # 저장 확장자 결정
     ext = "png" if SAVE_AS_PNG else "jpg"
 
-    # 릴레이 예열 중에는 스트리밍이 멈추지 않도록 실제 프레임 읽기 순간에만 카메라 락을 잡습니다.
-    full_frame_bgr = capture_high_quality_full_frame(
-        exposure_ms=exposure_ms,
+    capture_exposure_plan = {
+        cam_key: CAPTURE_EXPOSURE_MS_BY_CAMERA.get(cam_key, INITIAL_EXPOSURE_MS)
+        for cam_key in ["cam2", "cam3", "cam4"]
+    }
+    exposure_values_ms = list(dict.fromkeys(capture_exposure_plan.values()))
+
+    # UC-788은 네 카메라가 하나의 프레임으로 동작하므로 노출별 전체 프레임을 찍은 뒤 필요한 카메라 영역만 저장합니다.
+    frames_by_exposure = capture_high_quality_full_frames_by_exposure(
+        exposure_values_ms=exposure_values_ms,
         gain=gain
     )
 
@@ -977,6 +1048,9 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
 
     # cam2, cam3, cam4 순서대로 저장
     for cam_key in ["cam2", "cam3", "cam4"]:
+        exposure_ms = capture_exposure_plan[cam_key]
+        full_frame_bgr = frames_by_exposure[exposure_ms]
+
         # 개별 카메라 영역 추출
         target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
 
@@ -992,7 +1066,8 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
             ext=ext,
             profile_name=profile_name,
             folder_id=folder_id,
-            trigger_metadata=trigger_metadata
+            trigger_metadata=trigger_metadata,
+            uc788_exposure_value=exposure_ms_to_uc788_value(exposure_ms),
         )
 
         # 저장 파일 목록에 추가
@@ -1005,6 +1080,7 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
         "profile_name": profile_name,
         "profile_id": folder_id,
         "capture_id": capture_id,
+        "exposure_plan_ms": capture_exposure_plan,
         "files": saved_files
     }
 
@@ -1236,19 +1312,19 @@ def delete_profile_api(profile_id):
 # =========================
 
 def build_cam4_preview_jpeg():
-    # 스트리밍용 CAM4 프레임을 만들고 JPEG로 인코딩합니다.
+    # 위치 확인 화면은 필터가 어두운 cam4 대신 no_filter 프리뷰 카메라를 사용합니다.
     with camera_lock:
         if not camera_ready:
             return None
 
-        cam4_gray = read_uc788_cam_frame_gray8("cam4")
+        preview_gray = read_uc788_cam_frame_gray8(PREVIEW_CAM_KEY)
 
-    # 세로 키오스크 화면에 맞게 CAM4 영상을 서버에서 세로 방향으로 회전
-    cam4_gray = cv2.rotate(cam4_gray, cv2.ROTATE_90_CLOCKWISE)
+    # 세로 키오스크 화면에 맞게 영상을 서버에서 세로 방향으로 회전
+    preview_gray = cv2.rotate(preview_gray, cv2.ROTATE_90_CLOCKWISE)
 
     # 화면 표시용 크기로 리사이즈
-    cam4_gray = cv2.resize(
-        cam4_gray,
+    preview_gray = cv2.resize(
+        preview_gray,
         (STREAM_WIDTH, STREAM_HEIGHT),
         interpolation=cv2.INTER_AREA
     )
@@ -1256,7 +1332,7 @@ def build_cam4_preview_jpeg():
     # 브라우저에 바로 보낼 grayscale JPEG로 인코딩
     ok, buffer = cv2.imencode(
         ".jpg",
-        cam4_gray,
+        preview_gray,
         [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY]
     )
 
@@ -1357,21 +1433,21 @@ def generate_cam4_stream_inline():
         start_time = monotonic()
 
         try:
-            # 스트리밍에서는 전체 BGR 변환을 하지 않고 1채널 gray에서 CAM4만 잘라냅니다.
+            # 스트리밍에서는 전체 BGR 변환을 하지 않고 1채널 gray에서 프리뷰 카메라만 잘라냅니다.
             # 이렇게 해야 15.6인치 세로 키오스크에서도 프레임이 덜 끊깁니다.
             with camera_lock:
                 if not camera_ready:
                     sleep(0.05)
                     continue
 
-                cam4_gray = read_uc788_cam_frame_gray8("cam4")
+                preview_gray = read_uc788_cam_frame_gray8(PREVIEW_CAM_KEY)
 
-            # 세로 키오스크 화면에 맞게 CAM4 영상을 서버에서 세로 방향으로 회전
-            cam4_gray = cv2.rotate(cam4_gray, cv2.ROTATE_90_CLOCKWISE)
+            # 세로 키오스크 화면에 맞게 프리뷰 영상을 서버에서 세로 방향으로 회전
+            preview_gray = cv2.rotate(preview_gray, cv2.ROTATE_90_CLOCKWISE)
 
             # 800x1280 원본 세로 프레임에서 720x1152로 약간만 줄여 품질과 부드러움을 균형 있게 맞춤
-            cam4_gray = cv2.resize(
-                cam4_gray,
+            preview_gray = cv2.resize(
+                preview_gray,
                 (STREAM_WIDTH, STREAM_HEIGHT),
                 interpolation=cv2.INTER_AREA
             )
@@ -1380,7 +1456,7 @@ def generate_cam4_stream_inline():
             # 브라우저는 grayscale JPEG도 정상 표시합니다.
             ok, buffer = cv2.imencode(
                 ".jpg",
-                cam4_gray,
+                preview_gray,
                 [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY]
             )
 
@@ -1749,6 +1825,67 @@ def analyze_porphyrin_api(profile_id, capture_id):
 
     except Exception as e:
         # 실패 응답 반환
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 400
+
+
+# =========================
+# 특정 촬영 기록 트러블 위험/집중 케어 분석 API
+# =========================
+
+@app.route("/profiles/<profile_id>/history/<capture_id>/analyze-trouble-risk", methods=["POST"])
+def analyze_trouble_risk_api(profile_id, capture_id):
+    try:
+        image_path = resolve_image_path(
+            profile_id=profile_id,
+            capture_id=capture_id,
+            filter_type="660nm_filter"
+        )
+
+        try:
+            face_reference_path = resolve_image_path(
+                profile_id=profile_id,
+                capture_id=capture_id,
+                filter_type="no_filter"
+            )
+        except Exception:
+            face_reference_path = None
+
+        profile_root = get_profile_root(profile_id)
+        analysis_dir = (
+            profile_root
+            / CAMERA_INFO["cam4"]["folder"]
+            / capture_id
+            / "analysis"
+        )
+
+        report = analyze_trouble_risk_map(
+            image_path,
+            analysis_dir,
+            face_reference_path,
+            extract_face_landmarks_for_analysis
+        )
+
+        return jsonify({
+            "ok": True,
+            "captureId": capture_id,
+            "risk_area": report["risk_area"],
+            "risk_rate_percent": report["risk_rate_percent"],
+            "risk_grade": report["risk_grade"],
+            "region_analysis": report["region_analysis"],
+            "focus_areas": report["focus_areas"],
+            "top_region": report["top_region"],
+            "threshold_value": report["threshold_value"],
+            "face_area_pixels": report["face_area_pixels"],
+            "face_landmarks_used": report["face_landmarks_used"],
+            "risk_heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/trouble-risk-heatmap",
+            "focus_overlay_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/focus-care-overlay",
+            "risk_mask_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/trouble-risk-mask"
+        })
+
+    except Exception as e:
         return jsonify({
             "ok": False,
             "error": str(e)

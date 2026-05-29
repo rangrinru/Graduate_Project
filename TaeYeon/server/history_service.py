@@ -178,6 +178,9 @@ def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: s
         "porphyrin-face-mask": (CAMERA_INFO["cam4"]["folder"], "porphyrin_face_mask.jpg"),
         "porphyrin-compare": (CAMERA_INFO["cam4"]["folder"], "porphyrin_compare.jpg"),
         "porphyrin-heatmap": (CAMERA_INFO["cam4"]["folder"], "porphyrin_heatmap.jpg"),
+        "trouble-risk-heatmap": (CAMERA_INFO["cam4"]["folder"], "trouble_risk_heatmap.jpg"),
+        "trouble-risk-mask": (CAMERA_INFO["cam4"]["folder"], "trouble_risk_mask.jpg"),
+        "focus-care-overlay": (CAMERA_INFO["cam4"]["folder"], "focus_care_overlay.jpg"),
         "skin-aging-result": (CAMERA_INFO["cam3"]["folder"], "skin_aging_result.jpg"),
         "skin-aging-mask": (CAMERA_INFO["cam3"]["folder"], "skin_aging_mask.jpg"),
     }

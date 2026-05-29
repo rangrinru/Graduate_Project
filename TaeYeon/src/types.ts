@@ -67,6 +67,43 @@ export type PorphyrinResult = {
   heatmap_url: string;
 };
 
+export type FocusCareArea = {
+  id: number;
+  region: string;
+  bbox: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  center: {
+    x: number;
+    y: number;
+  };
+  area: number;
+  mean_intensity: number;
+  risk_score: number;
+};
+
+export type TroubleRiskResult = {
+  risk_area: number;
+  risk_rate_percent: number;
+  risk_grade: string;
+  region_analysis: Record<string, number>;
+  focus_areas: FocusCareArea[];
+  top_region: string | null;
+  threshold_value: number;
+  risk_heatmap_url: string;
+  focus_overlay_url: string;
+  risk_mask_url: string;
+};
+
+export type AnalysisImageMode =
+  | "source"
+  | "porphyrin_heatmap"
+  | "trouble_risk_heatmap"
+  | "focus_care_overlay";
+
 export type SkinAgingResult = {
   freckle_count: number;
   freckle_area: number;
