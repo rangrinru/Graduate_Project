@@ -9,11 +9,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_INPUT_DIR = PROJECT_ROOT / "captures" / "2026-05-27" / "660nm_2026-05-27"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp"}
 
-HEATMAP_MIN_VALUE = 4.0
-HEATMAP_MAX_VALUE = 38.0
-VISIBLE_THRESHOLD = 9
-LOCAL_CONTRAST_THRESHOLD = 1
-STRONG_ABSOLUTE_THRESHOLD = 24
+HEATMAP_MIN_VALUE = 25.0
+HEATMAP_MAX_VALUE = 110.0
+VISIBLE_THRESHOLD = 70
+LOCAL_CONTRAST_THRESHOLD = 5
+STRONG_ABSOLUTE_THRESHOLD = 100
 MIN_COMPONENT_AREA = 2
 
 
@@ -32,7 +32,7 @@ def list_images(input_dir: Path):
     )
 
 
-def fit_to_screen(img, max_width=5200, max_height=2700):
+def fit_to_screen(img, max_width=2600, max_height=1350):
     h, w = img.shape[:2]
     scale = min(max_width / max(w, 1), max_height / max(h, 1), 1.0)
     if scale >= 1.0:
