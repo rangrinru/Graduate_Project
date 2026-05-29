@@ -6,6 +6,10 @@ import cv2
 import numpy as np
 
 
+def clamp(value, low, high):
+    return max(low, min(high, value))
+
+
 def get_face_cascade():
     cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
     face_cascade = cv2.CascadeClassifier(cascade_path)
@@ -52,6 +56,51 @@ def expand_bbox(bbox, img_shape, ratio_x=0.16, ratio_y=0.18):
     return x1, y1, x2 - x1, y2 - y1, method
 
 
+def rescale_landmarks(pts, source_shape, target_shape):
+    if not pts:
+        return None
+
+    source_h, source_w = source_shape[:2]
+    target_h, target_w = target_shape[:2]
+    if source_w <= 0 or source_h <= 0:
+        return None
+
+    scale_x = target_w / float(source_w)
+    scale_y = target_h / float(source_h)
+    return [
+        (
+            clamp(int(round(x * scale_x)), 0, target_w - 1),
+            clamp(int(round(y * scale_y)), 0, target_h - 1),
+        )
+        for x, y in pts
+    ]
+
+
+def bbox_from_landmarks(pts, img_shape):
+    if not pts:
+        return None
+
+    img_h, img_w = img_shape[:2]
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    x1 = clamp(min(xs), 0, img_w - 1)
+    y1 = clamp(min(ys), 0, img_h - 1)
+    x2 = clamp(max(xs), 0, img_w - 1)
+    y2 = clamp(max(ys), 0, img_h - 1)
+    return expand_bbox((x1, y1, x2 - x1, y2 - y1, "mediapipe_landmark"), img_shape, 0.06, 0.08)
+
+
+def make_landmark_face_mask(shape, pts):
+    if not pts or len(pts) < 20:
+        return None
+
+    mask = np.zeros(shape[:2], dtype=np.uint8)
+    hull = cv2.convexHull(np.array(pts, dtype=np.int32))
+    cv2.fillConvexPoly(mask, hull, 255)
+    kernel = np.ones((15, 15), np.uint8)
+    return cv2.erode(mask, kernel, iterations=1)
+
+
 def valid_face_mask(l_channel):
     low = np.percentile(l_channel, 18)
     high = np.percentile(l_channel, 99.4)
@@ -76,12 +125,46 @@ def anatomy_mask(shape):
     return cv2.bitwise_and(mask, cv2.bitwise_not(remove))
 
 
-def cheek_focus_mask(shape):
+def cheek_focus_mask(shape, landmark_pts=None):
     h, w = shape[:2]
     mask = np.zeros((h, w), dtype=np.uint8)
 
-    cv2.ellipse(mask, (int(w * 0.32), int(h * 0.58)), (int(w * 0.22), int(h * 0.24)), 0, 0, 360, 255, -1)
-    cv2.ellipse(mask, (int(w * 0.68), int(h * 0.58)), (int(w * 0.22), int(h * 0.24)), 0, 0, 360, 255, -1)
+    if landmark_pts and len(landmark_pts) >= 469:
+        xs = [p[0] for p in landmark_pts]
+        ys = [p[1] for p in landmark_pts]
+        face_x1, face_x2 = min(xs), max(xs)
+        face_y1, face_y2 = min(ys), max(ys)
+        face_w = max(1, face_x2 - face_x1)
+        face_h = max(1, face_y2 - face_y1)
+
+        def avg(indices, axis, fallback):
+            values = [landmark_pts[index][axis] for index in indices if index < len(landmark_pts)]
+            return sum(values) / float(len(values)) if values else fallback
+
+        nose_x = avg([1, 2, 4, 5], 0, face_x1 + face_w * 0.50)
+        eye_y = avg([33, 133, 159, 145, 263, 362, 386, 374], 1, face_y1 + face_h * 0.34)
+        mouth_y = avg([13, 14, 61, 291, 0, 17], 1, face_y1 + face_h * 0.68)
+        cheek_y = eye_y + (mouth_y - eye_y) * 0.52
+
+        cheek_axes = (int(face_w * 0.16), int(face_h * 0.14))
+        left_center = (int(nose_x - face_w * 0.25), int(cheek_y))
+        right_center = (int(nose_x + face_w * 0.25), int(cheek_y))
+        cv2.ellipse(mask, left_center, cheek_axes, 0, 0, 360, 255, -1)
+        cv2.ellipse(mask, right_center, cheek_axes, 0, 0, 360, 255, -1)
+
+        remove = np.zeros_like(mask)
+        cv2.ellipse(remove, (int(nose_x), int(face_y1 + face_h * 0.53)), (int(face_w * 0.13), int(face_h * 0.20)), 0, 0, 360, 255, -1)
+        cv2.rectangle(remove, (0, 0), (w, int(eye_y + face_h * 0.08)), 255, -1)
+        cv2.rectangle(remove, (0, int(mouth_y - face_h * 0.04)), (w, h), 255, -1)
+
+        face_mask = make_landmark_face_mask(shape, landmark_pts)
+        mask = cv2.bitwise_and(mask, cv2.bitwise_not(remove))
+        if face_mask is not None:
+            mask = cv2.bitwise_and(mask, face_mask)
+        return mask
+
+    cv2.ellipse(mask, (int(w * 0.32), int(h * 0.58)), (int(w * 0.18), int(h * 0.19)), 0, 0, 360, 255, -1)
+    cv2.ellipse(mask, (int(w * 0.68), int(h * 0.58)), (int(w * 0.18), int(h * 0.19)), 0, 0, 360, 255, -1)
 
     remove = np.zeros_like(mask)
     cv2.ellipse(remove, (int(w * 0.50), int(h * 0.54)), (int(w * 0.15), int(h * 0.17)), 0, 0, 360, 255, -1)
@@ -92,7 +175,7 @@ def cheek_focus_mask(shape):
     return cv2.bitwise_and(mask, cv2.bitwise_not(remove))
 
 
-def freckle_candidates(face_roi):
+def freckle_candidates(face_roi, landmark_pts=None):
     lab = cv2.cvtColor(face_roi, cv2.COLOR_BGR2LAB)
     l_channel, _, _ = cv2.split(lab)
 
@@ -102,7 +185,7 @@ def freckle_candidates(face_roi):
     background = cv2.GaussianBlur(smooth, (31, 31), 0)
     dark_spots = cv2.subtract(background, smooth)
 
-    valid_mask = cv2.bitwise_and(valid_face_mask(l_channel), cheek_focus_mask(face_roi.shape))
+    valid_mask = cv2.bitwise_and(valid_face_mask(l_channel), cheek_focus_mask(face_roi.shape, landmark_pts))
     dark_spots = cv2.bitwise_and(dark_spots, dark_spots, mask=valid_mask)
 
     if np.any(valid_mask):
@@ -165,18 +248,49 @@ def draw_info_panel(img, lines):
         y += 34
 
 
-def analyze_skin_aging_405nm(image_path: Path, output_dir: Path):
+def analyze_skin_aging_405nm(
+    image_path: Path,
+    output_dir: Path,
+    face_reference_path: Path = None,
+    landmark_extractor=None,
+):
     img = cv2.imread(str(image_path))
     if img is None:
         raise RuntimeError("Failed to load 405nm image")
 
-    face_cascade = get_face_cascade()
-    result = img.copy()
-    face = detect_largest_face(img, face_cascade) or fallback_face_roi(img)
-    fx, fy, fw, fh, face_method = expand_bbox(face, img.shape)
-    face_roi = img[fy : fy + fh, fx : fx + fw]
+    landmark_pts = None
+    landmark_source_shape = None
+    if landmark_extractor is not None and face_reference_path is not None:
+        reference_img = cv2.imread(str(face_reference_path))
+        if reference_img is not None:
+            landmark_pts = landmark_extractor(reference_img)
+            landmark_source_shape = reference_img.shape
 
-    mask, threshold_value, cheek_mask = freckle_candidates(face_roi)
+    if landmark_extractor is not None and landmark_pts is None:
+        landmark_pts = landmark_extractor(img)
+        landmark_source_shape = img.shape
+
+    if landmark_pts is not None and landmark_source_shape is not None:
+        landmark_pts = rescale_landmarks(landmark_pts, landmark_source_shape, img.shape)
+
+    result = img.copy()
+    face = bbox_from_landmarks(landmark_pts, img.shape)
+    if face is None:
+        face_cascade = get_face_cascade()
+        face = detect_largest_face(img, face_cascade) or fallback_face_roi(img)
+        face = expand_bbox(face, img.shape)
+
+    fx, fy, fw, fh, face_method = face
+    face_roi = img[fy : fy + fh, fx : fx + fw]
+    roi_landmarks = None
+    if landmark_pts is not None:
+        roi_landmarks = [
+            (x - fx, y - fy)
+            for x, y in landmark_pts
+            if fx <= x < fx + fw and fy <= y < fy + fh
+        ]
+
+    mask, threshold_value, cheek_mask = freckle_candidates(face_roi, roi_landmarks)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     freckles = []
@@ -281,6 +395,7 @@ def analyze_skin_aging_405nm(image_path: Path, output_dir: Path):
         "max_area": int(max_area),
         "face_detection_method": face_method,
         "detection_focus": "bilateral_cheeks",
+        "face_landmarks_used": bool(landmark_pts is not None),
         "face_bbox": {
             "x": int(fx),
             "y": int(fy),

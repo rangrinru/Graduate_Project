@@ -1767,6 +1767,14 @@ def analyze_skin_aging_api(profile_id, capture_id):
             capture_id=capture_id,
             filter_type="405nm_filter"
         )
+        try:
+            face_reference_path = resolve_image_path(
+                profile_id=profile_id,
+                capture_id=capture_id,
+                filter_type="no_filter"
+            )
+        except Exception:
+            face_reference_path = None
 
         profile_root = get_profile_root(profile_id)
         analysis_dir = (
@@ -1776,7 +1784,12 @@ def analyze_skin_aging_api(profile_id, capture_id):
             / "analysis"
         )
 
-        report = analyze_skin_aging_405nm(image_path, analysis_dir)
+        report = analyze_skin_aging_405nm(
+            image_path,
+            analysis_dir,
+            face_reference_path,
+            extract_face_landmarks_for_analysis
+        )
 
         return jsonify({
             "ok": True,
@@ -1795,6 +1808,7 @@ def analyze_skin_aging_api(profile_id, capture_id):
             "min_area": report["min_area"],
             "max_area": report["max_area"],
             "face_detection_method": report["face_detection_method"],
+            "face_landmarks_used": report["face_landmarks_used"],
             "result_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/skin-aging-result",
             "mask_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/skin-aging-mask"
         })
