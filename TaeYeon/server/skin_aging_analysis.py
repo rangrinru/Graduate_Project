@@ -76,6 +76,22 @@ def anatomy_mask(shape):
     return cv2.bitwise_and(mask, cv2.bitwise_not(remove))
 
 
+def cheek_focus_mask(shape):
+    h, w = shape[:2]
+    mask = np.zeros((h, w), dtype=np.uint8)
+
+    cv2.ellipse(mask, (int(w * 0.32), int(h * 0.58)), (int(w * 0.22), int(h * 0.24)), 0, 0, 360, 255, -1)
+    cv2.ellipse(mask, (int(w * 0.68), int(h * 0.58)), (int(w * 0.22), int(h * 0.24)), 0, 0, 360, 255, -1)
+
+    remove = np.zeros_like(mask)
+    cv2.ellipse(remove, (int(w * 0.50), int(h * 0.54)), (int(w * 0.15), int(h * 0.17)), 0, 0, 360, 255, -1)
+    cv2.ellipse(remove, (int(w * 0.50), int(h * 0.76)), (int(w * 0.30), int(h * 0.14)), 0, 0, 360, 255, -1)
+    cv2.rectangle(remove, (0, 0), (w, int(h * 0.37)), 255, -1)
+    cv2.rectangle(remove, (0, int(h * 0.76)), (w, h), 255, -1)
+
+    return cv2.bitwise_and(mask, cv2.bitwise_not(remove))
+
+
 def freckle_candidates(face_roi):
     lab = cv2.cvtColor(face_roi, cv2.COLOR_BGR2LAB)
     l_channel, _, _ = cv2.split(lab)
@@ -86,18 +102,19 @@ def freckle_candidates(face_roi):
     background = cv2.GaussianBlur(smooth, (31, 31), 0)
     dark_spots = cv2.subtract(background, smooth)
 
-    valid_mask = cv2.bitwise_and(valid_face_mask(l_channel), anatomy_mask(face_roi.shape))
+    valid_mask = cv2.bitwise_and(valid_face_mask(l_channel), cheek_focus_mask(face_roi.shape))
     dark_spots = cv2.bitwise_and(dark_spots, dark_spots, mask=valid_mask)
 
     if np.any(valid_mask):
-        threshold_value = max(7, np.percentile(dark_spots[valid_mask > 0], 98.2))
+        threshold_value = max(4, np.percentile(dark_spots[valid_mask > 0], 96.5))
     else:
-        threshold_value = 14
+        threshold_value = 10
 
     _, mask = cv2.threshold(dark_spots, threshold_value, 255, cv2.THRESH_BINARY)
     kernel = np.ones((3, 3), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
-    return mask, float(threshold_value)
+    mask = cv2.bitwise_and(mask, mask, mask=valid_mask)
+    return mask, float(threshold_value), valid_mask
 
 
 def calculate_predicted_skin_age(freckle_count, freckle_area_rate_percent):
@@ -159,13 +176,13 @@ def analyze_skin_aging_405nm(image_path: Path, output_dir: Path):
     fx, fy, fw, fh, face_method = expand_bbox(face, img.shape)
     face_roi = img[fy : fy + fh, fx : fx + fw]
 
-    mask, threshold_value = freckle_candidates(face_roi)
+    mask, threshold_value, cheek_mask = freckle_candidates(face_roi)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     freckles = []
     total_area = 0.0
-    min_area = max(4, int((fw * fh) * 0.000012))
-    max_area = max(60, int((fw * fh) * 0.00035))
+    min_area = max(2, int((fw * fh) * 0.000006))
+    max_area = max(80, int((fw * fh) * 0.00045))
 
     for contour in contours:
         area = cv2.contourArea(contour)
@@ -177,12 +194,12 @@ def analyze_skin_aging_405nm(image_path: Path, output_dir: Path):
             continue
 
         circularity = (4.0 * np.pi * area) / (perimeter * perimeter)
-        if circularity < 0.32:
+        if circularity < 0.18:
             continue
 
         x, y, w, h = cv2.boundingRect(contour)
         aspect = w / float(h)
-        if aspect < 0.55 or aspect > 1.85:
+        if aspect < 0.35 or aspect > 2.60:
             continue
 
         gx = fx + x
@@ -192,14 +209,12 @@ def analyze_skin_aging_405nm(image_path: Path, output_dir: Path):
         rel_x = (cx - fx) / float(fw)
         rel_y = (cy - fy) / float(fh)
 
-        if rel_y < 0.34 or rel_y > 0.80:
+        if rel_y < 0.38 or rel_y > 0.76:
             continue
 
-        in_left_eye_zone = 0.08 < rel_x < 0.50 and 0.16 < rel_y < 0.54
-        in_right_eye_zone = 0.50 < rel_x < 0.92 and 0.16 < rel_y < 0.54
-        in_nostril_zone = 0.30 < rel_x < 0.70 and 0.46 < rel_y < 0.66
-        in_mouth_zone = 0.18 < rel_x < 0.82 and 0.64 < rel_y < 0.92
-        if in_left_eye_zone or in_right_eye_zone or in_nostril_zone or in_mouth_zone:
+        in_left_cheek = 0.14 < rel_x < 0.46
+        in_right_cheek = 0.54 < rel_x < 0.86
+        if not (in_left_cheek or in_right_cheek):
             continue
 
         radius = max(5, int(max(w, h) * 0.65))
@@ -224,6 +239,10 @@ def analyze_skin_aging_405nm(image_path: Path, output_dir: Path):
     age_result = calculate_predicted_skin_age(len(freckles), freckle_area_rate)
 
     cv2.rectangle(result, (fx, fy), (fx + fw, fy + fh), (0, 220, 0), 2, cv2.LINE_AA)
+    cheek_overlay = np.zeros_like(face_roi)
+    cheek_overlay[:, :, 1] = cheek_mask
+    blended_roi = cv2.addWeighted(result[fy : fy + fh, fx : fx + fw], 1.0, cheek_overlay, 0.18, 0)
+    result[fy : fy + fh, fx : fx + fw] = blended_roi
     draw_info_panel(
         result,
         [
@@ -261,6 +280,7 @@ def analyze_skin_aging_405nm(image_path: Path, output_dir: Path):
         "min_area": int(min_area),
         "max_area": int(max_area),
         "face_detection_method": face_method,
+        "detection_focus": "bilateral_cheeks",
         "face_bbox": {
             "x": int(fx),
             "y": int(fy),
