@@ -47,6 +47,7 @@ export type Toast = {
 };
 
 export type PorphyrinResult = {
+  porphyrin_count: number;
   porphyrin_area: number;
   detection_rate_percent: number;
   grade: string;

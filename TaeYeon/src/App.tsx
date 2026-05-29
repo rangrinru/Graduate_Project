@@ -692,6 +692,7 @@ function App() {
       }
 
       setPorphyrinResult({
+        porphyrin_count: Number(data.porphyrin_count || 0),
         porphyrin_area: data.porphyrin_area,
         detection_rate_percent: data.detection_rate_percent,
         grade: data.grade,
@@ -705,7 +706,7 @@ function App() {
       setShowAnalysisResultModal(false);
 
       setSelectedFilter("660nm_filter");
-      showToast("포르피린 분석 완료", "success");
+      showToast(`포르피린 분석 완료: ${data.porphyrin_count || 0}개 검출`, "success");
     } catch (error) {
       console.error(error);
       showToast("포르피린 분석 실패", "error");
@@ -1363,6 +1364,13 @@ function App() {
                                 {porphyrinResult.grade}
                               </div>
                             </div>
+
+                            <div className="analysis-stat">
+                              <div className="analysis-stat-label">포르피린 검출 수</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_count}개
+                              </div>
+                            </div>
                           </div>
 
                           <div className="analysis-region-grid">
@@ -1408,7 +1416,7 @@ function App() {
             <div className="analysis-full-stat">
               <div className="analysis-full-stat-label">검출 개수</div>
               <div className="analysis-full-stat-value">
-                {porphyrinResult.detection_rate_percent.toFixed(2)}%
+                {porphyrinResult.porphyrin_count}개
               </div>
             </div>
 
