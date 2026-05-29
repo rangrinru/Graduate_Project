@@ -1020,7 +1020,7 @@
 
         .analysis-result-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 10px;
           margin-bottom: 12px;
         }
@@ -1041,6 +1041,19 @@
         .analysis-stat-value {
           color: white;
           font-size: 18px;
+          font-weight: 800;
+        }
+
+        .analysis-stat-primary {
+          background: rgba(255,255,255,0.12);
+          border: 1px solid rgba(255,255,255,0.14);
+        }
+
+        .analysis-stat-sub,
+        .analysis-full-stat-sub {
+          margin-top: 4px;
+          color: rgba(255,255,255,0.7);
+          font-size: 11px;
           font-weight: 800;
         }
 
@@ -1151,7 +1164,7 @@
 
         .analysis-full-stats {
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 10px;
           margin-bottom: 12px;
         }
@@ -1174,6 +1187,11 @@
           color: white;
           font-size: 20px;
           font-weight: 900;
+        }
+
+        .analysis-full-stat-primary {
+          background: rgba(255,255,255,0.14);
+          border-color: rgba(255,255,255,0.18);
         }
 
         .analysis-full-image-wrap {
@@ -1237,6 +1255,11 @@
 
           .filter-row {
             flex-direction: row;
+          }
+
+          .analysis-result-grid,
+          .analysis-full-stats {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
           .auto-check-panel {

@@ -696,6 +696,14 @@ function App() {
         porphyrin_area: data.porphyrin_area,
         detection_rate_percent: data.detection_rate_percent,
         grade: data.grade,
+        skin_score: data.skin_score || {
+          score: 0,
+          grade: "-",
+          label: "분석 필요",
+          basis: "porphyrin_count",
+          porphyrin_count: Number(data.porphyrin_count || 0),
+          reference_bad_count: 80,
+        },
         region_analysis: data.region_analysis || {},
         threshold_percentile: data.threshold_percentile,
         threshold_value: data.threshold_value,
@@ -1351,6 +1359,16 @@ function App() {
                       {porphyrinResult && (
                         <div className="analysis-result-box">
                           <div className="analysis-result-grid">
+                            <div className="analysis-stat analysis-stat-primary">
+                              <div className="analysis-stat-label">피부 점수</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.skin_score.score}점
+                              </div>
+                              <div className="analysis-stat-sub">
+                                {porphyrinResult.skin_score.grade} · {porphyrinResult.skin_score.label}
+                              </div>
+                            </div>
+
                             <div className="analysis-stat">
                               <div className="analysis-stat-label">얼굴 영역 대비 포르피린</div>
                               <div className="analysis-stat-value">
@@ -1413,6 +1431,16 @@ function App() {
           </div>
 
           <div className="analysis-full-stats">
+            <div className="analysis-full-stat analysis-full-stat-primary">
+              <div className="analysis-full-stat-label">피부 점수</div>
+              <div className="analysis-full-stat-value">
+                {porphyrinResult.skin_score.score}점
+              </div>
+              <div className="analysis-full-stat-sub">
+                {porphyrinResult.skin_score.grade} · {porphyrinResult.skin_score.label}
+              </div>
+            </div>
+
             <div className="analysis-full-stat">
               <div className="analysis-full-stat-label">검출 개수</div>
               <div className="analysis-full-stat-value">
