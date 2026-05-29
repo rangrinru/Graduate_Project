@@ -299,9 +299,9 @@ def analyze_porphyrin_heatmap_v04(
     ).astype(np.uint8)
     heatmap = cv2.applyColorMap(heatmap_source, cv2.COLORMAP_JET)
 
-    visible_threshold = 14
+    visible_threshold = 10
     local_contrast_threshold = 2
-    strong_absolute_threshold = 32
+    strong_absolute_threshold = 24
     local_background = cv2.GaussianBlur(heat_scaled, (21, 21), 0)
     bright_detail = cv2.subtract(heat_scaled, local_background)
     thresh = np.where(
