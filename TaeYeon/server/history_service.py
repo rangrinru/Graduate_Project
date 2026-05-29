@@ -172,23 +172,26 @@ def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Pa
 
 def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: str) -> Path:
     profile_root = get_profile_root(profile_id)
-    analysis_dir = profile_root / CAMERA_INFO["cam4"]["folder"] / capture_id / "analysis"
     file_map = {
-        "porphyrin-overlay": "porphyrin_overlay.jpg",
-        "porphyrin-mask": "porphyrin_mask.jpg",
-        "porphyrin-face-mask": "porphyrin_face_mask.jpg",
-        "porphyrin-compare": "porphyrin_compare.jpg",
-        "porphyrin-heatmap": "porphyrin_heatmap.jpg",
-        "trouble-risk-heatmap": "trouble_risk_heatmap.jpg",
-        "trouble-risk-mask": "trouble_risk_mask.jpg",
-        "focus-care-overlay": "focus_care_overlay.jpg",
+        "porphyrin-overlay": (CAMERA_INFO["cam4"]["folder"], "porphyrin_overlay.jpg"),
+        "porphyrin-mask": (CAMERA_INFO["cam4"]["folder"], "porphyrin_mask.jpg"),
+        "porphyrin-face-mask": (CAMERA_INFO["cam4"]["folder"], "porphyrin_face_mask.jpg"),
+        "porphyrin-compare": (CAMERA_INFO["cam4"]["folder"], "porphyrin_compare.jpg"),
+        "porphyrin-heatmap": (CAMERA_INFO["cam4"]["folder"], "porphyrin_heatmap.jpg"),
+        "trouble-risk-heatmap": (CAMERA_INFO["cam4"]["folder"], "trouble_risk_heatmap.jpg"),
+        "trouble-risk-mask": (CAMERA_INFO["cam4"]["folder"], "trouble_risk_mask.jpg"),
+        "focus-care-overlay": (CAMERA_INFO["cam4"]["folder"], "focus_care_overlay.jpg"),
+        "skin-aging-result": (CAMERA_INFO["cam3"]["folder"], "skin_aging_result.jpg"),
+        "skin-aging-mask": (CAMERA_INFO["cam3"]["folder"], "skin_aging_mask.jpg"),
     }
 
     if result_type not in file_map:
         raise ValueError("유효하지 않은 분석 이미지 타입입니다.")
 
-    image_path = analysis_dir / file_map[result_type]
+    folder, file_name = file_map[result_type]
+    analysis_dir = profile_root / folder / capture_id / "analysis"
+    image_path = analysis_dir / file_name
     if not image_path.exists() or not image_path.is_file():
-        raise ValueError("분석 결과 이미지가 없습니다. 먼저 해당 분석을 실행하세요.")
+        raise ValueError("분석 결과 이미지가 없습니다. 먼저 분석을 실행하세요.")
 
     return image_path

@@ -1015,6 +1015,10 @@
           background: #f97316;
         }
 
+        .aging-analysis-btn {
+          background: #0f766e;
+        }
+
         .analysis-result-box {
           margin-top: 16px;
           border-radius: 18px;
