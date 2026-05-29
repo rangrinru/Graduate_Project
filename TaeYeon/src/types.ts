@@ -71,13 +71,13 @@ export type SkinAgingResult = {
   freckle_count: number;
   freckle_area: number;
   freckle_area_rate_percent: number;
-  aging_risk_score: number;
-  skin_age_score: number;
-  aging_level: string;
+  predicted_skin_age: number;
+  skin_age_offset: number;
+  skin_age_level: string;
   grade: string;
   label: string;
   basis: string;
-  reference_bad_count: number;
+  base_age: number;
   threshold_value: number;
   min_area: number;
   max_area: number;

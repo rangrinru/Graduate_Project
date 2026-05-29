@@ -30,6 +30,14 @@ import {
 } from "./hangul";
 import { API_BASE } from "./api";
 
+const getSkinAgeLabel = (level: string) => {
+  if (level === "young") return "젊은 피부";
+  if (level === "normal") return "보통";
+  if (level === "aging_care") return "관리 필요";
+  if (level === "intensive_care") return "집중 관리";
+  return "분석 필요";
+};
+
 function App() {
   const [screen, setScreen] = useState<Screen>("profiles");
 
@@ -772,13 +780,13 @@ function App() {
         freckle_count: Number(data.freckle_count || 0),
         freckle_area: Number(data.freckle_area || 0),
         freckle_area_rate_percent: Number(data.freckle_area_rate_percent || 0),
-        aging_risk_score: Number(data.aging_risk_score || 0),
-        skin_age_score: Number(data.skin_age_score || 0),
-        aging_level: data.aging_level || "-",
+        predicted_skin_age: Number(data.predicted_skin_age || 0),
+        skin_age_offset: Number(data.skin_age_offset || 0),
+        skin_age_level: data.skin_age_level || "-",
         grade: data.grade || "-",
         label: data.label || "분석 필요",
         basis: data.basis || "freckle_count",
-        reference_bad_count: Number(data.reference_bad_count || 80),
+        base_age: Number(data.base_age || 22),
         threshold_value: Number(data.threshold_value || 0),
         min_area: Number(data.min_area || 0),
         max_area: Number(data.max_area || 0),
@@ -1409,7 +1417,7 @@ function App() {
                     <div className="analysis-panel">
                       <div className="analysis-title">피부노화 분석</div>
                       <div className="analysis-description">
-                        405nm 필터 이미지에서 주근깨 의심 영역을 검출하고 피부노화 지표를 계산합니다.
+                        405nm 필터 이미지에서 주근깨 의심 영역을 검출하고 피부나이를 예측합니다.
                       </div>
 
                       <button
@@ -1424,19 +1432,19 @@ function App() {
                         <div className="analysis-result-box">
                           <div className="analysis-result-grid">
                             <div className="analysis-stat analysis-stat-primary">
-                              <div className="analysis-stat-label">피부노화 점수</div>
+                              <div className="analysis-stat-label">예측 피부나이</div>
                               <div className="analysis-stat-value">
-                                {skinAgingResult.skin_age_score}점
+                                {skinAgingResult.predicted_skin_age}세
                               </div>
                               <div className="analysis-stat-sub">
-                                {skinAgingResult.grade} · {skinAgingResult.label}
+                                {skinAgingResult.grade} · {getSkinAgeLabel(skinAgingResult.skin_age_level)}
                               </div>
                             </div>
 
                             <div className="analysis-stat">
-                              <div className="analysis-stat-label">노화 위험도</div>
+                              <div className="analysis-stat-label">기준 나이 대비</div>
                               <div className="analysis-stat-value">
-                                {skinAgingResult.aging_risk_score}
+                                +{skinAgingResult.skin_age_offset.toFixed(1)}세
                               </div>
                             </div>
 
@@ -1618,7 +1626,7 @@ function App() {
             <div>
               <div className="analysis-full-title">피부노화 분석 결과</div>
               <div className="analysis-full-subtitle">
-                405nm 이미지에서 검출된 주근깨 의심 영역을 확인합니다.
+                405nm 이미지에서 검출된 주근깨 의심 영역과 예측 피부나이를 확인합니다.
               </div>
             </div>
 
@@ -1632,12 +1640,12 @@ function App() {
 
           <div className="analysis-full-stats">
             <div className="analysis-full-stat analysis-full-stat-primary">
-              <div className="analysis-full-stat-label">피부노화 점수</div>
+              <div className="analysis-full-stat-label">예측 피부나이</div>
               <div className="analysis-full-stat-value">
-                {skinAgingResult.skin_age_score}점
+                {skinAgingResult.predicted_skin_age}세
               </div>
               <div className="analysis-full-stat-sub">
-                {skinAgingResult.grade} · {skinAgingResult.label}
+                {skinAgingResult.grade} · {getSkinAgeLabel(skinAgingResult.skin_age_level)}
               </div>
             </div>
 
@@ -1649,9 +1657,9 @@ function App() {
             </div>
 
             <div className="analysis-full-stat">
-              <div className="analysis-full-stat-label">노화 위험도</div>
+              <div className="analysis-full-stat-label">기준 나이 대비</div>
               <div className="analysis-full-stat-value">
-                {skinAgingResult.aging_risk_score}
+                +{skinAgingResult.skin_age_offset.toFixed(1)}세
               </div>
             </div>
 

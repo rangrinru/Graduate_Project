@@ -10,7 +10,7 @@ def get_face_cascade():
     cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
     face_cascade = cv2.CascadeClassifier(cascade_path)
     if face_cascade.empty():
-        raise RuntimeError("OpenCV 얼굴 검출 파일을 불러오지 못했습니다.")
+        raise RuntimeError("Failed to load OpenCV face cascade.")
     return face_cascade
 
 
@@ -100,31 +100,37 @@ def freckle_candidates(face_roi):
     return mask, float(threshold_value)
 
 
-def calculate_aging_score(freckle_count, freckle_area_rate_percent):
-    risk_score = min(100, int(round((freckle_count * 0.75) + (freckle_area_rate_percent * 18))))
-    skin_age_score = max(0, 100 - risk_score)
+def calculate_predicted_skin_age(freckle_count, freckle_area_rate_percent):
+    base_age = 22
+    age_offset = (freckle_count * 0.35) + (freckle_area_rate_percent * 8.0)
+    predicted_age = int(round(base_age + age_offset))
+    predicted_age = max(18, min(70, predicted_age))
 
-    if risk_score < 30:
-        level = "Low"
+    if predicted_age < 30:
+        level = "young"
         grade = "A"
-        label = "노화 의심 낮음"
-    elif risk_score < 65:
-        level = "Medium"
+        label = "young skin"
+    elif predicted_age < 40:
+        level = "normal"
         grade = "B"
-        label = "노화 주의"
-    else:
-        level = "High"
+        label = "normal skin age"
+    elif predicted_age < 50:
+        level = "aging_care"
         grade = "C"
-        label = "집중 관리"
+        label = "aging care"
+    else:
+        level = "intensive_care"
+        grade = "D"
+        label = "intensive care"
 
     return {
-        "aging_risk_score": risk_score,
-        "skin_age_score": skin_age_score,
-        "aging_level": level,
+        "predicted_skin_age": predicted_age,
+        "skin_age_offset": round(float(age_offset), 2),
+        "skin_age_level": level,
         "grade": grade,
         "label": label,
         "basis": "freckle_count",
-        "reference_bad_count": 80,
+        "base_age": base_age,
     }
 
 
@@ -145,7 +151,7 @@ def draw_info_panel(img, lines):
 def analyze_skin_aging_405nm(image_path: Path, output_dir: Path):
     img = cv2.imread(str(image_path))
     if img is None:
-        raise RuntimeError("405nm 이미지 로드 실패")
+        raise RuntimeError("Failed to load 405nm image")
 
     face_cascade = get_face_cascade()
     result = img.copy()
@@ -215,17 +221,17 @@ def analyze_skin_aging_405nm(image_path: Path, output_dir: Path):
 
     face_area = fw * fh
     freckle_area_rate = (total_area / face_area) * 100 if face_area else 0.0
-    score = calculate_aging_score(len(freckles), freckle_area_rate)
+    age_result = calculate_predicted_skin_age(len(freckles), freckle_area_rate)
 
     cv2.rectangle(result, (fx, fy), (fx + fw, fy + fh), (0, 220, 0), 2, cv2.LINE_AA)
     draw_info_panel(
         result,
         [
-            "405nm Freckle Aging Analysis",
+            "405nm Freckle Skin Age Analysis",
             f"Freckle Count: {len(freckles)}",
-            f"Aging Risk: {score['aging_risk_score']}/100",
-            f"Skin Age Score: {score['skin_age_score']}/100",
-            f"Level: {score['aging_level']}",
+            f"Predicted Skin Age: {age_result['predicted_skin_age']}",
+            f"Age Offset: +{age_result['skin_age_offset']}",
+            f"Level: {age_result['skin_age_level']}",
         ],
     )
 
@@ -238,19 +244,19 @@ def analyze_skin_aging_405nm(image_path: Path, output_dir: Path):
     cv2.imwrite(str(mask_path), mask)
 
     report = {
-        "metadata_type": "skin_aging_analysis",
+        "metadata_type": "skin_age_prediction",
         "created_at": datetime.now().isoformat(timespec="seconds"),
-        "analysis_note": "405nm 주근깨 의심 영역 기반 이미지 처리 추정값이며 의료 진단 목적이 아닙니다.",
+        "analysis_note": "Image-processing estimate from 405nm freckle-like regions. Not a medical diagnosis.",
         "freckle_count": len(freckles),
         "freckle_area": float(total_area),
         "freckle_area_rate_percent": round(float(freckle_area_rate), 4),
-        "aging_risk_score": score["aging_risk_score"],
-        "skin_age_score": score["skin_age_score"],
-        "aging_level": score["aging_level"],
-        "grade": score["grade"],
-        "label": score["label"],
-        "basis": score["basis"],
-        "reference_bad_count": score["reference_bad_count"],
+        "predicted_skin_age": age_result["predicted_skin_age"],
+        "skin_age_offset": age_result["skin_age_offset"],
+        "skin_age_level": age_result["skin_age_level"],
+        "grade": age_result["grade"],
+        "label": age_result["label"],
+        "basis": age_result["basis"],
+        "base_age": age_result["base_age"],
         "threshold_value": threshold_value,
         "min_area": int(min_area),
         "max_area": int(max_area),
