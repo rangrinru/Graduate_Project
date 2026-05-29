@@ -1010,12 +1010,22 @@
           transition: 0.2s ease;
         }
 
+        .trouble-risk-btn {
+          margin-top: 8px;
+          background: #f97316;
+        }
+
         .analysis-result-box {
           margin-top: 16px;
           border-radius: 18px;
           background: rgba(0,0,0,0.25);
           border: 1px solid rgba(255,255,255,0.08);
           padding: 14px;
+        }
+
+        .trouble-risk-result {
+          border-color: rgba(249, 115, 22, 0.22);
+          background: rgba(249, 115, 22, 0.08);
         }
 
         .analysis-result-grid {
@@ -1066,6 +1076,36 @@
         .analysis-region-item strong {
           color: white;
           font-size: 14px;
+        }
+
+        .analysis-view-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          margin: 10px 0 4px;
+        }
+
+        .focus-care-list {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+          margin-top: 12px;
+        }
+
+        .focus-care-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          border-radius: 12px;
+          background: rgba(0,0,0,0.24);
+          color: rgba(255,255,255,0.78);
+          font-size: 13px;
+          padding: 10px 12px;
+        }
+
+        .focus-care-item strong {
+          color: #fed7aa;
         }
 
         .analysis-image {

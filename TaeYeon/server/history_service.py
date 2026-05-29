@@ -179,6 +179,9 @@ def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: s
         "porphyrin-face-mask": "porphyrin_face_mask.jpg",
         "porphyrin-compare": "porphyrin_compare.jpg",
         "porphyrin-heatmap": "porphyrin_heatmap.jpg",
+        "trouble-risk-heatmap": "trouble_risk_heatmap.jpg",
+        "trouble-risk-mask": "trouble_risk_mask.jpg",
+        "focus-care-overlay": "focus_care_overlay.jpg",
     }
 
     if result_type not in file_map:
@@ -186,6 +189,6 @@ def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: s
 
     image_path = analysis_dir / file_map[result_type]
     if not image_path.exists() or not image_path.is_file():
-        raise ValueError("분석 결과 이미지가 없습니다. 먼저 포르피린 분석을 실행하세요.")
+        raise ValueError("분석 결과 이미지가 없습니다. 먼저 해당 분석을 실행하세요.")
 
     return image_path

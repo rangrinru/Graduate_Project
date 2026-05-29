@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 
 from porphyrin_analysis import analyze_porphyrin_heatmap_v04
+from trouble_risk_analysis import analyze_trouble_risk_map
 from config import *
 from state import *
 from led_controller import (
@@ -1747,6 +1748,67 @@ def analyze_porphyrin_api(profile_id, capture_id):
 
     except Exception as e:
         # 실패 응답 반환
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 400
+
+
+# =========================
+# 특정 촬영 기록 트러블 위험/집중 케어 분석 API
+# =========================
+
+@app.route("/profiles/<profile_id>/history/<capture_id>/analyze-trouble-risk", methods=["POST"])
+def analyze_trouble_risk_api(profile_id, capture_id):
+    try:
+        image_path = resolve_image_path(
+            profile_id=profile_id,
+            capture_id=capture_id,
+            filter_type="660nm_filter"
+        )
+
+        try:
+            face_reference_path = resolve_image_path(
+                profile_id=profile_id,
+                capture_id=capture_id,
+                filter_type="no_filter"
+            )
+        except Exception:
+            face_reference_path = None
+
+        profile_root = get_profile_root(profile_id)
+        analysis_dir = (
+            profile_root
+            / CAMERA_INFO["cam4"]["folder"]
+            / capture_id
+            / "analysis"
+        )
+
+        report = analyze_trouble_risk_map(
+            image_path,
+            analysis_dir,
+            face_reference_path,
+            extract_face_landmarks_for_analysis
+        )
+
+        return jsonify({
+            "ok": True,
+            "captureId": capture_id,
+            "risk_area": report["risk_area"],
+            "risk_rate_percent": report["risk_rate_percent"],
+            "risk_grade": report["risk_grade"],
+            "region_analysis": report["region_analysis"],
+            "focus_areas": report["focus_areas"],
+            "top_region": report["top_region"],
+            "threshold_value": report["threshold_value"],
+            "face_area_pixels": report["face_area_pixels"],
+            "face_landmarks_used": report["face_landmarks_used"],
+            "risk_heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/trouble-risk-heatmap",
+            "focus_overlay_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/focus-care-overlay",
+            "risk_mask_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/trouble-risk-mask"
+        })
+
+    except Exception as e:
         return jsonify({
             "ok": False,
             "error": str(e)
