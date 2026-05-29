@@ -296,8 +296,8 @@ def analyze_porphyrin_heatmap_v04(
     # instead of the top percentile within each individual image.
     heat_scaled = blur.copy()
     heat_scaled = cv2.bitwise_and(heat_scaled, heat_scaled, mask=face_mask)
-    heatmap_min_value = 20.0
-    heatmap_max_value = 90.0
+    heatmap_min_value = 15.0
+    heatmap_max_value = 75.0
     heatmap_source = np.clip(
         (heat_scaled.astype(np.float32) - heatmap_min_value) * 255.0 / (heatmap_max_value - heatmap_min_value),
         0,
@@ -306,14 +306,27 @@ def analyze_porphyrin_heatmap_v04(
     heatmap = cv2.applyColorMap(heatmap_source, cv2.COLORMAP_JET)
     heatmap[face_mask == 0] = (0, 0, 0)
 
-    visible_threshold = 38
-    _, thresh = cv2.threshold(heat_scaled, visible_threshold, 255, cv2.THRESH_BINARY)
+    visible_threshold = 22
+    local_contrast_threshold = 4
+    strong_absolute_threshold = 55
+    local_background = cv2.GaussianBlur(heat_scaled, (21, 21), 0)
+    bright_detail = cv2.subtract(heat_scaled, local_background)
+    thresh = np.where(
+        ((heat_scaled >= visible_threshold) & (bright_detail >= local_contrast_threshold))
+        | (heat_scaled >= strong_absolute_threshold),
+        255,
+        0
+    ).astype(np.uint8)
     thresh = cv2.bitwise_and(thresh, thresh, mask=face_mask)
 
     if landmark_pts is not None:
-        philtrum_threshold = 30
+        philtrum_threshold = 18
         philtrum_mask = np.zeros_like(gray)
-        face_ys, face_xs = np.where((face_mask > 0) & (heat_scaled >= philtrum_threshold))
+        face_ys, face_xs = np.where(
+            (face_mask > 0)
+            & (heat_scaled >= philtrum_threshold)
+            & (bright_detail >= local_contrast_threshold)
+        )
         for px, py in zip(face_xs, face_ys):
             region_key = classify_face_region_by_landmarks(
                 int(px),
@@ -331,9 +344,12 @@ def analyze_porphyrin_heatmap_v04(
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(thresh, connectivity=8)
     clean_mask = np.zeros_like(gray)
     accepted_count = 0
+    max_component_area = 350
     for label_idx in range(1, num_labels):
         area = int(stats[label_idx, cv2.CC_STAT_AREA])
         if area < 2:
+            continue
+        if area > max_component_area:
             continue
 
         clean_mask[labels == label_idx] = 255
@@ -399,11 +415,13 @@ def analyze_porphyrin_heatmap_v04(
         },
         "threshold_percentile": 0,
         "threshold_value": float(visible_threshold),
+        "local_contrast_threshold": float(local_contrast_threshold),
+        "strong_absolute_threshold": float(strong_absolute_threshold),
         "heatmap_scale": "fixed_absolute",
         "heatmap_min_value": heatmap_min_value,
         "heatmap_max_value": heatmap_max_value,
         "min_area": 2,
-        "max_area": 0,
+        "max_area": max_component_area,
         "face_landmarks_used": bool(landmark_pts is not None),
         "heatmap_path": str(heatmap_path),
         "mask_path": str(mask_path),
