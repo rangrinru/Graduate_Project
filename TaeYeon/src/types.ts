@@ -67,6 +67,25 @@ export type PorphyrinResult = {
   heatmap_url: string;
 };
 
+export type SkinAgingResult = {
+  freckle_count: number;
+  freckle_area: number;
+  freckle_area_rate_percent: number;
+  aging_risk_score: number;
+  skin_age_score: number;
+  aging_level: string;
+  grade: string;
+  label: string;
+  basis: string;
+  reference_bad_count: number;
+  threshold_value: number;
+  min_area: number;
+  max_area: number;
+  face_detection_method: string;
+  result_url: string;
+  mask_url: string;
+};
+
 export type AutoCaptureChecks = {
   face_found: boolean;
   center_ok: boolean;

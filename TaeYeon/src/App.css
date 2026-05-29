@@ -1010,6 +1010,10 @@
           transition: 0.2s ease;
         }
 
+        .aging-analysis-btn {
+          background: #0f766e;
+        }
+
         .analysis-result-box {
           margin-top: 16px;
           border-radius: 18px;

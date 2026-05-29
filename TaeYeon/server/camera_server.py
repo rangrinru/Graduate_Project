@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 
 from porphyrin_analysis import analyze_porphyrin_heatmap_v04
+from skin_aging_analysis import analyze_skin_aging_405nm
 from config import *
 from state import *
 from led_controller import (
@@ -1757,6 +1758,52 @@ def analyze_porphyrin_api(profile_id, capture_id):
 # =========================
 # 포르피린 분석 이미지 반환 API
 # =========================
+
+@app.route("/profiles/<profile_id>/history/<capture_id>/analyze-aging", methods=["POST"])
+def analyze_skin_aging_api(profile_id, capture_id):
+    try:
+        image_path = resolve_image_path(
+            profile_id=profile_id,
+            capture_id=capture_id,
+            filter_type="405nm_filter"
+        )
+
+        profile_root = get_profile_root(profile_id)
+        analysis_dir = (
+            profile_root
+            / CAMERA_INFO["cam3"]["folder"]
+            / capture_id
+            / "analysis"
+        )
+
+        report = analyze_skin_aging_405nm(image_path, analysis_dir)
+
+        return jsonify({
+            "ok": True,
+            "captureId": capture_id,
+            "freckle_count": report["freckle_count"],
+            "freckle_area": report["freckle_area"],
+            "freckle_area_rate_percent": report["freckle_area_rate_percent"],
+            "aging_risk_score": report["aging_risk_score"],
+            "skin_age_score": report["skin_age_score"],
+            "aging_level": report["aging_level"],
+            "grade": report["grade"],
+            "label": report["label"],
+            "basis": report["basis"],
+            "reference_bad_count": report["reference_bad_count"],
+            "threshold_value": report["threshold_value"],
+            "min_area": report["min_area"],
+            "max_area": report["max_area"],
+            "face_detection_method": report["face_detection_method"],
+            "result_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/skin-aging-result",
+            "mask_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/skin-aging-mask"
+        })
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 400
 
 @app.route("/profiles/<profile_id>/history/<capture_id>/analysis/<result_type>", methods=["GET"])
 def get_porphyrin_analysis_image_api(profile_id, capture_id, result_type):
