@@ -32,7 +32,7 @@ def list_images(input_dir: Path):
     )
 
 
-def fit_to_screen(img, max_width=1400, max_height=900):
+def fit_to_screen(img, max_width=5200, max_height=2700):
     h, w = img.shape[:2]
     scale = min(max_width / max(w, 1), max_height / max(h, 1), 1.0)
     if scale >= 1.0:
