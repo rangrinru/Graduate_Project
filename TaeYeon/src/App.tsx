@@ -1,7 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import type {
-  AnalysisImageMode,
   AutoCaptureStatus,
   HistoryDetail,
   HistoryItem,
@@ -11,7 +10,6 @@ import type {
   Screen,
   Toast,
   HangulBuffer,
-  TroubleRiskResult,
 } from "./types";
 import { AUTO_CHECK_LABELS, EMPTY_AUTO_CHECKS, REGION_LABELS } from "./constants";
 import {
@@ -69,9 +67,6 @@ function App() {
 
   const [isAnalyzingPorphyrin, setIsAnalyzingPorphyrin] = useState(false);
   const [porphyrinResult, setPorphyrinResult] = useState<PorphyrinResult | null>(null);
-  const [isAnalyzingTroubleRisk, setIsAnalyzingTroubleRisk] = useState(false);
-  const [troubleRiskResult, setTroubleRiskResult] = useState<TroubleRiskResult | null>(null);
-  const [analysisImageMode, setAnalysisImageMode] = useState<AnalysisImageMode>("source");
   const [showAnalysisResultModal, setShowAnalysisResultModal] = useState(false);
   const historyScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -503,8 +498,6 @@ function App() {
     setSelectedHistory(null);
     setHistoryItems([]);
     setPorphyrinResult(null);
-    setTroubleRiskResult(null);
-    setAnalysisImageMode("source");
     setShowAnalysisResultModal(false);
     setAutoStatus(null);
     setScreen("camera");
@@ -516,8 +509,6 @@ function App() {
     setSelectedHistory(null);
     setHistoryItems([]);
     setPorphyrinResult(null);
-    setTroubleRiskResult(null);
-    setAnalysisImageMode("source");
     setShowAnalysisResultModal(false);
     setAutoStatus(null);
   };
@@ -613,9 +604,7 @@ function App() {
       setSelectedHistory(data);
       setSelectedFilter("no_filter");
       setPorphyrinResult(null);
-      setTroubleRiskResult(null);
-      setAnalysisImageMode("source");
-      setShowAnalysisResultModal(false);
+    setShowAnalysisResultModal(false);
       setScreen("historyDetail");
     } catch (error) {
       console.error(error);
@@ -661,9 +650,7 @@ function App() {
       if (selectedHistory?.captureId === target.captureId) {
         setSelectedHistory(null);
         setPorphyrinResult(null);
-        setTroubleRiskResult(null);
-        setAnalysisImageMode("source");
-        setShowAnalysisResultModal(false);
+    setShowAnalysisResultModal(false);
         setScreen("history");
       }
 
@@ -705,9 +692,18 @@ function App() {
       }
 
       setPorphyrinResult({
+        porphyrin_count: Number(data.porphyrin_count || 0),
         porphyrin_area: data.porphyrin_area,
         detection_rate_percent: data.detection_rate_percent,
         grade: data.grade,
+        skin_score: data.skin_score || {
+          score: 0,
+          grade: "-",
+          label: "분석 필요",
+          basis: "porphyrin_count",
+          porphyrin_count: Number(data.porphyrin_count || 0),
+          reference_bad_count: 80,
+        },
         region_analysis: data.region_analysis || {},
         threshold_percentile: data.threshold_percentile,
         threshold_value: data.threshold_value,
@@ -718,64 +714,12 @@ function App() {
       setShowAnalysisResultModal(false);
 
       setSelectedFilter("660nm_filter");
-      setAnalysisImageMode("porphyrin_heatmap");
       showToast(`포르피린 분석 완료: ${data.porphyrin_count || 0}개 검출`, "success");
     } catch (error) {
       console.error(error);
       showToast("포르피린 분석 실패", "error");
     } finally {
       setIsAnalyzingPorphyrin(false);
-    }
-  };
-
-  const analyzeTroubleRisk = async () => {
-    if (!selectedProfile || !selectedHistory) {
-      showToast("분석할 촬영 기록이 없습니다.", "error");
-      return;
-    }
-
-    try {
-      setIsAnalyzingTroubleRisk(true);
-      showToast("트러블 위험 분석을 시작합니다.", "info");
-
-      const encodedProfileId = encodeURIComponent(selectedProfile.folderId);
-      const encodedCaptureId = encodeURIComponent(selectedHistory.captureId);
-
-      const res = await fetch(
-        `${API_BASE}/profiles/${encodedProfileId}/history/${encodedCaptureId}/analyze-trouble-risk`,
-        {
-          method: "POST",
-        }
-      );
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        showToast(data.error || "트러블 위험 분석 실패", "error");
-        return;
-      }
-
-      setTroubleRiskResult({
-        risk_area: data.risk_area,
-        risk_rate_percent: data.risk_rate_percent,
-        risk_grade: data.risk_grade,
-        region_analysis: data.region_analysis || {},
-        focus_areas: data.focus_areas || [],
-        top_region: data.top_region ?? null,
-        threshold_value: data.threshold_value,
-        risk_heatmap_url: data.risk_heatmap_url,
-        focus_overlay_url: data.focus_overlay_url,
-        risk_mask_url: data.risk_mask_url,
-      });
-
-      setSelectedFilter("660nm_filter");
-      setAnalysisImageMode("trouble_risk_heatmap");
-      showToast("트러블 위험 분석 완료", "success");
-    } catch (error) {
-      console.error(error);
-      showToast("트러블 위험 분석 실패", "error");
-    } finally {
-      setIsAnalyzingTroubleRisk(false);
     }
   };
 
@@ -960,24 +904,6 @@ function App() {
 
     return `${API_BASE}${imageUrl}`;
   };
-
-  const activeAnalysisImageUrl =
-    analysisImageMode === "porphyrin_heatmap"
-      ? porphyrinResult?.heatmap_url
-      : analysisImageMode === "trouble_risk_heatmap"
-        ? troubleRiskResult?.risk_heatmap_url
-        : analysisImageMode === "focus_care_overlay"
-          ? troubleRiskResult?.focus_overlay_url
-          : null;
-
-  const activeAnalysisImageAlt =
-    analysisImageMode === "porphyrin_heatmap"
-      ? "포르피린 히트맵"
-      : analysisImageMode === "trouble_risk_heatmap"
-        ? "트러블 위험 예측 히트맵"
-        : analysisImageMode === "focus_care_overlay"
-          ? "집중 케어 영역 표시"
-          : currentImage?.display_name || "촬영 이미지";
 
   return (
     <>
@@ -1355,10 +1281,7 @@ function App() {
                           className={`filter-chip ${
                             selectedFilter === "no_filter" ? "active" : ""
                           }`}
-                          onClick={() => {
-                            setSelectedFilter("no_filter");
-                            setAnalysisImageMode("source");
-                          }}
+                          onClick={() => setSelectedFilter("no_filter")}
                         >
                           No_Filter
                         </button>
@@ -1367,10 +1290,7 @@ function App() {
                           className={`filter-chip ${
                             selectedFilter === "405nm_filter" ? "active" : ""
                           }`}
-                          onClick={() => {
-                            setSelectedFilter("405nm_filter");
-                            setAnalysisImageMode("source");
-                          }}
+                          onClick={() => setSelectedFilter("405nm_filter")}
                         >
                           405nm_Filter
                         </button>
@@ -1379,55 +1299,19 @@ function App() {
                           className={`filter-chip ${
                             selectedFilter === "660nm_filter" ? "active" : ""
                           }`}
-                          onClick={() => {
-                            setSelectedFilter("660nm_filter");
-                            setAnalysisImageMode("source");
-                          }}
+                          onClick={() => setSelectedFilter("660nm_filter")}
                         >
                           660nm_Filter
                         </button>
-
-                        {porphyrinResult?.heatmap_url && (
-                          <button
-                            className={`filter-chip ${
-                              analysisImageMode === "porphyrin_heatmap" ? "active" : ""
-                            }`}
-                            onClick={() => setAnalysisImageMode("porphyrin_heatmap")}
-                          >
-                            포르피린 히트맵
-                          </button>
-                        )}
-
-                        {troubleRiskResult?.risk_heatmap_url && (
-                          <button
-                            className={`filter-chip ${
-                              analysisImageMode === "trouble_risk_heatmap" ? "active" : ""
-                            }`}
-                            onClick={() => setAnalysisImageMode("trouble_risk_heatmap")}
-                          >
-                            위험 히트맵
-                          </button>
-                        )}
-
-                        {troubleRiskResult?.focus_overlay_url && (
-                          <button
-                            className={`filter-chip ${
-                              analysisImageMode === "focus_care_overlay" ? "active" : ""
-                            }`}
-                            onClick={() => setAnalysisImageMode("focus_care_overlay")}
-                          >
-                            집중 케어
-                          </button>
-                        )}
                       </div>
                     </div>
 
                     <div className="image-viewer">
-                      {activeAnalysisImageUrl ? (
+                      {selectedFilter === "660nm_filter" && porphyrinResult?.heatmap_url ? (
                         <img
                           className="history-image"
-                          src={getImageSrc(activeAnalysisImageUrl)}
-                          alt={activeAnalysisImageAlt}
+                          src={getImageSrc(porphyrinResult.heatmap_url)}
+                          alt="Porphyrin heatmap"
                         />
                       ) : currentImage?.exists && currentImage?.image_url ? (
                         <img
@@ -1457,14 +1341,6 @@ function App() {
                         {isAnalyzingPorphyrin ? "포르피린 분석 중..." : "포르피린 분석하기"}
                       </button>
 
-                      <button
-                        className="analysis-btn trouble-risk-btn"
-                        onClick={analyzeTroubleRisk}
-                        disabled={isAnalyzingTroubleRisk || !selectedHistory}
-                      >
-                        {isAnalyzingTroubleRisk ? "트러블 위험 분석 중..." : "트러블 위험 분석하기"}
-                      </button>
-
                       {false && porphyrinResult && (
                         <div className="analysis-result-compact">
                           <div className="analysis-compact-text">
@@ -1483,6 +1359,16 @@ function App() {
                       {porphyrinResult && (
                         <div className="analysis-result-box">
                           <div className="analysis-result-grid">
+                            <div className="analysis-stat analysis-stat-primary">
+                              <div className="analysis-stat-label">피부 점수</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.skin_score.score}점
+                              </div>
+                              <div className="analysis-stat-sub">
+                                {porphyrinResult.skin_score.grade} · {porphyrinResult.skin_score.label}
+                              </div>
+                            </div>
+
                             <div className="analysis-stat">
                               <div className="analysis-stat-label">얼굴 영역 대비 포르피린</div>
                               <div className="analysis-stat-value">
@@ -1494,6 +1380,13 @@ function App() {
                               <div className="analysis-stat-label">등급</div>
                               <div className="analysis-stat-value">
                                 {porphyrinResult.grade}
+                              </div>
+                            </div>
+
+                            <div className="analysis-stat">
+                              <div className="analysis-stat-label">포르피린 검출 수</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_count}개
                               </div>
                             </div>
                           </div>
@@ -1508,73 +1401,6 @@ function App() {
                               )
                             )}
                           </div>
-                        </div>
-                      )}
-
-                      {troubleRiskResult && (
-                        <div className="analysis-result-box trouble-risk-result">
-                          <div className="analysis-result-grid">
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">트러블 위험 면적</div>
-                              <div className="analysis-stat-value">
-                                {troubleRiskResult.risk_rate_percent.toFixed(2)}%
-                              </div>
-                            </div>
-
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">위험 등급</div>
-                              <div className="analysis-stat-value">
-                                {troubleRiskResult.risk_grade}
-                              </div>
-                            </div>
-
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">집중 케어</div>
-                              <div className="analysis-stat-value">
-                                {troubleRiskResult.focus_areas.length}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="analysis-view-row">
-                            <button
-                              className="analysis-view-btn"
-                              onClick={() => setAnalysisImageMode("trouble_risk_heatmap")}
-                            >
-                              위험 히트맵 보기
-                            </button>
-
-                            <button
-                              className="analysis-view-btn"
-                              onClick={() => setAnalysisImageMode("focus_care_overlay")}
-                            >
-                              집중 케어 보기
-                            </button>
-                          </div>
-
-                          <div className="analysis-region-grid">
-                            {Object.entries(troubleRiskResult.region_analysis).map(
-                              ([key, value]) => (
-                                <div className="analysis-region-item" key={key}>
-                                  <span>{REGION_LABELS[key] || key}</span>
-                                  <strong>{value}%</strong>
-                                </div>
-                              )
-                            )}
-                          </div>
-
-                          {troubleRiskResult.focus_areas.length > 0 && (
-                            <div className="focus-care-list">
-                              {troubleRiskResult.focus_areas.slice(0, 4).map((area) => (
-                                <div className="focus-care-item" key={area.id}>
-                                  <span>
-                                    #{area.id} {REGION_LABELS[area.region] || area.region}
-                                  </span>
-                                  <strong>{Math.round(area.risk_score)}</strong>
-                                </div>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       )}
                     </div>
@@ -1605,10 +1431,20 @@ function App() {
           </div>
 
           <div className="analysis-full-stats">
+            <div className="analysis-full-stat analysis-full-stat-primary">
+              <div className="analysis-full-stat-label">피부 점수</div>
+              <div className="analysis-full-stat-value">
+                {porphyrinResult.skin_score.score}점
+              </div>
+              <div className="analysis-full-stat-sub">
+                {porphyrinResult.skin_score.grade} · {porphyrinResult.skin_score.label}
+              </div>
+            </div>
+
             <div className="analysis-full-stat">
               <div className="analysis-full-stat-label">검출 개수</div>
               <div className="analysis-full-stat-value">
-                {porphyrinResult.detection_rate_percent.toFixed(2)}%
+                {porphyrinResult.porphyrin_count}개
               </div>
             </div>
 

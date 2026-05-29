@@ -47,9 +47,18 @@ export type Toast = {
 };
 
 export type PorphyrinResult = {
+  porphyrin_count: number;
   porphyrin_area: number;
   detection_rate_percent: number;
   grade: string;
+  skin_score: {
+    score: number;
+    grade: string;
+    label: string;
+    basis: string;
+    porphyrin_count: number;
+    reference_bad_count: number;
+  };
   region_analysis: Record<string, number>;
   threshold_percentile: number;
   threshold_value: number;

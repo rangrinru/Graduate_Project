@@ -9,6 +9,38 @@ def clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
 
+def calculate_skin_score_from_porphyrin_count(porphyrin_count: int):
+    reference_bad_count = 80
+    count = max(0, int(porphyrin_count))
+    count_risk = min(count / reference_bad_count, 1.0)
+    score = int(round(100 - (70 * count_risk)))
+
+    if score >= 90:
+        grade = "A"
+        label = "매우 양호"
+    elif score >= 80:
+        grade = "B"
+        label = "양호"
+    elif score >= 70:
+        grade = "C"
+        label = "주의"
+    elif score >= 60:
+        grade = "D"
+        label = "관리 필요"
+    else:
+        grade = "E"
+        label = "집중 관리"
+
+    return {
+        "score": score,
+        "grade": grade,
+        "label": label,
+        "basis": "porphyrin_count",
+        "porphyrin_count": count,
+        "reference_bad_count": reference_bad_count,
+    }
+
+
 def make_porphyrin_face_mask(gray):
     h, w = gray.shape
     non_black = cv2.inRange(gray, 8, 255)
@@ -338,6 +370,7 @@ def analyze_porphyrin_heatmap_v04(
         grade = "High"
 
     region_analysis = normalize_region_scores(region_score)
+    skin_score = calculate_skin_score_from_porphyrin_count(accepted_count)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     heatmap_path = output_dir / "porphyrin_heatmap.jpg"
@@ -355,6 +388,7 @@ def analyze_porphyrin_heatmap_v04(
         "detection_rate_percent": float(detection_rate),
         "face_area_pixels": int(face_pixels),
         "grade": grade,
+        "skin_score": skin_score,
         "region_analysis": {
             key: float(value)
             for key, value in region_analysis.items()

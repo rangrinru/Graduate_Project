@@ -174,6 +174,28 @@ def set_manual_controls(camera, exposure_ms, gain):
     return
 
 
+def exposure_ms_to_uc788_value(exposure_ms):
+    if exposure_ms is None:
+        return UC788_EXPOSURE
+
+    if INITIAL_EXPOSURE_MS <= 0:
+        return max(0, int(round(exposure_ms)))
+
+    scale = UC788_EXPOSURE / float(INITIAL_EXPOSURE_MS)
+    return max(0, int(round(float(exposure_ms) * scale)))
+
+
+def gain_to_uc788_value(gain):
+    if gain is None:
+        return UC788_ANALOGUE_GAIN
+
+    if CURRENT_GAIN <= 0:
+        return UC788_ANALOGUE_GAIN
+
+    scale = UC788_ANALOGUE_GAIN / float(CURRENT_GAIN)
+    return max(0, int(round(float(gain) * scale)))
+
+
 # =========================
 # UC-788 Rev.B RAW 카메라 유틸 함수
 # =========================
@@ -230,19 +252,24 @@ def configure_uc788_media(force=False):
 
 
 
-def apply_uc788_controls():
+def apply_uc788_controls(exposure_ms=None, gain=None, strict=False):
     # UC-788 Rev.B 직접 V4L2 캡처용 노출/게인/트리거 기본값 적용
     # /dev/v4l-subdev0 컨트롤이 순간적으로 준비되지 않을 수 있으므로 실패해도 서버는 계속 실행합니다.
+    exposure_value = exposure_ms_to_uc788_value(exposure_ms)
+    gain_value = gain_to_uc788_value(gain)
+
     commands = [
         ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"trigger_mode={UC788_TRIGGER_MODE}"],
-        ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"exposure={UC788_EXPOSURE}"],
-        ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"analogue_gain={UC788_ANALOGUE_GAIN}"],
+        ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"exposure={exposure_value}"],
+        ["v4l2-ctl", "-d", "/dev/v4l-subdev0", "-c", f"analogue_gain={gain_value}"],
     ]
 
     for command in commands:
         try:
-            run_command(command, check=False, capture_output=True)
+            run_command(command, check=strict, capture_output=True)
         except Exception as e:
+            if strict:
+                raise RuntimeError(f"UC-788 컨트롤 적용 실패: {command}: {e}") from e
             print(f"[UC-788 컨트롤 적용 경고] {command}: {e}")
 
 
@@ -433,10 +460,10 @@ def capture_y10p_raw_bytes():
     return read_exact_from_fifo(RAW_EXPECTED_BYTES, timeout_sec=2.0)
 
 
-def capture_y10p_raw_bytes_direct():
+def capture_y10p_raw_bytes_direct(exposure_ms=None, gain=None, strict_controls=False):
     stop_uc788_stream()
     configure_uc788_media(force=True)
-    apply_uc788_controls()
+    apply_uc788_controls(exposure_ms=exposure_ms, gain=gain, strict=strict_controls)
 
     try:
         RAW_FRAME_PATH.unlink(missing_ok=True)
@@ -461,6 +488,16 @@ def capture_y10p_raw_bytes_direct():
         raise RuntimeError(f"raw 크기 오류: expected={RAW_EXPECTED_BYTES}, actual={len(raw_bytes)}")
 
     return raw_bytes
+
+
+def capture_uc788_full_frame_bgr_direct(exposure_ms, gain):
+    raw_bytes = capture_y10p_raw_bytes_direct(
+        exposure_ms=exposure_ms,
+        gain=gain,
+        strict_controls=True
+    )
+    gray8 = y10p_high8_to_gray8(raw_bytes)
+    return cv2.cvtColor(gray8, cv2.COLOR_GRAY2BGR)
 
 
 def read_uc788_full_frame_gray8():
@@ -553,7 +590,7 @@ def capture_high_quality_full_frame(exposure_ms, gain):
     try:
         # UC-788 Rev.B raw 기반 전체 프레임 촬영
         with camera_lock:
-            full_frame_bgr = read_uc788_full_frame_bgr()
+            full_frame_bgr = capture_uc788_full_frame_bgr_direct(exposure_ms, gain)
 
     finally:
         # 릴레이 OFF
@@ -561,6 +598,26 @@ def capture_high_quality_full_frame(exposure_ms, gain):
 
     # 촬영 결과 반환
     return full_frame_bgr
+
+
+def capture_high_quality_full_frames_by_exposure(exposure_values_ms, gain):
+    relay_on()
+    sleep(RELAY_WARMUP_SEC)
+
+    frames_by_exposure = {}
+
+    try:
+        with camera_lock:
+            for exposure_ms in exposure_values_ms:
+                frames_by_exposure[exposure_ms] = capture_uc788_full_frame_bgr_direct(
+                    exposure_ms=exposure_ms,
+                    gain=gain
+                )
+
+    finally:
+        relay_off()
+
+    return frames_by_exposure
 
 
 # =========================
@@ -951,18 +1008,21 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
     if not profile_root.exists():
         raise ValueError("프로필 폴더가 존재하지 않습니다.")
 
-    # 촬영 노출 시간 설정
-    exposure_ms = INITIAL_EXPOSURE_MS
-
     # 촬영 gain 설정
     gain = CURRENT_GAIN
 
     # 저장 확장자 결정
     ext = "png" if SAVE_AS_PNG else "jpg"
 
-    # 릴레이 예열 중에는 스트리밍이 멈추지 않도록 실제 프레임 읽기 순간에만 카메라 락을 잡습니다.
-    full_frame_bgr = capture_high_quality_full_frame(
-        exposure_ms=exposure_ms,
+    capture_exposure_plan = {
+        cam_key: CAPTURE_EXPOSURE_MS_BY_CAMERA.get(cam_key, INITIAL_EXPOSURE_MS)
+        for cam_key in ["cam2", "cam3", "cam4"]
+    }
+    exposure_values_ms = list(dict.fromkeys(capture_exposure_plan.values()))
+
+    # UC-788은 네 카메라가 하나의 프레임으로 동작하므로 노출별 전체 프레임을 찍은 뒤 필요한 카메라 영역만 저장합니다.
+    frames_by_exposure = capture_high_quality_full_frames_by_exposure(
+        exposure_values_ms=exposure_values_ms,
         gain=gain
     )
 
@@ -977,6 +1037,9 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
 
     # cam2, cam3, cam4 순서대로 저장
     for cam_key in ["cam2", "cam3", "cam4"]:
+        exposure_ms = capture_exposure_plan[cam_key]
+        full_frame_bgr = frames_by_exposure[exposure_ms]
+
         # 개별 카메라 영역 추출
         target_frame = extract_cam_frame(full_frame_bgr, cam_key).copy()
 
@@ -1005,6 +1068,7 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
         "profile_name": profile_name,
         "profile_id": folder_id,
         "capture_id": capture_id,
+        "exposure_plan_ms": capture_exposure_plan,
         "files": saved_files
     }
 
@@ -1737,6 +1801,7 @@ def analyze_porphyrin_api(profile_id, capture_id):
             "detection_rate_percent": report["detection_rate_percent"],
             "face_area_pixels": report["face_area_pixels"],
             "grade": report["grade"],
+            "skin_score": report["skin_score"],
             "region_analysis": report["region_analysis"],
             "threshold_percentile": report["threshold_percentile"],
             "threshold_value": report["threshold_value"],
