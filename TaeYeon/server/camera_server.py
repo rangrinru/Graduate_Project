@@ -1736,6 +1736,7 @@ def analyze_porphyrin_api(profile_id, capture_id):
             "detection_rate_percent": report["detection_rate_percent"],
             "face_area_pixels": report["face_area_pixels"],
             "grade": report["grade"],
+            "skin_score": report["skin_score"],
             "region_analysis": report["region_analysis"],
             "threshold_percentile": report["threshold_percentile"],
             "threshold_value": report["threshold_value"],
