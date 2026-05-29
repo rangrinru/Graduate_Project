@@ -296,20 +296,22 @@ def analyze_porphyrin_heatmap_v04(
     # instead of the top percentile within each individual image.
     heat_scaled = blur.copy()
     heat_scaled = cv2.bitwise_and(heat_scaled, heat_scaled, mask=face_mask)
+    heatmap_min_value = 20.0
+    heatmap_max_value = 90.0
     heatmap_source = np.clip(
-        (heat_scaled.astype(np.float32) - 40.0) * 255.0 / (255.0 - 40.0),
+        (heat_scaled.astype(np.float32) - heatmap_min_value) * 255.0 / (heatmap_max_value - heatmap_min_value),
         0,
         255
     ).astype(np.uint8)
     heatmap = cv2.applyColorMap(heatmap_source, cv2.COLORMAP_JET)
     heatmap[face_mask == 0] = (0, 0, 0)
 
-    visible_threshold = 120
+    visible_threshold = 38
     _, thresh = cv2.threshold(heat_scaled, visible_threshold, 255, cv2.THRESH_BINARY)
     thresh = cv2.bitwise_and(thresh, thresh, mask=face_mask)
 
     if landmark_pts is not None:
-        philtrum_threshold = 105
+        philtrum_threshold = 30
         philtrum_mask = np.zeros_like(gray)
         face_ys, face_xs = np.where((face_mask > 0) & (heat_scaled >= philtrum_threshold))
         for px, py in zip(face_xs, face_ys):
@@ -323,8 +325,7 @@ def analyze_porphyrin_heatmap_v04(
                 philtrum_mask[int(py), int(px)] = 255
         thresh = cv2.bitwise_or(thresh, philtrum_mask)
 
-    kernel = np.ones((3, 3), np.uint8)
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    kernel = np.ones((2, 2), np.uint8)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
 
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(thresh, connectivity=8)
@@ -332,7 +333,7 @@ def analyze_porphyrin_heatmap_v04(
     accepted_count = 0
     for label_idx in range(1, num_labels):
         area = int(stats[label_idx, cv2.CC_STAT_AREA])
-        if area < 12:
+        if area < 2:
             continue
 
         clean_mask[labels == label_idx] = 255
@@ -399,9 +400,9 @@ def analyze_porphyrin_heatmap_v04(
         "threshold_percentile": 0,
         "threshold_value": float(visible_threshold),
         "heatmap_scale": "fixed_absolute",
-        "heatmap_min_value": 40.0,
-        "heatmap_max_value": 255.0,
-        "min_area": 12,
+        "heatmap_min_value": heatmap_min_value,
+        "heatmap_max_value": heatmap_max_value,
+        "min_area": 2,
         "max_area": 0,
         "face_landmarks_used": bool(landmark_pts is not None),
         "heatmap_path": str(heatmap_path),
