@@ -5,6 +5,14 @@ import cv2
 import numpy as np
 
 
+HEATMAP_MIN_VALUE = 25.0
+HEATMAP_MAX_VALUE = 110.0
+VISIBLE_THRESHOLD = 70
+LOCAL_CONTRAST_THRESHOLD = 5
+STRONG_ABSOLUTE_THRESHOLD = 100
+MIN_COMPONENT_AREA = 2
+
+
 def clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
@@ -122,6 +130,59 @@ def normalize_region_scores(region_score):
             rounded[order[idx % len(order)]] += step
 
     return rounded
+
+
+def build_absolute_porphyrin_heatmap(heat_source, mask=None):
+    if mask is None:
+        mask = np.full_like(heat_source, 255)
+
+    heat_scaled = cv2.bitwise_and(heat_source, heat_source, mask=mask)
+    heatmap_source = np.clip(
+        (heat_scaled.astype(np.float32) - HEATMAP_MIN_VALUE)
+        * 255.0
+        / (HEATMAP_MAX_VALUE - HEATMAP_MIN_VALUE),
+        0,
+        255,
+    ).astype(np.uint8)
+    heatmap = cv2.applyColorMap(heatmap_source, cv2.COLORMAP_JET)
+
+    local_background = cv2.GaussianBlur(heat_scaled, (21, 21), 0)
+    bright_detail = cv2.subtract(heat_scaled, local_background)
+    thresh = np.where(
+        (
+            (heat_scaled >= VISIBLE_THRESHOLD)
+            & (bright_detail >= LOCAL_CONTRAST_THRESHOLD)
+        )
+        | (heat_scaled >= STRONG_ABSOLUTE_THRESHOLD),
+        255,
+        0,
+    ).astype(np.uint8)
+    thresh = cv2.bitwise_and(thresh, thresh, mask=mask)
+
+    kernel = np.ones((2, 2), np.uint8)
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(thresh, connectivity=8)
+    clean_mask = np.zeros_like(heat_source)
+    accepted_count = 0
+    max_component_area = 0
+
+    for label_idx in range(1, num_labels):
+        area = int(stats[label_idx, cv2.CC_STAT_AREA])
+        if area < MIN_COMPONENT_AREA:
+            continue
+
+        clean_mask[labels == label_idx] = 255
+        accepted_count += 1
+        max_component_area = max(max_component_area, area)
+
+    detected_overlay = np.zeros_like(heatmap)
+    detected_overlay[clean_mask > 0] = (0, 0, 255)
+    heatmap = cv2.addWeighted(heatmap, 1.0, detected_overlay, 0.45, 0)
+    contours, _ = cv2.findContours(clean_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(heatmap, contours, -1, (0, 0, 255), 1, cv2.LINE_AA)
+
+    return heatmap, clean_mask, heatmap_source, accepted_count, max_component_area
 
 
 def rescale_landmarks(pts, source_shape, target_shape):
@@ -286,52 +347,10 @@ def analyze_porphyrin_heatmap_v04(
     landmark_metrics = get_landmark_metrics(None, face_rect)
     landmark_pts = None
 
-    # Fixed-scale heatmap: red now means a comparable absolute 660nm response,
-    # instead of the top percentile within each individual image.
-    heat_scaled = blur.copy()
-    heat_scaled = cv2.bitwise_and(heat_scaled, heat_scaled, mask=face_mask)
-    heatmap_min_value = 25.0
-    heatmap_max_value = 110.0
-    heatmap_source = np.clip(
-        (heat_scaled.astype(np.float32) - heatmap_min_value) * 255.0 / (heatmap_max_value - heatmap_min_value),
-        0,
-        255
-    ).astype(np.uint8)
-    heatmap = cv2.applyColorMap(heatmap_source, cv2.COLORMAP_JET)
-
-    visible_threshold = 70
-    local_contrast_threshold = 5
-    strong_absolute_threshold = 100
-    local_background = cv2.GaussianBlur(heat_scaled, (21, 21), 0)
-    bright_detail = cv2.subtract(heat_scaled, local_background)
-    thresh = np.where(
-        ((heat_scaled >= visible_threshold) & (bright_detail >= local_contrast_threshold))
-        | (heat_scaled >= strong_absolute_threshold),
-        255,
-        0
-    ).astype(np.uint8)
-    thresh = cv2.bitwise_and(thresh, thresh, mask=face_mask)
-
-    kernel = np.ones((2, 2), np.uint8)
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
-
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(thresh, connectivity=8)
-    clean_mask = np.zeros_like(gray)
-    accepted_count = 0
-    max_component_area = 0
-    for label_idx in range(1, num_labels):
-        area = int(stats[label_idx, cv2.CC_STAT_AREA])
-        if area < 2:
-            continue
-
-        clean_mask[labels == label_idx] = 255
-        accepted_count += 1
-
-    detected_overlay = np.zeros_like(heatmap)
-    detected_overlay[clean_mask > 0] = (0, 0, 255)
-    heatmap = cv2.addWeighted(heatmap, 1.0, detected_overlay, 0.45, 0)
-    detected_contours, _ = cv2.findContours(clean_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.drawContours(heatmap, detected_contours, -1, (0, 0, 255), 1, cv2.LINE_AA)
+    # Same absolute-threshold preview logic as porphyrin_threshold_viewer.py.
+    heatmap, clean_mask, heatmap_source, accepted_count, max_component_area = (
+        build_absolute_porphyrin_heatmap(blur, face_mask)
+    )
 
     region_score = {
         "forehead": 0.0,
@@ -383,13 +402,13 @@ def analyze_porphyrin_heatmap_v04(
             for key, value in region_analysis.items()
         },
         "threshold_percentile": 0,
-        "threshold_value": float(visible_threshold),
-        "local_contrast_threshold": float(local_contrast_threshold),
-        "strong_absolute_threshold": float(strong_absolute_threshold),
+        "threshold_value": float(VISIBLE_THRESHOLD),
+        "local_contrast_threshold": float(LOCAL_CONTRAST_THRESHOLD),
+        "strong_absolute_threshold": float(STRONG_ABSOLUTE_THRESHOLD),
         "heatmap_scale": "fixed_absolute",
-        "heatmap_min_value": heatmap_min_value,
-        "heatmap_max_value": heatmap_max_value,
-        "min_area": 2,
+        "heatmap_min_value": HEATMAP_MIN_VALUE,
+        "heatmap_max_value": HEATMAP_MAX_VALUE,
+        "min_area": MIN_COMPONENT_AREA,
         "max_area": max_component_area,
         "face_landmarks_used": bool(landmark_pts is not None),
         "heatmap_path": str(heatmap_path),
