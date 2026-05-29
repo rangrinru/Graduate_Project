@@ -294,25 +294,24 @@ def analyze_porphyrin_heatmap_v04(
         face_rect = (0, 0, gray.shape[1], gray.shape[0])
     landmark_metrics = get_landmark_metrics(landmark_pts, face_rect)
 
-    face_values = blur[face_mask > 0]
-    heat_low = np.percentile(face_values, 50)
-    heat_high = np.percentile(face_values, 98.2)
-    if heat_high <= heat_low:
-        heat_high = heat_low + 1
-
-    heat_scaled = np.clip(
-        (blur.astype(np.float32) - heat_low) * 255.0 / (heat_high - heat_low),
+    # Fixed-scale heatmap: red now means a comparable absolute 660nm response,
+    # instead of the top percentile within each individual image.
+    heat_scaled = blur.copy()
+    heat_scaled = cv2.bitwise_and(heat_scaled, heat_scaled, mask=face_mask)
+    heatmap_source = np.clip(
+        (heat_scaled.astype(np.float32) - 40.0) * 255.0 / (255.0 - 40.0),
         0,
         255
     ).astype(np.uint8)
-    heatmap = cv2.applyColorMap(heat_scaled, cv2.COLORMAP_JET)
+    heatmap = cv2.applyColorMap(heatmap_source, cv2.COLORMAP_JET)
+    heatmap[face_mask == 0] = (0, 0, 0)
 
-    visible_threshold = 155
+    visible_threshold = 170
     _, thresh = cv2.threshold(heat_scaled, visible_threshold, 255, cv2.THRESH_BINARY)
     thresh = cv2.bitwise_and(thresh, thresh, mask=face_mask)
 
     if landmark_pts is not None:
-        philtrum_threshold = 105
+        philtrum_threshold = 140
         philtrum_mask = np.zeros_like(gray)
         face_ys, face_xs = np.where((face_mask > 0) & (heat_scaled >= philtrum_threshold))
         for px, py in zip(face_xs, face_ys):
@@ -352,7 +351,7 @@ def analyze_porphyrin_heatmap_v04(
 
     ys, xs = np.where(clean_mask > 0)
     total_area = float(len(xs))
-    intensity_values = heat_scaled[ys, xs].astype(np.float32) / 255.0 if len(xs) else []
+    intensity_values = heatmap_source[ys, xs].astype(np.float32) / 255.0 if len(xs) else []
 
     for x, y, intensity in zip(xs, ys, intensity_values):
         if landmark_pts is not None:
@@ -395,6 +394,9 @@ def analyze_porphyrin_heatmap_v04(
         },
         "threshold_percentile": 0,
         "threshold_value": float(visible_threshold),
+        "heatmap_scale": "fixed_absolute",
+        "heatmap_min_value": 40.0,
+        "heatmap_max_value": 255.0,
         "min_area": 12,
         "max_area": 0,
         "face_landmarks_used": bool(landmark_pts is not None),
