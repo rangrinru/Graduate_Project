@@ -178,6 +178,15 @@ def exposure_ms_to_uc788_value(exposure_ms):
     if exposure_ms is None:
         return UC788_EXPOSURE
 
+    if exposure_ms == REFERENCE_EXPOSURE_MS:
+        return UC788_REFERENCE_EXPOSURE
+
+    if exposure_ms == FLUORESCENCE_EXPOSURE_MS:
+        return UC788_FLUORESCENCE_EXPOSURE
+
+    if exposure_ms == PREVIEW_EXPOSURE_MS:
+        return UC788_PREVIEW_EXPOSURE
+
     if INITIAL_EXPOSURE_MS <= 0:
         return max(0, int(round(exposure_ms)))
 
@@ -336,8 +345,8 @@ def start_uc788_stream():
     # media 포맷 설정
     configure_uc788_media(force=True)
 
-    # UC-788 직접 V4L2 캡처용 노출/게인/트리거 기본값 적용
-    apply_uc788_controls()
+    # 위치 확인 프리뷰는 저장용 0ms가 아니라 얼굴을 볼 수 있는 별도 노출로 유지합니다.
+    apply_uc788_controls(exposure_ms=PREVIEW_EXPOSURE_MS, gain=CURRENT_GAIN)
 
     # 기존 FIFO 삭제 후 새로 생성
     try:
@@ -464,6 +473,7 @@ def capture_y10p_raw_bytes_direct(exposure_ms=None, gain=None, strict_controls=F
     stop_uc788_stream()
     configure_uc788_media(force=True)
     apply_uc788_controls(exposure_ms=exposure_ms, gain=gain, strict=strict_controls)
+    sleep(DIRECT_CAPTURE_EXPOSURE_SETTLE_SEC)
 
     try:
         RAW_FRAME_PATH.unlink(missing_ok=True)
@@ -475,7 +485,7 @@ def capture_y10p_raw_bytes_direct(exposure_ms=None, gain=None, strict_controls=F
         "-d", RAW_VIDEO_DEVICE,
         "--set-fmt-video=width=5120,height=800,pixelformat=Y10P",
         "--stream-mmap=3",
-        "--stream-skip=5",
+        f"--stream-skip={DIRECT_CAPTURE_STREAM_SKIP}",
         "--stream-count=1",
         f"--stream-to={RAW_FRAME_PATH}",
     ]
@@ -1055,7 +1065,8 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
             ext=ext,
             profile_name=profile_name,
             folder_id=folder_id,
-            trigger_metadata=trigger_metadata
+            trigger_metadata=trigger_metadata,
+            uc788_exposure_value=exposure_ms_to_uc788_value(exposure_ms),
         )
 
         # 저장 파일 목록에 추가
@@ -1300,19 +1311,19 @@ def delete_profile_api(profile_id):
 # =========================
 
 def build_cam4_preview_jpeg():
-    # 스트리밍용 CAM4 프레임을 만들고 JPEG로 인코딩합니다.
+    # 위치 확인 화면은 필터가 어두운 cam4 대신 no_filter 프리뷰 카메라를 사용합니다.
     with camera_lock:
         if not camera_ready:
             return None
 
-        cam4_gray = read_uc788_cam_frame_gray8("cam4")
+        preview_gray = read_uc788_cam_frame_gray8(PREVIEW_CAM_KEY)
 
-    # 세로 키오스크 화면에 맞게 CAM4 영상을 서버에서 세로 방향으로 회전
-    cam4_gray = cv2.rotate(cam4_gray, cv2.ROTATE_90_CLOCKWISE)
+    # 세로 키오스크 화면에 맞게 영상을 서버에서 세로 방향으로 회전
+    preview_gray = cv2.rotate(preview_gray, cv2.ROTATE_90_CLOCKWISE)
 
     # 화면 표시용 크기로 리사이즈
-    cam4_gray = cv2.resize(
-        cam4_gray,
+    preview_gray = cv2.resize(
+        preview_gray,
         (STREAM_WIDTH, STREAM_HEIGHT),
         interpolation=cv2.INTER_AREA
     )
@@ -1320,7 +1331,7 @@ def build_cam4_preview_jpeg():
     # 브라우저에 바로 보낼 grayscale JPEG로 인코딩
     ok, buffer = cv2.imencode(
         ".jpg",
-        cam4_gray,
+        preview_gray,
         [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY]
     )
 
@@ -1421,21 +1432,21 @@ def generate_cam4_stream_inline():
         start_time = monotonic()
 
         try:
-            # 스트리밍에서는 전체 BGR 변환을 하지 않고 1채널 gray에서 CAM4만 잘라냅니다.
+            # 스트리밍에서는 전체 BGR 변환을 하지 않고 1채널 gray에서 프리뷰 카메라만 잘라냅니다.
             # 이렇게 해야 15.6인치 세로 키오스크에서도 프레임이 덜 끊깁니다.
             with camera_lock:
                 if not camera_ready:
                     sleep(0.05)
                     continue
 
-                cam4_gray = read_uc788_cam_frame_gray8("cam4")
+                preview_gray = read_uc788_cam_frame_gray8(PREVIEW_CAM_KEY)
 
-            # 세로 키오스크 화면에 맞게 CAM4 영상을 서버에서 세로 방향으로 회전
-            cam4_gray = cv2.rotate(cam4_gray, cv2.ROTATE_90_CLOCKWISE)
+            # 세로 키오스크 화면에 맞게 프리뷰 영상을 서버에서 세로 방향으로 회전
+            preview_gray = cv2.rotate(preview_gray, cv2.ROTATE_90_CLOCKWISE)
 
             # 800x1280 원본 세로 프레임에서 720x1152로 약간만 줄여 품질과 부드러움을 균형 있게 맞춤
-            cam4_gray = cv2.resize(
-                cam4_gray,
+            preview_gray = cv2.resize(
+                preview_gray,
                 (STREAM_WIDTH, STREAM_HEIGHT),
                 interpolation=cv2.INTER_AREA
             )
@@ -1444,7 +1455,7 @@ def generate_cam4_stream_inline():
             # 브라우저는 grayscale JPEG도 정상 표시합니다.
             ok, buffer = cv2.imencode(
                 ".jpg",
-                cam4_gray,
+                preview_gray,
                 [cv2.IMWRITE_JPEG_QUALITY, STREAM_JPEG_QUALITY]
             )
 

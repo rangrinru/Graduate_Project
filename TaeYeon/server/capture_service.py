@@ -26,6 +26,7 @@ def save_one_camera_image(
     profile_name,
     folder_id,
     trigger_metadata=None,
+    uc788_exposure_value=None,
 ):
     info = CAMERA_INFO[cam_key]
     frame_bgr = cv2.rotate(frame_bgr, cv2.ROTATE_90_CLOCKWISE)
@@ -56,6 +57,7 @@ def save_one_camera_image(
             "AeEnable": False,
             "ExposureTime_ms": exposure_ms,
             "ExposureTime_us": exposure_ms * 1000,
+            "UC788ExposureValue": uc788_exposure_value,
             "AnalogueGain": gain,
         },
         "saved_file": str(image_path),
