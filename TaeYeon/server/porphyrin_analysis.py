@@ -290,7 +290,7 @@ def analyze_porphyrin_heatmap_v04(
     # instead of the top percentile within each individual image.
     heat_scaled = blur.copy()
     heat_scaled = cv2.bitwise_and(heat_scaled, heat_scaled, mask=face_mask)
-    heatmap_min_value = 4.0
+    heatmap_min_value = 8.0
     heatmap_max_value = 38.0
     heatmap_source = np.clip(
         (heat_scaled.astype(np.float32) - heatmap_min_value) * 255.0 / (heatmap_max_value - heatmap_min_value),
@@ -299,8 +299,8 @@ def analyze_porphyrin_heatmap_v04(
     ).astype(np.uint8)
     heatmap = cv2.applyColorMap(heatmap_source, cv2.COLORMAP_JET)
 
-    visible_threshold = 9
-    local_contrast_threshold = 1
+    visible_threshold = 11
+    local_contrast_threshold = 2
     strong_absolute_threshold = 24
     local_background = cv2.GaussianBlur(heat_scaled, (21, 21), 0)
     bright_detail = cv2.subtract(heat_scaled, local_background)
