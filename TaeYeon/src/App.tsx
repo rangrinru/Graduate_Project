@@ -719,7 +719,7 @@ function App() {
 
       setSelectedFilter("660nm_filter");
       setAnalysisImageMode("porphyrin_heatmap");
-      showToast("포르피린 분석 완료", "success");
+      showToast(`포르피린 분석 완료: ${data.porphyrin_count || 0}개 검출`, "success");
     } catch (error) {
       console.error(error);
       showToast("포르피린 분석 실패", "error");
