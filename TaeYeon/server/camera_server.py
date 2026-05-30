@@ -1312,7 +1312,7 @@ def delete_profile_api(profile_id):
 # =========================
 
 def build_cam4_preview_jpeg():
-    # 위치 확인 화면은 필터가 어두운 cam4 대신 no_filter 프리뷰 카메라를 사용합니다.
+    # 위치 확인 화면은 PREVIEW_CAM_KEY로 지정한 카메라를 사용합니다.
     with camera_lock:
         if not camera_ready:
             return None
