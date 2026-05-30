@@ -40,6 +40,9 @@ const getSkinAgeLabel = (level: string) => {
 
 const PROFILE_FETCH_TIMEOUT_MS = 4000;
 
+type HistoryFilter = "no_filter" | "405nm_filter" | "660nm_filter";
+type DetailImageView = "source" | "porphyrin_heatmap" | "skin_aging_result";
+
 function App() {
   const [screen, setScreen] = useState<Screen>("profiles");
 
@@ -65,9 +68,8 @@ function App() {
   const [selectedHistory, setSelectedHistory] = useState<HistoryDetail | null>(null);
   const [isLoadingHistoryDetail, setIsLoadingHistoryDetail] = useState(false);
 
-  const [selectedFilter, setSelectedFilter] = useState<
-    "no_filter" | "405nm_filter" | "660nm_filter"
-  >("no_filter");
+  const [selectedFilter, setSelectedFilter] = useState<HistoryFilter>("no_filter");
+  const [detailImageView, setDetailImageView] = useState<DetailImageView>("source");
 
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimerRef = useRef<number | null>(null);
@@ -93,6 +95,17 @@ function App() {
     if (!selectedHistory) return null;
     return selectedHistory.images[selectedFilter] || null;
   }, [selectedHistory, selectedFilter]);
+
+  const isViewingPorphyrinHeatmap =
+    detailImageView === "porphyrin_heatmap" && Boolean(porphyrinResult?.heatmap_url);
+  const isViewingSkinAgingResult =
+    detailImageView === "skin_aging_result" && Boolean(skinAgingResult?.result_url);
+
+  const selectedImageLabel = isViewingPorphyrinHeatmap
+    ? "Porphyrin_Heatmap"
+    : isViewingSkinAgingResult
+      ? "Skin_Aging_Result"
+      : currentImage?.display_name || "-";
 
   const selectedHistoryIndex = useMemo(() => {
     if (!selectedHistory) return -1;
@@ -126,6 +139,11 @@ function App() {
       setToast(null);
       toastTimerRef.current = null;
     }, 2500);
+  };
+
+  const selectHistoryFilter = (filter: HistoryFilter) => {
+    setSelectedFilter(filter);
+    setDetailImageView("source");
   };
 
   useEffect(() => {
@@ -543,6 +561,7 @@ function App() {
     setHistoryItems([]);
     setPorphyrinResult(null);
     setSkinAgingResult(null);
+    setDetailImageView("source");
     setShowSkinAgingResultModal(false);
     setAutoStatus(null);
     setScreen("camera");
@@ -555,6 +574,7 @@ function App() {
     setHistoryItems([]);
     setPorphyrinResult(null);
     setSkinAgingResult(null);
+    setDetailImageView("source");
     setShowSkinAgingResultModal(false);
     setAutoStatus(null);
   };
@@ -693,6 +713,7 @@ function App() {
       if (resetFilter) {
         setSelectedFilter("no_filter");
       }
+      setDetailImageView("source");
       setPorphyrinResult(null);
       setSkinAgingResult(null);
       setShowSkinAgingResultModal(false);
@@ -742,6 +763,7 @@ function App() {
         setSelectedHistory(null);
         setPorphyrinResult(null);
         setSkinAgingResult(null);
+        setDetailImageView("source");
         setShowSkinAgingResultModal(false);
         setScreen("history");
       }
@@ -804,6 +826,7 @@ function App() {
         heatmap_url: data.heatmap_url,
       });
       setSelectedFilter("660nm_filter");
+      setDetailImageView("porphyrin_heatmap");
       showToast("포르피린 분석 완료", "success");
     } catch (error) {
       console.error(error);
@@ -866,6 +889,7 @@ function App() {
       });
       setShowSkinAgingResultModal(false);
       setSelectedFilter("405nm_filter");
+      setDetailImageView("skin_aging_result");
       showToast(`피부노화 분석 완료: 주근깨 ${data.freckle_count || 0}개 검출`, "success");
     } catch (error) {
       console.error(error);
@@ -1466,47 +1490,75 @@ function App() {
                       <div className="history-detail-sub">
                         프로필: {selectedHistory?.profileName || "-"}
                         <br />
-                        선택한 필터: {currentImage?.display_name || "-"}
+                        선택한 이미지: {selectedImageLabel}
                       </div>
 
                       <div className="filter-row">
                         <button
                           className={`filter-chip ${
-                            selectedFilter === "no_filter" ? "active" : ""
+                            selectedFilter === "no_filter" && detailImageView === "source" ? "active" : ""
                           }`}
-                          onClick={() => setSelectedFilter("no_filter")}
+                          onClick={() => selectHistoryFilter("no_filter")}
                         >
                           No_Filter
                         </button>
 
                         <button
                           className={`filter-chip ${
-                            selectedFilter === "405nm_filter" ? "active" : ""
+                            selectedFilter === "405nm_filter" && detailImageView === "source" ? "active" : ""
                           }`}
-                          onClick={() => setSelectedFilter("405nm_filter")}
+                          onClick={() => selectHistoryFilter("405nm_filter")}
                         >
                           405nm_Filter
                         </button>
 
+                        {skinAgingResult?.result_url && (
+                          <button
+                            className={`filter-chip aging-chip ${
+                              isViewingSkinAgingResult ? "active" : ""
+                            }`}
+                            onClick={() => {
+                              setSelectedFilter("405nm_filter");
+                              setDetailImageView("skin_aging_result");
+                            }}
+                          >
+                            SkinAging
+                          </button>
+                        )}
+
                         <button
                           className={`filter-chip ${
-                            selectedFilter === "660nm_filter" ? "active" : ""
+                            selectedFilter === "660nm_filter" && detailImageView === "source" ? "active" : ""
                           }`}
-                          onClick={() => setSelectedFilter("660nm_filter")}
+                          onClick={() => selectHistoryFilter("660nm_filter")}
                         >
                           660nm_Filter
                         </button>
+
+                        {porphyrinResult?.heatmap_url && (
+                          <button
+                            className={`filter-chip porphyrin-chip ${
+                              isViewingPorphyrinHeatmap ? "active" : ""
+                            }`}
+                            onClick={() => {
+                              setSelectedFilter("660nm_filter");
+                              setDetailImageView("porphyrin_heatmap");
+                            }}
+                          >
+                            Porphyrin
+                          </button>
+                        )}
                       </div>
                     </div>
 
                     <div className="image-viewer">
-                      {selectedFilter === "405nm_filter" && skinAgingResult?.result_url ? (
+                      {isViewingSkinAgingResult && skinAgingResult?.result_url ? (
                         <img
                           className="history-image"
                           src={getImageSrc(skinAgingResult.result_url)}
                           alt="Skin aging analysis result"
                         />
-                      ) : selectedFilter === "660nm_filter" && porphyrinResult?.heatmap_url ? (
+                      ) : isViewingPorphyrinHeatmap && porphyrinResult?.heatmap_url ? (
                         <img
                           className="history-image"
                           src={getImageSrc(porphyrinResult.heatmap_url)}

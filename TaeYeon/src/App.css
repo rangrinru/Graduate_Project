@@ -986,6 +986,30 @@
           border-color: rgba(34, 211, 238, 0.35);
         }
 
+        .history-detail-container .porphyrin-chip {
+          background: rgba(239, 68, 68, 0.16);
+          color: #fecaca;
+          border-color: rgba(248, 113, 113, 0.36);
+        }
+
+        .history-detail-container .porphyrin-chip.active {
+          background: rgba(239, 68, 68, 0.38);
+          color: #ffffff;
+          border-color: rgba(252, 165, 165, 0.72);
+        }
+
+        .history-detail-container .aging-chip {
+          background: rgba(15, 118, 110, 0.16);
+          color: #99f6e4;
+          border-color: rgba(45, 212, 191, 0.36);
+        }
+
+        .history-detail-container .aging-chip.active {
+          background: rgba(15, 118, 110, 0.38);
+          color: #ffffff;
+          border-color: rgba(94, 234, 212, 0.72);
+        }
+
         .history-detail-container .filter-chip {
           border-radius: 14px;
           padding: 9px 12px;
