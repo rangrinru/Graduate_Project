@@ -631,20 +631,6 @@ def capture_high_quality_full_frames_by_exposure(exposure_values_ms, gain):
     return frames_by_exposure
 
 
-def capture_full_frames_by_exposure_without_relay(exposure_values_ms, gain):
-    relay_off()
-    frames_by_exposure = {}
-
-    with camera_lock:
-        for exposure_ms in exposure_values_ms:
-            frames_by_exposure[exposure_ms] = capture_uc788_full_frame_bgr_direct(
-                exposure_ms=exposure_ms,
-                gain=gain
-            )
-
-    return frames_by_exposure
-
-
 # =========================
 # 자동 얼굴 촬영 유틸 함수 - rpicam_03_eye_closed_auto.py 방식
 # =========================
@@ -1008,11 +994,7 @@ def build_auto_trigger_metadata(detection):
     return metadata
 
 
-def perform_capture_for_profile(
-    profile_id: str,
-    trigger_metadata=None,
-    frames_by_exposure_provider=capture_high_quality_full_frames_by_exposure,
-):
+def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
     # profileId가 비어 있으면 예외 발생
     if not str(profile_id).strip():
         raise ValueError("profileId가 필요합니다.")
@@ -1050,7 +1032,7 @@ def perform_capture_for_profile(
     exposure_values_ms = list(dict.fromkeys(capture_exposure_plan.values()))
 
     # UC-788은 네 카메라가 하나의 프레임으로 동작하므로 노출별 전체 프레임을 찍은 뒤 필요한 카메라 영역만 저장합니다.
-    frames_by_exposure = frames_by_exposure_provider(
+    frames_by_exposure = capture_high_quality_full_frames_by_exposure(
         exposure_values_ms=exposure_values_ms,
         gain=gain
     )
@@ -1553,47 +1535,6 @@ def capture_all():
             "ok": False,
             "error": str(e)
         }), 500
-
-
-@app.route("/capture-white-led", methods=["POST"])
-def capture_white_led():
-    previous_white_led_state = get_white_led_status()
-
-    try:
-        body = request.get_json(silent=True) or {}
-        profile_id = body.get("profileId", "")
-
-        relay_off()
-        white_led_on()
-        sleep(WHITE_LED_CAPTURE_WARMUP_SEC)
-
-        result = perform_capture_for_profile(
-            profile_id,
-            trigger_metadata={
-                "type": "manual_white_led_capture",
-                "white_led_was_on_before_capture": previous_white_led_state,
-                "white_led_warmup_sec": WHITE_LED_CAPTURE_WARMUP_SEC,
-                "uv_relay_enabled": False,
-            },
-            frames_by_exposure_provider=capture_full_frames_by_exposure_without_relay,
-        )
-
-        result["white_led_capture"] = True
-        result["white_led_is_on"] = previous_white_led_state
-        return jsonify(result)
-
-    except Exception as e:
-        print("[백색 LED 촬영 오류]", e)
-        return jsonify({
-            "ok": False,
-            "error": str(e),
-            "white_led_is_on": get_white_led_status(),
-        }), 500
-
-    finally:
-        relay_off()
-        if not previous_white_led_state:
-            white_led_off()
 
 
 # =========================
