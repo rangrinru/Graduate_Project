@@ -919,6 +919,45 @@
           font-size: 20px;
           font-weight: 700;
           margin: 0;
+          min-width: 260px;
+          text-align: center;
+        }
+
+        .history-detail-nav {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 14px;
+          width: 100%;
+        }
+
+        .history-nav-btn {
+          width: 54px;
+          height: 54px;
+          min-width: 54px;
+          min-height: 54px;
+          border: 1px solid rgba(255,255,255,0.16);
+          border-radius: 999px;
+          background: rgba(255,255,255,0.1);
+          color: white;
+          font-size: 36px;
+          font-weight: 900;
+          line-height: 1;
+          cursor: pointer;
+          transition: 0.2s ease;
+        }
+
+        .history-nav-btn:hover {
+          transform: scale(1.04);
+          background: rgba(34, 211, 238, 0.18);
+          border-color: rgba(34, 211, 238, 0.38);
+          color: #a5f3fc;
+        }
+
+        .history-nav-btn:disabled {
+          opacity: 0.32;
+          cursor: not-allowed;
+          transform: none;
         }
 
         .history-detail-sub {
@@ -1488,6 +1527,15 @@
 
         .history-detail-title {
           font-size: 26px;
+          min-width: 360px;
+        }
+
+        .history-nav-btn {
+          width: 68px;
+          height: 68px;
+          min-width: 68px;
+          min-height: 68px;
+          font-size: 44px;
         }
 
         .history-detail-sub {
