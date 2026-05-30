@@ -38,6 +38,8 @@ const getSkinAgeLabel = (level: string) => {
   return "분석 필요";
 };
 
+const PROFILE_FETCH_TIMEOUT_MS = 4000;
+
 function App() {
   const [screen, setScreen] = useState<Screen>("profiles");
 
@@ -136,10 +138,17 @@ function App() {
   }, []);
 
   const fetchProfiles = async () => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      controller.abort();
+    }, PROFILE_FETCH_TIMEOUT_MS);
+
     try {
       setIsLoadingProfiles(true);
 
-      const res = await fetch(`${API_BASE}/profiles`);
+      const res = await fetch(`${API_BASE}/profiles`, {
+        signal: controller.signal,
+      });
       const data = await res.json();
 
       if (!data.ok) {
@@ -151,8 +160,9 @@ function App() {
       setProfiles(data.profiles || []);
     } catch (error) {
       console.error(error);
-      showToast("프로필 목록 불러오기 실패", "error");
+      showToast("프로필 목록 불러오기 실패: 서버 연결을 확인하세요.", "error");
     } finally {
+      window.clearTimeout(timeoutId);
       setIsLoadingProfiles(false);
     }
   };
