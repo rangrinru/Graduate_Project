@@ -1019,6 +1019,11 @@
           background: #0f766e;
         }
 
+        .analysis-panel:has(.analysis-btn:not(.aging-analysis-btn)) .analysis-result-box,
+        .analysis-panel + .analysis-panel .analysis-result-box {
+          display: none;
+        }
+
         .analysis-result-box {
           margin-top: 16px;
           border-radius: 18px;
