@@ -597,6 +597,48 @@ function App() {
     }
   };
 
+  const capturePhotoWithWhiteLed = async () => {
+    if (!selectedProfile) {
+      showToast("프로필을 먼저 선택하세요.", "error");
+      return;
+    }
+
+    try {
+      setIsCapturing(true);
+      showToast("백색 조명 촬영을 시작합니다.", "info");
+
+      const res = await fetch(`${API_BASE}/capture-white-led`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          profileId: selectedProfile.folderId,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!data.ok) {
+        showToast(data.error || "백색 조명 촬영 실패", "error");
+        console.error(data);
+        return;
+      }
+
+      if (typeof data.white_led_is_on === "boolean") {
+        setWhiteLedOn(data.white_led_is_on);
+      }
+
+      showToast(`${selectedProfile.name} 프로필에 백색 조명 촬영 저장 완료`, "success");
+      console.log(data);
+    } catch (error) {
+      console.error(error);
+      showToast("백색 조명 촬영 실패", "error");
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
   const fetchHistory = async () => {
     if (!selectedProfile) {
       showToast("프로필을 먼저 선택하세요.", "error");
@@ -1163,6 +1205,14 @@ function App() {
                   disabled={isCapturing || isChangingWhiteLed}
                 >
                   {whiteLedOn ? "백색 조명 끄기" : "백색 조명 켜기"}
+                </button>
+
+                <button
+                  className="control-btn white-led-capture-control"
+                  onClick={capturePhotoWithWhiteLed}
+                  disabled={isCapturing || isAutoRunning}
+                >
+                  백색 조명 촬영
                 </button>
 
                 <button
