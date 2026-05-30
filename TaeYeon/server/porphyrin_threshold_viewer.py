@@ -22,6 +22,7 @@ def imread_unicode(path: Path):
     return cv2.imdecode(data, cv2.IMREAD_COLOR)
 
 
+
 def list_images(input_dir: Path):
     return sorted(
         path
