@@ -46,16 +46,6 @@ type HistoryDetail = {
 type PorphyrinAnalysisResult = {
   heatmap_url: string;
   metadata_path?: string;
-  analysis: {
-    porphyrin_count: number;
-    detection_rate_percent: number;
-    grade: string;
-    region_analysis: Record<string, number>;
-    threshold_percentile: number;
-    threshold_value: number;
-    min_area: number;
-    max_area: number;
-  };
 };
 
 type Toast = {
@@ -2064,46 +2054,6 @@ function App() {
                       )}
                     </div>
 
-                    {porphyrinAnalysis && (
-                      <div className="analysis-result-panel">
-                        <h3 className="analysis-result-title">
-                          Porphyrin Analysis
-                        </h3>
-
-                        <div className="analysis-text-grid">
-                          <div className="analysis-text-item">
-                            <div className="analysis-label">Detected Count</div>
-                            <div className="analysis-value">
-                              {porphyrinAnalysis.analysis.porphyrin_count}
-                            </div>
-                          </div>
-
-                          <div className="analysis-text-item">
-                            <div className="analysis-label">Detection Rate</div>
-                            <div className="analysis-value">
-                              {porphyrinAnalysis.analysis.detection_rate_percent.toFixed(2)}%
-                            </div>
-                          </div>
-
-                          <div className="analysis-text-item">
-                            <div className="analysis-label">Grade</div>
-                            <div className="analysis-value">
-                              {porphyrinAnalysis.analysis.grade}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="region-list">
-                          {Object.entries(porphyrinAnalysis.analysis.region_analysis).map(
-                            ([key, value]) => (
-                              <div key={key}>
-                                {key}: {value.toFixed(2)}%
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    )}
                   </>
                 )}
               </div>

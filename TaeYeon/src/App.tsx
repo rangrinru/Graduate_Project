@@ -12,7 +12,7 @@ import type {
   Toast,
   HangulBuffer,
 } from "./types";
-import { AUTO_CHECK_LABELS, EMPTY_AUTO_CHECKS, REGION_LABELS } from "./constants";
+import { AUTO_CHECK_LABELS, EMPTY_AUTO_CHECKS } from "./constants";
 import {
   COMPOUND_JONG_MAP,
   COMPOUND_JUNG_MAP,
@@ -76,7 +76,6 @@ function App() {
 
   const [isAnalyzingPorphyrin, setIsAnalyzingPorphyrin] = useState(false);
   const [porphyrinResult, setPorphyrinResult] = useState<PorphyrinResult | null>(null);
-  const [showAnalysisResultModal, setShowAnalysisResultModal] = useState(false);
   const [isAnalyzingSkinAging, setIsAnalyzingSkinAging] = useState(false);
   const [skinAgingResult, setSkinAgingResult] = useState<SkinAgingResult | null>(null);
   const [showSkinAgingResultModal, setShowSkinAgingResultModal] = useState(false);
@@ -510,7 +509,6 @@ function App() {
     setSelectedHistory(null);
     setHistoryItems([]);
     setPorphyrinResult(null);
-    setShowAnalysisResultModal(false);
     setSkinAgingResult(null);
     setShowSkinAgingResultModal(false);
     setAutoStatus(null);
@@ -523,7 +521,6 @@ function App() {
     setSelectedHistory(null);
     setHistoryItems([]);
     setPorphyrinResult(null);
-    setShowAnalysisResultModal(false);
     setSkinAgingResult(null);
     setShowSkinAgingResultModal(false);
     setAutoStatus(null);
@@ -620,7 +617,6 @@ function App() {
       setSelectedHistory(data);
       setSelectedFilter("no_filter");
       setPorphyrinResult(null);
-      setShowAnalysisResultModal(false);
       setSkinAgingResult(null);
       setShowSkinAgingResultModal(false);
       setScreen("historyDetail");
@@ -668,7 +664,6 @@ function App() {
       if (selectedHistory?.captureId === target.captureId) {
         setSelectedHistory(null);
         setPorphyrinResult(null);
-        setShowAnalysisResultModal(false);
         setSkinAgingResult(null);
         setShowSkinAgingResultModal(false);
         setScreen("history");
@@ -731,10 +726,8 @@ function App() {
         max_area: data.max_area,
         heatmap_url: data.heatmap_url,
       });
-      setShowAnalysisResultModal(false);
-
       setSelectedFilter("660nm_filter");
-      showToast(`포르피린 분석 완료: ${data.porphyrin_count || 0}개 검출`, "success");
+      showToast("포르피린 분석 완료", "success");
     } catch (error) {
       console.error(error);
       showToast("포르피린 분석 실패", "error");
@@ -1488,68 +1481,6 @@ function App() {
                         {isAnalyzingPorphyrin ? "포르피린 분석 중..." : "포르피린 분석하기"}
                       </button>
 
-                      {false && porphyrinResult && (
-                        <div className="analysis-result-compact">
-                          <div className="analysis-compact-text">
-                            분석 완료
-                          </div>
-
-                          <button
-                            className="analysis-view-btn"
-                            onClick={() => setShowAnalysisResultModal(true)}
-                          >
-                            분석 결과 크게 보기
-                          </button>
-                        </div>
-                      )}
-
-                      {porphyrinResult && (
-                        <div className="analysis-result-box">
-                          <div className="analysis-result-grid">
-                            <div className="analysis-stat analysis-stat-primary">
-                              <div className="analysis-stat-label">피부 점수</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.skin_score.score}점
-                              </div>
-                              <div className="analysis-stat-sub">
-                                {porphyrinResult.skin_score.grade} · {porphyrinResult.skin_score.label}
-                              </div>
-                            </div>
-
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">얼굴 영역 대비 포르피린</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.detection_rate_percent.toFixed(2)}%
-                              </div>
-                            </div>
-
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">등급</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.grade}
-                              </div>
-                            </div>
-
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">포르피린 검출 수</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.porphyrin_count}개
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="analysis-region-grid">
-                            {Object.entries(porphyrinResult.region_analysis).map(
-                              ([key, value]) => (
-                                <div className="analysis-region-item" key={key}>
-                                  <span>{REGION_LABELS[key] || key}</span>
-                                  <strong>{value}%</strong>
-                                </div>
-                              )
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </>
                 )}
@@ -1558,67 +1489,6 @@ function App() {
           )}
         </div>
       </div>
-
-      {showAnalysisResultModal && porphyrinResult && (
-        <div className="analysis-full-overlay">
-          <div className="analysis-full-header">
-            <div>
-              <div className="analysis-full-title">포르피린 분석 결과</div>
-              <div className="analysis-full-subtitle">
-                원본 이미지와 검출 결과를 한 화면에서 확인합니다.
-              </div>
-            </div>
-
-            <button
-              className="analysis-full-close"
-              onClick={() => setShowAnalysisResultModal(false)}
-            >
-              닫기
-            </button>
-          </div>
-
-          <div className="analysis-full-stats">
-            <div className="analysis-full-stat analysis-full-stat-primary">
-              <div className="analysis-full-stat-label">피부 점수</div>
-              <div className="analysis-full-stat-value">
-                {porphyrinResult.skin_score.score}점
-              </div>
-              <div className="analysis-full-stat-sub">
-                {porphyrinResult.skin_score.grade} · {porphyrinResult.skin_score.label}
-              </div>
-            </div>
-
-            <div className="analysis-full-stat">
-              <div className="analysis-full-stat-label">검출 개수</div>
-              <div className="analysis-full-stat-value">
-                {porphyrinResult.porphyrin_count}개
-              </div>
-            </div>
-
-            <div className="analysis-full-stat">
-              <div className="analysis-full-stat-label">검출 면적</div>
-              <div className="analysis-full-stat-value">
-                {porphyrinResult.porphyrin_area.toFixed(1)}
-              </div>
-            </div>
-
-            <div className="analysis-full-stat">
-              <div className="analysis-full-stat-label">임계값</div>
-              <div className="analysis-full-stat-value">
-                {porphyrinResult.threshold_value.toFixed(1)}
-              </div>
-            </div>
-          </div>
-
-          <div className="analysis-full-image-wrap">
-            <img
-              className="analysis-full-image"
-              src={getImageSrc(porphyrinResult.heatmap_url)}
-              alt="포르피린 분석 결과"
-            />
-          </div>
-        </div>
-      )}
 
       {showSkinAgingResultModal && skinAgingResult && (
         <div className="analysis-full-overlay">
