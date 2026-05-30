@@ -8,10 +8,10 @@ from profile_service import find_profile_by_id
 
 def format_capture_id_to_text(capture_id: str) -> str:
     try:
-        date_part, time_part, millis_part = capture_id.split("_")
+        date_part, time_part, _millis_part = capture_id.split("_")
         return (
             f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:8]} "
-            f"{time_part[:2]}:{time_part[2:4]}:{time_part[4:6]}.{millis_part}"
+            f"{time_part[:2]}:{time_part[2:4]}"
         )
     except Exception:
         return capture_id

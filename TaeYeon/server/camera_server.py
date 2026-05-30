@@ -1322,9 +1322,6 @@ def build_cam4_preview_jpeg():
     # 세로 키오스크 화면에 맞게 영상을 서버에서 세로 방향으로 회전
     preview_gray = cv2.rotate(preview_gray, cv2.ROTATE_90_CLOCKWISE)
 
-    if PREVIEW_MIRROR_HORIZONTAL:
-        preview_gray = cv2.flip(preview_gray, 1)
-
     # 화면 표시용 크기로 리사이즈
     preview_gray = cv2.resize(
         preview_gray,
@@ -1447,9 +1444,6 @@ def generate_cam4_stream_inline():
 
             # 세로 키오스크 화면에 맞게 프리뷰 영상을 서버에서 세로 방향으로 회전
             preview_gray = cv2.rotate(preview_gray, cv2.ROTATE_90_CLOCKWISE)
-
-            if PREVIEW_MIRROR_HORIZONTAL:
-                preview_gray = cv2.flip(preview_gray, 1)
 
             # 800x1280 원본 세로 프레임에서 720x1152로 약간만 줄여 품질과 부드러움을 균형 있게 맞춤
             preview_gray = cv2.resize(

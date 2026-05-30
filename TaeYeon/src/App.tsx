@@ -81,6 +81,7 @@ function App() {
   const [skinAgingResult, setSkinAgingResult] = useState<SkinAgingResult | null>(null);
   const [showSkinAgingResultModal, setShowSkinAgingResultModal] = useState(false);
   const historyScrollRef = useRef<HTMLDivElement | null>(null);
+  const historyScrollTopRef = useRef(0);
 
   const [whiteLedOn, setWhiteLedOn] = useState(false);
   const [isChangingWhiteLed, setIsChangingWhiteLed] = useState(false);
@@ -91,6 +92,18 @@ function App() {
     if (!selectedHistory) return null;
     return selectedHistory.images[selectedFilter] || null;
   }, [selectedHistory, selectedFilter]);
+
+  const selectedHistoryIndex = useMemo(() => {
+    if (!selectedHistory) return -1;
+    return historyItems.findIndex((item) => item.captureId === selectedHistory.captureId);
+  }, [historyItems, selectedHistory]);
+
+  const newerHistoryItem =
+    selectedHistoryIndex > 0 ? historyItems[selectedHistoryIndex - 1] : null;
+  const olderHistoryItem =
+    selectedHistoryIndex >= 0 && selectedHistoryIndex < historyItems.length - 1
+      ? historyItems[selectedHistoryIndex + 1]
+      : null;
 
   const profileNameInputValue = profileInputText + composeHangul(hangulBuffer);
 
@@ -172,6 +185,16 @@ function App() {
 
     showToast("자동 촬영이 완료되었습니다.", "success");
   }, [autoStatus?.captured, autoStatus?.capture_id]);
+
+  useEffect(() => {
+    if (screen !== "history") return;
+
+    window.requestAnimationFrame(() => {
+      if (historyScrollRef.current) {
+        historyScrollRef.current.scrollTop = historyScrollTopRef.current;
+      }
+    });
+  }, [screen]);
 
   const createProfile = async () => {
     const trimmed = profileNameInputValue.trim();
@@ -595,7 +618,7 @@ function App() {
     }
   };
 
-  const openHistoryDetail = async (captureId: string) => {
+  const openHistoryDetail = async (captureId: string, resetFilter = true) => {
     if (!selectedProfile) {
       showToast("프로필을 먼저 선택하세요.", "error");
       return;
@@ -618,7 +641,9 @@ function App() {
       }
 
       setSelectedHistory(data);
-      setSelectedFilter("no_filter");
+      if (resetFilter) {
+        setSelectedFilter("no_filter");
+      }
       setPorphyrinResult(null);
       setShowAnalysisResultModal(false);
       setSkinAgingResult(null);
@@ -955,6 +980,7 @@ function App() {
   };
 
   const openHistory = () => {
+    historyScrollTopRef.current = 0;
     fetchHistory();
   };
 
@@ -964,6 +990,16 @@ function App() {
 
   const backToHistory = () => {
     setScreen("history");
+  };
+
+  const openHistoryCard = (captureId: string) => {
+    historyScrollTopRef.current = historyScrollRef.current?.scrollTop ?? 0;
+    openHistoryDetail(captureId);
+  };
+
+  const moveHistoryDetail = (item: HistoryItem | null) => {
+    if (!item || isLoadingHistoryDetail) return;
+    openHistoryDetail(item.captureId, false);
   };
 
   const scrollHistoryList = (direction: "up" | "down") => {
@@ -1288,13 +1324,13 @@ function App() {
                       <div
                         key={item.captureId}
                         className="history-card"
-                        onClick={() => openHistoryDetail(item.captureId)}
+                        onClick={() => openHistoryCard(item.captureId)}
                       >
                         <div className="history-card-header">
                           <div>
                             <div className="history-card-time">{item.displayTime}</div>
                             <div className="history-card-sub">
-                              captureId: {item.captureId}
+                              프로필: {item.profileName}
                             </div>
                           </div>
 
@@ -1348,9 +1384,31 @@ function App() {
                 ) : (
                   <>
                     <div className="history-detail-top">
-                      <h2 className="history-detail-title">
-                        {selectedHistory?.displayTime || "-"}
-                      </h2>
+                      <div className="history-detail-nav">
+                        <button
+                          className="history-nav-btn"
+                          type="button"
+                          onClick={() => moveHistoryDetail(olderHistoryItem)}
+                          disabled={!olderHistoryItem || isLoadingHistoryDetail}
+                          aria-label="이전 촬영 기록 보기"
+                        >
+                          ‹
+                        </button>
+
+                        <h2 className="history-detail-title">
+                          {selectedHistory?.displayTime || "-"}
+                        </h2>
+
+                        <button
+                          className="history-nav-btn"
+                          type="button"
+                          onClick={() => moveHistoryDetail(newerHistoryItem)}
+                          disabled={!newerHistoryItem || isLoadingHistoryDetail}
+                          aria-label="다음 촬영 기록 보기"
+                        >
+                          ›
+                        </button>
+                      </div>
 
                       <div className="history-detail-sub">
                         프로필: {selectedHistory?.profileName || "-"}
