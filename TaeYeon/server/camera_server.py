@@ -1519,6 +1519,7 @@ def analyze_porphyrin_api(profile_id, capture_id):
                 if report.get("white_overlay_path")
                 else f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-heatmap"
             ),
+            "uv_heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-heatmap",
             "white_overlay_url": (
                 f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-white-overlay"
                 if report.get("white_overlay_path")
