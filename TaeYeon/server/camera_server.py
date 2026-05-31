@@ -9,7 +9,6 @@ import cv2
 
 from porphyrin_analysis import analyze_porphyrin_heatmap_v04
 from trouble_risk_analysis import analyze_trouble_risk_map
-from skin_aging_analysis import analyze_skin_aging_405nm
 from config import *
 from state import *
 from led_controller import (
@@ -1613,66 +1612,6 @@ def analyze_trouble_risk_api(profile_id, capture_id):
 # =========================
 # 포르피린 분석 이미지 반환 API
 # =========================
-
-@app.route("/profiles/<profile_id>/history/<capture_id>/analyze-aging", methods=["POST"])
-def analyze_skin_aging_api(profile_id, capture_id):
-    try:
-        image_path = resolve_image_path(
-            profile_id=profile_id,
-            capture_id=capture_id,
-            filter_type="405nm_filter"
-        )
-        try:
-            face_reference_path = resolve_image_path(
-                profile_id=profile_id,
-                capture_id=capture_id,
-                filter_type="no_filter"
-            )
-        except Exception:
-            face_reference_path = None
-
-        profile_root = get_profile_root(profile_id)
-        analysis_dir = (
-            profile_root
-            / CAMERA_INFO["cam3"]["folder"]
-            / capture_id
-            / "analysis"
-        )
-
-        report = analyze_skin_aging_405nm(
-            image_path,
-            analysis_dir,
-            face_reference_path,
-            extract_face_landmarks_for_analysis
-        )
-
-        return jsonify({
-            "ok": True,
-            "captureId": capture_id,
-            "freckle_count": report["freckle_count"],
-            "freckle_area": report["freckle_area"],
-            "freckle_area_rate_percent": report["freckle_area_rate_percent"],
-            "predicted_skin_age": report["predicted_skin_age"],
-            "skin_age_offset": report["skin_age_offset"],
-            "skin_age_level": report["skin_age_level"],
-            "grade": report["grade"],
-            "label": report["label"],
-            "basis": report["basis"],
-            "base_age": report["base_age"],
-            "threshold_value": report["threshold_value"],
-            "min_area": report["min_area"],
-            "max_area": report["max_area"],
-            "face_detection_method": report["face_detection_method"],
-            "face_landmarks_used": report["face_landmarks_used"],
-            "result_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/skin-aging-result",
-            "mask_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/skin-aging-mask"
-        })
-
-    except Exception as e:
-        return jsonify({
-            "ok": False,
-            "error": str(e)
-        }), 400
 
 @app.route("/profiles/<profile_id>/history/<capture_id>/analysis/<result_type>", methods=["GET"])
 def get_porphyrin_analysis_image_api(profile_id, capture_id, result_type):
