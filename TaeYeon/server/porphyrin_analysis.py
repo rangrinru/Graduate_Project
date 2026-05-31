@@ -10,6 +10,9 @@ HEATMAP_MAX_VALUE = 110.0
 VISIBLE_THRESHOLD = 70
 LOCAL_CONTRAST_THRESHOLD = 5
 STRONG_ABSOLUTE_THRESHOLD = 100
+LOW_VISIBLE_THRESHOLD = 45
+LOW_LOCAL_CONTRAST_THRESHOLD = 3
+LOW_STRONG_ABSOLUTE_THRESHOLD = 80
 MIN_COMPONENT_AREA = 2
 
 
@@ -132,6 +135,24 @@ def normalize_region_scores(region_score):
     return rounded
 
 
+def clean_component_mask(mask, min_area):
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    clean_mask = np.zeros_like(mask)
+    accepted_count = 0
+    max_component_area = 0
+
+    for label_idx in range(1, num_labels):
+        area = int(stats[label_idx, cv2.CC_STAT_AREA])
+        if area < min_area:
+            continue
+
+        clean_mask[labels == label_idx] = 255
+        accepted_count += 1
+        max_component_area = max(max_component_area, area)
+
+    return clean_mask, accepted_count, max_component_area
+
+
 def build_absolute_porphyrin_heatmap(heat_source, mask=None):
     if mask is None:
         mask = np.full_like(heat_source, 255)
@@ -159,30 +180,60 @@ def build_absolute_porphyrin_heatmap(heat_source, mask=None):
     ).astype(np.uint8)
     thresh = cv2.bitwise_and(thresh, thresh, mask=mask)
 
+    low_thresh = np.where(
+        (
+            (heat_scaled >= LOW_VISIBLE_THRESHOLD)
+            & (bright_detail >= LOW_LOCAL_CONTRAST_THRESHOLD)
+        )
+        | (heat_scaled >= LOW_STRONG_ABSOLUTE_THRESHOLD),
+        255,
+        0,
+    ).astype(np.uint8)
+    low_thresh = cv2.bitwise_and(low_thresh, low_thresh, mask=mask)
+
     kernel = np.ones((2, 2), np.uint8)
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
+    low_thresh = cv2.morphologyEx(low_thresh, cv2.MORPH_CLOSE, kernel, iterations=1)
 
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(thresh, connectivity=8)
-    clean_mask = np.zeros_like(heat_source)
-    accepted_count = 0
-    max_component_area = 0
-
-    for label_idx in range(1, num_labels):
-        area = int(stats[label_idx, cv2.CC_STAT_AREA])
-        if area < MIN_COMPONENT_AREA:
-            continue
-
-        clean_mask[labels == label_idx] = 255
-        accepted_count += 1
-        max_component_area = max(max_component_area, area)
+    clean_mask, accepted_count, max_component_area = clean_component_mask(thresh, MIN_COMPONENT_AREA)
+    low_mask, low_count, _low_max_component_area = clean_component_mask(low_thresh, MIN_COMPONENT_AREA)
+    low_only_mask = cv2.bitwise_and(low_mask, cv2.bitwise_not(clean_mask))
 
     detected_overlay = np.zeros_like(heatmap)
+    detected_overlay[low_only_mask > 0] = (0, 255, 255)
     detected_overlay[clean_mask > 0] = (0, 0, 255)
     heatmap = cv2.addWeighted(heatmap, 1.0, detected_overlay, 0.45, 0)
+    low_contours, _ = cv2.findContours(low_only_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours, _ = cv2.findContours(clean_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(heatmap, low_contours, -1, (0, 255, 255), 1, cv2.LINE_AA)
     cv2.drawContours(heatmap, contours, -1, (0, 0, 255), 1, cv2.LINE_AA)
 
-    return heatmap, clean_mask, heatmap_source, accepted_count, max_component_area
+    return heatmap, clean_mask, low_mask, heatmap_source, accepted_count, low_count, max_component_area
+
+
+def build_mask_overlay(base_img, strong_mask, low_mask=None):
+    mask = strong_mask
+    if base_img.shape[:2] != mask.shape[:2]:
+        base_img = cv2.resize(
+            base_img,
+            (mask.shape[1], mask.shape[0]),
+            interpolation=cv2.INTER_AREA,
+        )
+
+    overlay = base_img.copy()
+    if low_mask is not None:
+        low_only_mask = cv2.bitwise_and(low_mask, cv2.bitwise_not(strong_mask))
+        overlay[low_only_mask > 0] = (0, 255, 255)
+    overlay[strong_mask > 0] = (0, 0, 255)
+    overlay = cv2.addWeighted(base_img, 0.72, overlay, 0.28, 0)
+
+    if low_mask is not None:
+        low_only_mask = cv2.bitwise_and(low_mask, cv2.bitwise_not(strong_mask))
+        low_contours, _ = cv2.findContours(low_only_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(overlay, low_contours, -1, (0, 255, 255), 1, cv2.LINE_AA)
+    contours, _ = cv2.findContours(strong_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(overlay, contours, -1, (0, 0, 255), 1, cv2.LINE_AA)
+    return overlay
 
 
 def rescale_landmarks(pts, source_shape, target_shape):
@@ -314,6 +365,7 @@ def analyze_porphyrin_heatmap_v04(
     output_dir: Path,
     face_reference_path: Path = None,
     landmark_extractor=None,
+    white_reference_path: Path = None,
 ):
     img = cv2.imread(str(image_path))
     if img is None:
@@ -348,7 +400,7 @@ def analyze_porphyrin_heatmap_v04(
     landmark_pts = None
 
     # Same absolute-threshold preview logic as porphyrin_threshold_viewer.py.
-    heatmap, clean_mask, heatmap_source, accepted_count, max_component_area = (
+    heatmap, clean_mask, low_mask, heatmap_source, accepted_count, low_count, max_component_area = (
         build_absolute_porphyrin_heatmap(blur, face_mask)
     )
 
@@ -363,6 +415,7 @@ def analyze_porphyrin_heatmap_v04(
 
     ys, xs = np.where(clean_mask > 0)
     total_area = float(len(xs))
+    low_total_area = float(np.count_nonzero(low_mask))
     intensity_values = heatmap_source[ys, xs].astype(np.float32) / 255.0 if len(xs) else []
 
     for x, y, intensity in zip(xs, ys, intensity_values):
@@ -382,17 +435,28 @@ def analyze_porphyrin_heatmap_v04(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     heatmap_path = output_dir / "porphyrin_heatmap.jpg"
+    white_overlay_path = output_dir / "porphyrin_overlay_white.jpg"
     mask_path = output_dir / "porphyrin_mask.jpg"
     face_mask_path = output_dir / "porphyrin_face_mask.jpg"
     report_path = output_dir / "porphyrin_report.json"
 
     cv2.imwrite(str(heatmap_path), heatmap)
+    white_overlay_saved = False
+    if white_reference_path is not None:
+        white_reference_img = cv2.imread(str(white_reference_path))
+        if white_reference_img is not None:
+            white_overlay = build_mask_overlay(white_reference_img, clean_mask, low_mask)
+            cv2.imwrite(str(white_overlay_path), white_overlay)
+            white_overlay_saved = True
+
     cv2.imwrite(str(mask_path), clean_mask)
     cv2.imwrite(str(face_mask_path), face_mask)
 
     report = {
         "porphyrin_count": int(accepted_count),
         "porphyrin_area": float(total_area),
+        "low_candidate_count": int(low_count),
+        "low_candidate_area": float(low_total_area),
         "detection_rate_percent": float(detection_rate),
         "face_area_pixels": int(face_pixels),
         "grade": grade,
@@ -405,6 +469,9 @@ def analyze_porphyrin_heatmap_v04(
         "threshold_value": float(VISIBLE_THRESHOLD),
         "local_contrast_threshold": float(LOCAL_CONTRAST_THRESHOLD),
         "strong_absolute_threshold": float(STRONG_ABSOLUTE_THRESHOLD),
+        "low_visible_threshold": float(LOW_VISIBLE_THRESHOLD),
+        "low_local_contrast_threshold": float(LOW_LOCAL_CONTRAST_THRESHOLD),
+        "low_strong_absolute_threshold": float(LOW_STRONG_ABSOLUTE_THRESHOLD),
         "heatmap_scale": "fixed_absolute",
         "heatmap_min_value": HEATMAP_MIN_VALUE,
         "heatmap_max_value": HEATMAP_MAX_VALUE,
@@ -412,6 +479,8 @@ def analyze_porphyrin_heatmap_v04(
         "max_area": max_component_area,
         "face_landmarks_used": bool(landmark_pts is not None),
         "heatmap_path": str(heatmap_path),
+        "white_reference_path": str(white_reference_path) if white_reference_path is not None else None,
+        "white_overlay_path": str(white_overlay_path) if white_overlay_saved else None,
         "mask_path": str(mask_path),
         "face_mask_path": str(face_mask_path),
         "report_path": str(report_path),

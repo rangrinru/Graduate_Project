@@ -65,6 +65,8 @@ export type PorphyrinResult = {
   min_area: number;
   max_area: number;
   heatmap_url: string;
+  uv_heatmap_url?: string | null;
+  white_overlay_url?: string | null;
 };
 
 export type FocusCareArea = {

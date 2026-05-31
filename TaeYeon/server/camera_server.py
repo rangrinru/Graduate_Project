@@ -25,7 +25,7 @@ from profile_service import (
     find_profile_by_id,
     load_profiles,
 )
-from capture_service import extract_cam_frame, save_one_camera_image
+from capture_service import extract_cam_frame, save_one_camera_image, save_white_cam4_reference_image
 from history_service import (
     delete_capture_history,
     get_capture_detail,
@@ -33,6 +33,7 @@ from history_service import (
     get_profile_root,
     resolve_analysis_image_path,
     resolve_image_path,
+    resolve_white_cam4_reference_path,
 )
 from auto_capture_service import (
     calculate_eye_aspect_ratio_from_points,
@@ -736,6 +737,37 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
 
         # 저장 파일 목록에 추가
         saved_files.append(result)
+
+    try:
+        white_led_on()
+        sleep(WHITE_LED_WARMUP_SEC)
+
+        with camera_lock:
+            white_frames_by_exposure = capture_picamera_still_frames_by_exposure(
+                exposure_values_ms=[WHITE_REFERENCE_EXPOSURE_MS],
+                gain=gain,
+            )
+
+        white_full_frame_bgr = white_frames_by_exposure[WHITE_REFERENCE_EXPOSURE_MS]
+        white_cam4_frame = extract_cam_frame(white_full_frame_bgr, "cam4").copy()
+        white_capture_timestamp = datetime.now()
+
+        white_result = save_white_cam4_reference_image(
+            frame_bgr=white_cam4_frame,
+            profile_root=profile_root,
+            capture_id=capture_id,
+            timestamp=white_capture_timestamp,
+            exposure_ms=WHITE_REFERENCE_EXPOSURE_MS,
+            gain=gain,
+            ext=ext,
+            profile_name=profile_name,
+            folder_id=folder_id,
+            trigger_metadata=trigger_metadata,
+        )
+        saved_files.append(white_result)
+
+    finally:
+        white_led_off()
 
     # 촬영 결과 반환
     return {
@@ -1441,13 +1473,21 @@ def analyze_porphyrin_api(profile_id, capture_id):
             filter_type="660nm_filter"
         )
         try:
-            face_reference_path = resolve_image_path(
-                profile_id=profile_id,
-                capture_id=capture_id,
-                filter_type="no_filter"
-            )
+            face_reference_path = resolve_white_cam4_reference_path(profile_id, capture_id)
         except Exception:
-            face_reference_path = None
+            try:
+                face_reference_path = resolve_image_path(
+                    profile_id=profile_id,
+                    capture_id=capture_id,
+                    filter_type="no_filter"
+                )
+            except Exception:
+                face_reference_path = None
+
+        try:
+            white_reference_path = resolve_white_cam4_reference_path(profile_id, capture_id)
+        except Exception:
+            white_reference_path = None
 
         # 프로필 루트 경로 가져오기
         profile_root = get_profile_root(profile_id)
@@ -1465,7 +1505,8 @@ def analyze_porphyrin_api(profile_id, capture_id):
             image_path,
             analysis_dir,
             face_reference_path,
-            extract_face_landmarks_for_analysis
+            extract_face_landmarks_for_analysis,
+            white_reference_path
         )
 
         # 성공 응답 반환
@@ -1484,7 +1525,17 @@ def analyze_porphyrin_api(profile_id, capture_id):
             "min_area": report["min_area"],
             "max_area": report["max_area"],
             "face_landmarks_used": report["face_landmarks_used"],
-            "heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-heatmap"
+            "heatmap_url": (
+                f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-white-overlay"
+                if report.get("white_overlay_path")
+                else f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-heatmap"
+            ),
+            "uv_heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-heatmap",
+            "white_overlay_url": (
+                f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-white-overlay"
+                if report.get("white_overlay_path")
+                else None
+            ),
         })
 
     except Exception as e:

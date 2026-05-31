@@ -1,7 +1,9 @@
 ﻿import cv2
 import json
 
-from config import CAMERA_INFO, CAPTURE_HEIGHT, CAPTURE_WIDTH, SINGLE_WIDTH
+from config import CAMERA_INFO, CAPTURE_HEIGHT, CAPTURE_WIDTH, SINGLE_WIDTH, WHITE_CAM4_REFERENCE_NAME
+
+
 def extract_cam_frame(full_frame_bgr, cam_key):
     info = CAMERA_INFO[cam_key]
     return full_frame_bgr[:, info["x_start"]:info["x_end"]]
@@ -72,4 +74,66 @@ def save_one_camera_image(
         "display_name": info["display_name"],
         "image_path": str(image_path),
         "metadata_path": str(meta_path),
+    }
+
+
+def save_white_cam4_reference_image(
+    frame_bgr,
+    profile_root,
+    capture_id,
+    timestamp,
+    exposure_ms,
+    gain,
+    ext,
+    profile_name,
+    folder_id,
+    trigger_metadata=None,
+):
+    info = CAMERA_INFO["cam4"]
+    frame_bgr = cv2.rotate(frame_bgr, cv2.ROTATE_90_CLOCKWISE)
+    target_dir = profile_root / info["folder"] / capture_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    image_path = target_dir / f"{WHITE_CAM4_REFERENCE_NAME}.{ext}"
+    meta_path = target_dir / f"{WHITE_CAM4_REFERENCE_NAME}_metadata.json"
+    save_image(image_path, frame_bgr)
+
+    metadata = {
+        "captured_at": timestamp.isoformat(),
+        "profile_name": profile_name,
+        "profile_folder_id": folder_id,
+        "camera_name": "cam4",
+        "camera_label": "CAM 4 - WHITE LED FACE REFERENCE",
+        "filter_type": info["filter"],
+        "display_name": "White_LED_Face",
+        "illumination": "white_led",
+        "capture_type": "picamera2_still_fullframe_then_crop_white_led_reference",
+        "file_format": ext,
+        "camera_mode": {
+            "capture_width": CAPTURE_WIDTH,
+            "capture_height": CAPTURE_HEIGHT,
+            "single_width": SINGLE_WIDTH,
+        },
+        "camera_control": {
+            "AeEnable": False,
+            "ExposureTime_ms": exposure_ms,
+            "ExposureTime_us": exposure_ms * 1000,
+            "AnalogueGain": gain,
+        },
+        "saved_file": str(image_path),
+        "rotation_applied": "ROTATE_90_CLOCKWISE",
+        "auto_capture_trigger": trigger_metadata,
+        "source_purpose": "face_reference_for_porphyrin_overlay",
+    }
+
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=4)
+
+    return {
+        "camera": "cam4",
+        "filter_type": info["filter"],
+        "display_name": "White_LED_Face",
+        "image_path": str(image_path),
+        "metadata_path": str(meta_path),
+        "illumination": "white_led",
     }
