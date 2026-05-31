@@ -59,6 +59,8 @@ relay = LED(RELAY_PIN, active_high=RELAY_ACTIVE_HIGH, initial_value=False)
 WHITE_LED_PIN = 22
 WHITE_LED_ACTIVE_HIGH = True
 WHITE_LED_OFF_BEFORE_CAPTURE_SEC = 0.15
+WHITE_LED_WARMUP_SEC = 0.25
+WHITE_CAM4_NAME = "cam4_white"
 white_led = LED(WHITE_LED_PIN, active_high=WHITE_LED_ACTIVE_HIGH, initial_value=False)
 
 # =========================
@@ -276,6 +278,7 @@ def save_one_camera_image(session_dir, cam_key, frame_bgr, timestamp, exposure_m
 
 def save_session_metadata(session_dir, timestamp, exposure_ms, gain, detection_snapshot=None):
     session_meta_path = session_dir / "session_metadata.json"
+    ext = "png" if SAVE_AS_PNG else "jpg"
     data = {
         "session_dir": str(session_dir),
         "captured_at": timestamp.isoformat(),
@@ -285,13 +288,49 @@ def save_session_metadata(session_dir, timestamp, exposure_ms, gain, detection_s
         "open_eye_baseline_samples": list(OPEN_EYE_EAR_HISTORY),
         "trigger_detection": detection_snapshot,
         "files": {
-            "cam2": str(session_dir / f"cam2.{'png' if SAVE_AS_PNG else 'jpg'}"),
-            "cam3": str(session_dir / f"cam3.{'png' if SAVE_AS_PNG else 'jpg'}"),
-            "cam4": str(session_dir / f"cam4.{'png' if SAVE_AS_PNG else 'jpg'}"),
+            "cam2": str(session_dir / f"cam2.{ext}"),
+            "cam3": str(session_dir / f"cam3.{ext}"),
+            "cam4": str(session_dir / f"cam4.{ext}"),
+            "cam4_white": str(session_dir / f"{WHITE_CAM4_NAME}.{ext}"),
         },
     }
     with open(session_meta_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
+
+
+def save_white_cam4_image(session_dir, frame_bgr, timestamp, exposure_ms, gain, ext):
+    image_path = session_dir / f"{WHITE_CAM4_NAME}.{ext}"
+    meta_path = session_dir / f"{WHITE_CAM4_NAME}_metadata.json"
+
+    save_image(image_path, frame_bgr)
+
+    metadata = {
+        "captured_at": timestamp.isoformat(),
+        "camera_name": "cam4",
+        "camera_label": "CAM 4 - WHITE LED FACE REFERENCE",
+        "filter_type": CAMERA_INFO["cam4"]["filter"],
+        "illumination": "white_led",
+        "file_format": ext,
+        "camera_control": {
+            "AeEnable": False,
+            "ExposureTime_ms": exposure_ms,
+            "ExposureTime_us": exposure_ms * 1000,
+            "AnalogueGain": gain
+        },
+        "white_led_control": {
+            "white_led_pin": WHITE_LED_PIN,
+            "white_led_active_high": WHITE_LED_ACTIVE_HIGH,
+            "white_led_warmup_sec": WHITE_LED_WARMUP_SEC,
+        },
+        "source_purpose": "face_reference_for_porphyrin_overlay",
+        "saved_file": str(image_path),
+    }
+
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=4)
+
+    logger.info("[white cam4 saved] %s", image_path)
+    logger.info("[white cam4 metadata saved] %s", meta_path)
 
 
 def show_single_camera(window_name, frame_bgr, cam_key, exposure_ms, hold_ms=180):
@@ -368,6 +407,7 @@ def analyze_porphyrin_session(session_dir):
     cam2_path = session_dir / f"cam2.{'png' if SAVE_AS_PNG else 'jpg'}"
     cam3_path = session_dir / f"cam3.{'png' if SAVE_AS_PNG else 'jpg'}"
     cam4_path = session_dir / f"cam4.{'png' if SAVE_AS_PNG else 'jpg'}"
+    cam4_white_path = session_dir / f"{WHITE_CAM4_NAME}.{'png' if SAVE_AS_PNG else 'jpg'}"
 
     cam2 = cv2.imread(str(cam2_path), cv2.IMREAD_GRAYSCALE)
     cam3 = cv2.imread(str(cam3_path), cv2.IMREAD_GRAYSCALE)
@@ -421,20 +461,39 @@ def analyze_porphyrin_session(session_dir):
     overlay[clean_mask > 0] = (0, 0, 255)
     overlay = cv2.addWeighted(cam4_bgr, 0.7, overlay, 0.3, 0)
 
+    white_overlay = None
+    if cam4_white_path.exists():
+        cam4_white_bgr = cv2.imread(str(cam4_white_path), cv2.IMREAD_COLOR)
+        if cam4_white_bgr is not None:
+            if cam4_white_bgr.shape[:2] != clean_mask.shape[:2]:
+                cam4_white_bgr = cv2.resize(
+                    cam4_white_bgr,
+                    (clean_mask.shape[1], clean_mask.shape[0]),
+                    interpolation=cv2.INTER_AREA
+                )
+            white_overlay = cam4_white_bgr.copy()
+            white_overlay[clean_mask > 0] = (0, 0, 255)
+            white_overlay = cv2.addWeighted(cam4_white_bgr, 0.7, white_overlay, 0.3, 0)
+
     if bbox is not None:
         x1, y1, x2, y2 = bbox
         cv2.rectangle(overlay, (x1, y1), (x2, y2), (255, 255, 0), 2)
+        if white_overlay is not None:
+            cv2.rectangle(white_overlay, (x1, y1), (x2, y2), (255, 255, 0), 2)
 
     analysis_dir = session_dir / "analysis"
     analysis_dir.mkdir(parents=True, exist_ok=True)
 
     mask_path = analysis_dir / "porphyrin_mask.png"
     overlay_path = analysis_dir / "porphyrin_overlay.png"
+    white_overlay_path = analysis_dir / "porphyrin_overlay_white.png"
     roi_mask_path = analysis_dir / "face_roi_mask.png"
     report_path = analysis_dir / "report.json"
 
     save_image(mask_path, clean_mask)
     save_image(overlay_path, overlay)
+    if white_overlay is not None:
+        save_image(white_overlay_path, white_overlay)
     save_image(roi_mask_path, roi_mask)
 
     mean_intensity = float(score_norm[clean_mask > 0].mean()) if (clean_mask > 0).any() else 0.0
@@ -447,6 +506,8 @@ def analyze_porphyrin_session(session_dir):
         "face_bbox": bbox,
         "mask_path": str(mask_path),
         "overlay_path": str(overlay_path),
+        "white_cam4_path": str(cam4_white_path) if cam4_white_path.exists() else None,
+        "white_overlay_path": str(white_overlay_path) if white_overlay is not None else None,
         "roi_mask_path": str(roi_mask_path),
         "report_path": str(report_path),
     }
@@ -497,6 +558,16 @@ def capture_sequence(cam, preview_config, still_config, exposure_ms, gain, detec
             show_single_camera(WINDOW_NAME, target_frame, cam_key, exposure_ms, hold_ms=180)
             save_one_camera_image(session_dir, cam_key, target_frame, capture_timestamp, exposure_ms, gain, ext)
 
+        relay_off()
+        white_led_on()
+        sleep(WHITE_LED_WARMUP_SEC)
+
+        white_full_frame_bgr = capture_high_quality_full_frame(cam, preview_config, still_config, exposure_ms, gain)
+        white_capture_timestamp = datetime.now()
+        white_cam4 = extract_cam_frame(white_full_frame_bgr, "cam4").copy()
+        show_single_camera(WINDOW_NAME, white_cam4, "cam4", exposure_ms, hold_ms=180)
+        save_white_cam4_image(session_dir, white_cam4, white_capture_timestamp, exposure_ms, gain, ext)
+
         save_session_metadata(session_dir, capture_timestamp, exposure_ms, gain, detection_snapshot=detection_snapshot)
         STATE["last_session_dir"] = str(session_dir)
         STATE["last_capture_monotonic"] = monotonic()
@@ -504,6 +575,7 @@ def capture_sequence(cam, preview_config, still_config, exposure_ms, gain, detec
         start_background_analysis(session_dir)
         return str(session_dir)
     finally:
+        white_led_off()
         relay_off()
 
 
