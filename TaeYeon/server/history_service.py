@@ -2,7 +2,7 @@
 import shutil
 from pathlib import Path
 
-from config import CAMERA_INFO, SAVE_ROOT
+from config import CAMERA_INFO, SAVE_ROOT, WHITE_CAM4_REFERENCE_NAME
 from profile_service import find_profile_by_id
 
 
@@ -170,6 +170,22 @@ def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Pa
     raise ValueError("이미지 파일이 존재하지 않습니다.")
 
 
+def resolve_white_cam4_reference_path(profile_id: str, capture_id: str) -> Path:
+    profile_root = get_profile_root(profile_id)
+    target_dir = profile_root / CAMERA_INFO["cam4"]["folder"] / capture_id
+    candidates = [
+        target_dir / f"{WHITE_CAM4_REFERENCE_NAME}.png",
+        target_dir / f"{WHITE_CAM4_REFERENCE_NAME}.jpg",
+        target_dir / f"{WHITE_CAM4_REFERENCE_NAME}.jpeg",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+
+    raise ValueError("백색 LED cam4 기준 이미지가 존재하지 않습니다.")
+
+
 def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: str) -> Path:
     profile_root = get_profile_root(profile_id)
     file_map = {
@@ -178,6 +194,7 @@ def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: s
         "porphyrin-face-mask": (CAMERA_INFO["cam4"]["folder"], "porphyrin_face_mask.jpg"),
         "porphyrin-compare": (CAMERA_INFO["cam4"]["folder"], "porphyrin_compare.jpg"),
         "porphyrin-heatmap": (CAMERA_INFO["cam4"]["folder"], "porphyrin_heatmap.jpg"),
+        "porphyrin-white-overlay": (CAMERA_INFO["cam4"]["folder"], "porphyrin_overlay_white.jpg"),
         "trouble-risk-heatmap": (CAMERA_INFO["cam4"]["folder"], "trouble_risk_heatmap.jpg"),
         "trouble-risk-mask": (CAMERA_INFO["cam4"]["folder"], "trouble_risk_mask.jpg"),
         "focus-care-overlay": (CAMERA_INFO["cam4"]["folder"], "focus_care_overlay.jpg"),

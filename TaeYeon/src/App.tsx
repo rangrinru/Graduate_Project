@@ -782,6 +782,7 @@ function App() {
         min_area: data.min_area,
         max_area: data.max_area,
         heatmap_url: data.heatmap_url,
+        white_overlay_url: data.white_overlay_url ?? null,
       });
       setSelectedFilter("660nm_filter");
       setDetailImageView("porphyrin_heatmap");

@@ -185,6 +185,23 @@ def build_absolute_porphyrin_heatmap(heat_source, mask=None):
     return heatmap, clean_mask, heatmap_source, accepted_count, max_component_area
 
 
+def build_mask_overlay(base_img, mask):
+    if base_img.shape[:2] != mask.shape[:2]:
+        base_img = cv2.resize(
+            base_img,
+            (mask.shape[1], mask.shape[0]),
+            interpolation=cv2.INTER_AREA,
+        )
+
+    overlay = base_img.copy()
+    overlay[mask > 0] = (0, 0, 255)
+    overlay = cv2.addWeighted(base_img, 0.72, overlay, 0.28, 0)
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.drawContours(overlay, contours, -1, (0, 0, 255), 1, cv2.LINE_AA)
+    return overlay
+
+
 def rescale_landmarks(pts, source_shape, target_shape):
     if not pts:
         return None
@@ -314,6 +331,7 @@ def analyze_porphyrin_heatmap_v04(
     output_dir: Path,
     face_reference_path: Path = None,
     landmark_extractor=None,
+    white_reference_path: Path = None,
 ):
     img = cv2.imread(str(image_path))
     if img is None:
@@ -382,11 +400,20 @@ def analyze_porphyrin_heatmap_v04(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     heatmap_path = output_dir / "porphyrin_heatmap.jpg"
+    white_overlay_path = output_dir / "porphyrin_overlay_white.jpg"
     mask_path = output_dir / "porphyrin_mask.jpg"
     face_mask_path = output_dir / "porphyrin_face_mask.jpg"
     report_path = output_dir / "porphyrin_report.json"
 
     cv2.imwrite(str(heatmap_path), heatmap)
+    white_overlay_saved = False
+    if white_reference_path is not None:
+        white_reference_img = cv2.imread(str(white_reference_path))
+        if white_reference_img is not None:
+            white_overlay = build_mask_overlay(white_reference_img, clean_mask)
+            cv2.imwrite(str(white_overlay_path), white_overlay)
+            white_overlay_saved = True
+
     cv2.imwrite(str(mask_path), clean_mask)
     cv2.imwrite(str(face_mask_path), face_mask)
 
@@ -412,6 +439,8 @@ def analyze_porphyrin_heatmap_v04(
         "max_area": max_component_area,
         "face_landmarks_used": bool(landmark_pts is not None),
         "heatmap_path": str(heatmap_path),
+        "white_reference_path": str(white_reference_path) if white_reference_path is not None else None,
+        "white_overlay_path": str(white_overlay_path) if white_overlay_saved else None,
         "mask_path": str(mask_path),
         "face_mask_path": str(face_mask_path),
         "report_path": str(report_path),
