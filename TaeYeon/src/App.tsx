@@ -8,7 +8,6 @@ import type {
   PorphyrinResult,
   Profile,
   Screen,
-  SkinAgingResult,
   Toast,
   HangulBuffer,
 } from "./types";
@@ -30,18 +29,10 @@ import {
 } from "./hangul";
 import { API_BASE } from "./api";
 
-const getSkinAgeLabel = (level: string) => {
-  if (level === "young") return "젊은 피부";
-  if (level === "normal") return "보통";
-  if (level === "aging_care") return "관리 필요";
-  if (level === "intensive_care") return "집중 관리";
-  return "분석 필요";
-};
-
 const PROFILE_FETCH_TIMEOUT_MS = 4000;
 
 type HistoryFilter = "no_filter" | "405nm_filter" | "660nm_filter";
-type DetailImageView = "source" | "porphyrin_heatmap" | "skin_aging_result";
+type DetailImageView = "source" | "porphyrin_heatmap";
 
 function App() {
   const [screen, setScreen] = useState<Screen>("profiles");
@@ -80,9 +71,6 @@ function App() {
 
   const [isAnalyzingPorphyrin, setIsAnalyzingPorphyrin] = useState(false);
   const [porphyrinResult, setPorphyrinResult] = useState<PorphyrinResult | null>(null);
-  const [isAnalyzingSkinAging, setIsAnalyzingSkinAging] = useState(false);
-  const [skinAgingResult, setSkinAgingResult] = useState<SkinAgingResult | null>(null);
-  const [showSkinAgingResultModal, setShowSkinAgingResultModal] = useState(false);
   const historyScrollRef = useRef<HTMLDivElement | null>(null);
   const historyScrollTopRef = useRef(0);
 
@@ -98,14 +86,10 @@ function App() {
 
   const isViewingPorphyrinHeatmap =
     detailImageView === "porphyrin_heatmap" && Boolean(porphyrinResult?.heatmap_url);
-  const isViewingSkinAgingResult =
-    detailImageView === "skin_aging_result" && Boolean(skinAgingResult?.result_url);
 
   const selectedImageLabel = isViewingPorphyrinHeatmap
     ? "Porphyrin_Heatmap"
-    : isViewingSkinAgingResult
-      ? "Skin_Aging_Result"
-      : currentImage?.display_name || "-";
+    : currentImage?.display_name || "-";
 
   const selectedHistoryIndex = useMemo(() => {
     if (!selectedHistory) return -1;
@@ -560,9 +544,7 @@ function App() {
     setSelectedHistory(null);
     setHistoryItems([]);
     setPorphyrinResult(null);
-    setSkinAgingResult(null);
     setDetailImageView("source");
-    setShowSkinAgingResultModal(false);
     setAutoStatus(null);
     setScreen("camera");
   };
@@ -573,9 +555,7 @@ function App() {
     setSelectedHistory(null);
     setHistoryItems([]);
     setPorphyrinResult(null);
-    setSkinAgingResult(null);
     setDetailImageView("source");
-    setShowSkinAgingResultModal(false);
     setAutoStatus(null);
   };
 
@@ -673,8 +653,6 @@ function App() {
       }
       setDetailImageView("source");
       setPorphyrinResult(null);
-      setSkinAgingResult(null);
-      setShowSkinAgingResultModal(false);
       setScreen("historyDetail");
     } catch (error) {
       console.error(error);
@@ -720,9 +698,7 @@ function App() {
       if (selectedHistory?.captureId === target.captureId) {
         setSelectedHistory(null);
         setPorphyrinResult(null);
-        setSkinAgingResult(null);
         setDetailImageView("source");
-        setShowSkinAgingResultModal(false);
         setScreen("history");
       }
 
@@ -793,69 +769,6 @@ function App() {
       showToast("포르피린 분석 실패", "error");
     } finally {
       setIsAnalyzingPorphyrin(false);
-    }
-  };
-
-  const analyzeSkinAging = async () => {
-    if (!selectedProfile || !selectedHistory) {
-      showToast("분석할 촬영 기록이 없습니다.", "error");
-      return;
-    }
-
-    const agingImage = selectedHistory.images["405nm_filter"];
-    if (!agingImage?.exists) {
-      showToast("405nm 필터 이미지가 없어 피부노화 분석을 할 수 없습니다.", "error");
-      return;
-    }
-
-    try {
-      setIsAnalyzingSkinAging(true);
-      showToast("피부노화 분석을 시작합니다.", "info");
-
-      const encodedProfileId = encodeURIComponent(selectedProfile.folderId);
-      const encodedCaptureId = encodeURIComponent(selectedHistory.captureId);
-
-      const res = await fetch(
-        `${API_BASE}/profiles/${encodedProfileId}/history/${encodedCaptureId}/analyze-aging`,
-        {
-          method: "POST",
-        }
-      );
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        showToast(data.error || "피부노화 분석 실패", "error");
-        return;
-      }
-
-      setSkinAgingResult({
-        freckle_count: Number(data.freckle_count || 0),
-        freckle_area: Number(data.freckle_area || 0),
-        freckle_area_rate_percent: Number(data.freckle_area_rate_percent || 0),
-        predicted_skin_age: Number(data.predicted_skin_age || 0),
-        skin_age_offset: Number(data.skin_age_offset || 0),
-        skin_age_level: data.skin_age_level || "-",
-        grade: data.grade || "-",
-        label: data.label || "분석 필요",
-        basis: data.basis || "freckle_count",
-        base_age: Number(data.base_age || 22),
-        threshold_value: Number(data.threshold_value || 0),
-        min_area: Number(data.min_area || 0),
-        max_area: Number(data.max_area || 0),
-        face_detection_method: data.face_detection_method || "-",
-        result_url: data.result_url,
-        mask_url: data.mask_url,
-      });
-      setShowSkinAgingResultModal(false);
-      setSelectedFilter("405nm_filter");
-      setDetailImageView("skin_aging_result");
-      showToast(`피부노화 분석 완료: 주근깨 ${data.freckle_count || 0}개 검출`, "success");
-    } catch (error) {
-      console.error(error);
-      showToast("피부노화 분석 실패", "error");
-    } finally {
-      setIsAnalyzingSkinAging(false);
     }
   };
 
@@ -1464,20 +1377,6 @@ function App() {
                           405nm_Filter
                         </button>
 
-                        {skinAgingResult?.result_url && (
-                          <button
-                            className={`filter-chip aging-chip ${
-                              isViewingSkinAgingResult ? "active" : ""
-                            }`}
-                            onClick={() => {
-                              setSelectedFilter("405nm_filter");
-                              setDetailImageView("skin_aging_result");
-                            }}
-                          >
-                            SkinAging
-                          </button>
-                        )}
-
                         <button
                           className={`filter-chip ${
                             selectedFilter === "660nm_filter" && detailImageView === "source" ? "active" : ""
@@ -1504,13 +1403,7 @@ function App() {
                     </div>
 
                     <div className="image-viewer">
-                      {isViewingSkinAgingResult && skinAgingResult?.result_url ? (
-                        <img
-                          className="history-image"
-                          src={getImageSrc(skinAgingResult.result_url)}
-                          alt="Skin aging analysis result"
-                        />
-                      ) : isViewingPorphyrinHeatmap && porphyrinResult?.heatmap_url ? (
+                      {isViewingPorphyrinHeatmap && porphyrinResult?.heatmap_url ? (
                         porphyrinResult.white_overlay_url && porphyrinResult.uv_heatmap_url ? (
                           <div className="porphyrin-comparison-view">
                             <div className="porphyrin-comparison-item">
@@ -1551,65 +1444,6 @@ function App() {
                     </div>
 
                     <div className="analysis-panel">
-                      <div className="analysis-title">피부노화 분석</div>
-                      <div className="analysis-description">
-                        405nm 필터 이미지에서 주근깨 의심 영역을 검출하고 피부나이를 예측합니다.
-                      </div>
-
-                      <button
-                        className="analysis-btn aging-analysis-btn"
-                        onClick={analyzeSkinAging}
-                        disabled={isAnalyzingSkinAging || !selectedHistory}
-                      >
-                        {isAnalyzingSkinAging ? "피부노화 분석 중..." : "피부노화 분석하기"}
-                      </button>
-
-                      {skinAgingResult && (
-                        <div className="analysis-result-box">
-                          <div className="analysis-result-grid">
-                            <div className="analysis-stat analysis-stat-primary">
-                              <div className="analysis-stat-label">예측 피부나이</div>
-                              <div className="analysis-stat-value">
-                                {skinAgingResult.predicted_skin_age}세
-                              </div>
-                              <div className="analysis-stat-sub">
-                                {skinAgingResult.grade} · {getSkinAgeLabel(skinAgingResult.skin_age_level)}
-                              </div>
-                            </div>
-
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">기준 나이 대비</div>
-                              <div className="analysis-stat-value">
-                                +{skinAgingResult.skin_age_offset.toFixed(1)}세
-                              </div>
-                            </div>
-
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">주근깨 검출 수</div>
-                              <div className="analysis-stat-value">
-                                {skinAgingResult.freckle_count}개
-                              </div>
-                            </div>
-
-                            <div className="analysis-stat">
-                              <div className="analysis-stat-label">검출 면적 비율</div>
-                              <div className="analysis-stat-value">
-                                {skinAgingResult.freckle_area_rate_percent.toFixed(3)}%
-                              </div>
-                            </div>
-                          </div>
-
-                          <button
-                            className="analysis-view-btn"
-                            onClick={() => setShowSkinAgingResultModal(true)}
-                          >
-                            피부노화 결과 크게 보기
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="analysis-panel">
                       <div className="analysis-title">포르피린 분석</div>
                       <div className="analysis-description">
                         660nm 필터 이미지에서 강한 형광 후보 영역을 검출합니다.
@@ -1632,67 +1466,6 @@ function App() {
           )}
         </div>
       </div>
-
-      {showSkinAgingResultModal && skinAgingResult && (
-        <div className="analysis-full-overlay">
-          <div className="analysis-full-header">
-            <div>
-              <div className="analysis-full-title">피부노화 분석 결과</div>
-              <div className="analysis-full-subtitle">
-                405nm 이미지에서 검출된 주근깨 의심 영역과 예측 피부나이를 확인합니다.
-              </div>
-            </div>
-
-            <button
-              className="analysis-full-close"
-              onClick={() => setShowSkinAgingResultModal(false)}
-            >
-              닫기
-            </button>
-          </div>
-
-          <div className="analysis-full-stats">
-            <div className="analysis-full-stat analysis-full-stat-primary">
-              <div className="analysis-full-stat-label">예측 피부나이</div>
-              <div className="analysis-full-stat-value">
-                {skinAgingResult.predicted_skin_age}세
-              </div>
-              <div className="analysis-full-stat-sub">
-                {skinAgingResult.grade} · {getSkinAgeLabel(skinAgingResult.skin_age_level)}
-              </div>
-            </div>
-
-            <div className="analysis-full-stat">
-              <div className="analysis-full-stat-label">주근깨 검출 수</div>
-              <div className="analysis-full-stat-value">
-                {skinAgingResult.freckle_count}개
-              </div>
-            </div>
-
-            <div className="analysis-full-stat">
-              <div className="analysis-full-stat-label">기준 나이 대비</div>
-              <div className="analysis-full-stat-value">
-                +{skinAgingResult.skin_age_offset.toFixed(1)}세
-              </div>
-            </div>
-
-            <div className="analysis-full-stat">
-              <div className="analysis-full-stat-label">검출 면적 비율</div>
-              <div className="analysis-full-stat-value">
-                {skinAgingResult.freckle_area_rate_percent.toFixed(3)}%
-              </div>
-            </div>
-          </div>
-
-          <div className="analysis-full-image-wrap">
-            <img
-              className="analysis-full-image"
-              src={getImageSrc(skinAgingResult.result_url)}
-              alt="피부노화 분석 결과"
-            />
-          </div>
-        </div>
-      )}
 
       {showCreateModal && (
         <div className="modal-overlay">

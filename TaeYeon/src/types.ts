@@ -106,25 +106,6 @@ export type AnalysisImageMode =
   | "trouble_risk_heatmap"
   | "focus_care_overlay";
 
-export type SkinAgingResult = {
-  freckle_count: number;
-  freckle_area: number;
-  freckle_area_rate_percent: number;
-  predicted_skin_age: number;
-  skin_age_offset: number;
-  skin_age_level: string;
-  grade: string;
-  label: string;
-  basis: string;
-  base_age: number;
-  threshold_value: number;
-  min_area: number;
-  max_area: number;
-  face_detection_method: string;
-  result_url: string;
-  mask_url: string;
-};
-
 export type AutoCaptureChecks = {
   face_found: boolean;
   center_ok: boolean;
