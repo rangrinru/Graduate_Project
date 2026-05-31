@@ -696,6 +696,11 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
     }
     exposure_values_ms = list(dict.fromkeys(capture_exposure_plan.values()))
 
+    # Manual capture can be triggered while the white LED is already on.
+    # Keep the UV/fluorescence capture clean, then turn white LED back on only for cam4_white.
+    white_led_off()
+    sleep(WHITE_LED_OFF_BEFORE_CAPTURE_SEC)
+
     # 네 카메라 영역이 하나의 전체 프레임에 들어오므로 노출별 전체 프레임을 찍은 뒤 필요한 영역만 저장합니다.
     frames_by_exposure = capture_high_quality_full_frames_by_exposure(
         exposure_values_ms=exposure_values_ms,
