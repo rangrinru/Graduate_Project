@@ -249,7 +249,18 @@ def capture_picamera_still_frames_by_exposure(exposure_values_ms, gain):
     try:
         for exposure_ms in exposure_values_ms:
             set_manual_controls(picam2, exposure_ms, gain)
-            sleep(PICAMERA_CONTROL_SETTLE_SEC)
+
+            # Picamera2는 제어값 변경 직후 이전 노출 프레임이 큐에 남을 수 있어
+            # 저장할 프레임을 받기 전에 몇 장을 버려 실제 노출값이 반영되게 합니다.
+            settle_sec = max(
+                PICAMERA_CONTROL_SETTLE_SEC,
+                (float(exposure_ms) / 1000.0) * PICAMERA_STILL_DISCARD_FRAMES,
+            )
+            sleep(settle_sec)
+
+            for _ in range(PICAMERA_STILL_DISCARD_FRAMES):
+                picam2.capture_array()
+
             still_frame = picam2.capture_array()
             frames_by_exposure[exposure_ms] = picamera_frame_to_bgr(
                 still_frame,
