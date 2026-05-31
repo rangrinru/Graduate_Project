@@ -1333,7 +1333,10 @@ def auto_capture_start_api():
                 "ok": True,
                 **get_auto_state_copy()
             })
-
+            
+        # 자동 촬영 안내 단계에서는 얼굴을 맞추기 쉽도록 백색 LED를 켭니다.
+        white_led_on()
+        
         # 자동 촬영 상태 초기화
         reset_auto_state(profile_id=profile_id, running=True)
 
