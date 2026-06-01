@@ -1895,13 +1895,15 @@ function App() {
                         분석 결과는 원본과 검출 결과를 나란히 보여줍니다.
                       </div>
 
-                      <button
-                        className="analysis-btn"
-                        onClick={analyzePorphyrin}
-                        disabled={isAnalyzingPorphyrin || !selectedHistory}
-                      >
-                        {isAnalyzingPorphyrin ? "포르피린 분석 중..." : "포르피린 분석하기"}
-                      </button>
+                      {!porphyrinResult && (
+                        <button
+                          className="analysis-btn"
+                          onClick={analyzePorphyrin}
+                          disabled={isAnalyzingPorphyrin || !selectedHistory}
+                        >
+                          {isAnalyzingPorphyrin ? "포르피린 분석 중..." : "포르피린 분석하기"}
+                        </button>
+                      )}
 
                       {porphyrinResult && (
                         <>
