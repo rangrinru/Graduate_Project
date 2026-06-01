@@ -30,6 +30,7 @@ from history_service import (
     get_capture_detail,
     get_capture_history,
     get_profile_root,
+    get_porphyrin_analysis_report,
     resolve_analysis_image_path,
     resolve_image_path,
     resolve_white_cam4_reference_path,
@@ -1523,6 +1524,8 @@ def analyze_porphyrin_api(profile_id, capture_id):
             "porphyrin_count": report["porphyrin_count"],
             "porphyrin_area": report["porphyrin_area"],
             "detection_rate_percent": report["detection_rate_percent"],
+            "porphyrin_mean_brightness": report["porphyrin_mean_brightness"],
+            "porphyrin_top5_max_brightness": report["porphyrin_top5_max_brightness"],
             "face_area_pixels": report["face_area_pixels"],
             "grade": report["grade"],
             "skin_score": report["skin_score"],
@@ -1612,6 +1615,46 @@ def analyze_trouble_risk_api(profile_id, capture_id):
             "ok": False,
             "error": str(e)
         }), 400
+
+
+# =========================
+# 특정 촬영 기록 포르피린 분석 리포트 조회 API
+# =========================
+
+@app.route("/profiles/<profile_id>/history/<capture_id>/analysis/porphyrin-report", methods=["GET"])
+def get_porphyrin_analysis_report_api(profile_id, capture_id):
+    try:
+        report = get_porphyrin_analysis_report(profile_id, capture_id)
+
+        return jsonify({
+            "ok": True,
+            "captureId": capture_id,
+            "porphyrin_count": report.get("porphyrin_count", 0),
+            "porphyrin_area": report.get("porphyrin_area", 0),
+            "detection_rate_percent": report.get("detection_rate_percent", 0),
+            "porphyrin_mean_brightness": report.get("porphyrin_mean_brightness", 0),
+            "porphyrin_top5_max_brightness": report.get("porphyrin_top5_max_brightness", 0),
+            "grade": report.get("grade", "-"),
+            "skin_score": report.get("skin_score"),
+            "region_analysis": report.get("region_analysis", {}),
+            "threshold_percentile": report.get("threshold_percentile", 0),
+            "threshold_value": report.get("threshold_value", 0),
+            "min_area": report.get("min_area", 0),
+            "max_area": report.get("max_area", 0),
+            "heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-heatmap",
+            "uv_heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-heatmap",
+            "white_overlay_url": (
+                f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-white-overlay"
+                if report.get("white_overlay_path")
+                else None
+            ),
+        })
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 404
 
 
 # =========================

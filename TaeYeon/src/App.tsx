@@ -5,6 +5,7 @@ import type {
   HistoryDetail,
   HistoryItem,
   KeyboardMode,
+  PorphyrinCompareItem,
   PorphyrinResult,
   Profile,
   Screen,
@@ -91,6 +92,62 @@ function normalizePercentagesTo100(values: Record<string, number>) {
   return Object.fromEntries(normalized.map((item) => [item.key, item.rounded]));
 }
 
+function mapAutoCaptureStatus(
+  data: Record<string, unknown>,
+  fallbackStatus: string
+): AutoCaptureStatus {
+  return {
+    running: Boolean(data.running),
+    captured: Boolean(data.captured),
+    profile_id: typeof data.profile_id === "string" ? data.profile_id : null,
+    capture_id: typeof data.capture_id === "string" ? data.capture_id : null,
+    status: typeof data.status === "string" ? data.status : fallbackStatus,
+    error: typeof data.error === "string" ? data.error : null,
+    checks:
+      typeof data.checks === "object" && data.checks !== null
+        ? { ...EMPTY_AUTO_CHECKS, ...data.checks }
+        : EMPTY_AUTO_CHECKS,
+    stable_face_count: Number(data.stable_face_count || 0),
+    eyes_closed_count: Number(data.eyes_closed_count || 0),
+    dynamic_eye_threshold: Number(data.dynamic_eye_threshold || 0),
+    white_led_is_on: Boolean(data.white_led_is_on),
+    last_update: typeof data.last_update === "string" ? data.last_update : null,
+  };
+}
+
+function mapPorphyrinResult(data: Record<string, unknown>): PorphyrinResult {
+  return {
+    porphyrin_count: Number(data.porphyrin_count || 0),
+    porphyrin_area: Number(data.porphyrin_area || 0),
+    detection_rate_percent: Number(data.detection_rate_percent || 0),
+    porphyrin_mean_brightness: Number(data.porphyrin_mean_brightness || 0),
+    porphyrin_top5_max_brightness: Number(data.porphyrin_top5_max_brightness || 0),
+    grade: typeof data.grade === "string" ? data.grade : "-",
+    skin_score:
+      typeof data.skin_score === "object" && data.skin_score !== null
+        ? data.skin_score as PorphyrinResult["skin_score"]
+        : {
+            score: 0,
+            grade: "-",
+            label: "분석 필요",
+            basis: "porphyrin_count",
+            porphyrin_count: Number(data.porphyrin_count || 0),
+            reference_bad_count: 80,
+          },
+    region_analysis:
+      typeof data.region_analysis === "object" && data.region_analysis !== null
+        ? data.region_analysis as Record<string, number>
+        : {},
+    threshold_percentile: Number(data.threshold_percentile || 0),
+    threshold_value: Number(data.threshold_value || 0),
+    min_area: Number(data.min_area || 0),
+    max_area: Number(data.max_area || 0),
+    heatmap_url: typeof data.heatmap_url === "string" ? data.heatmap_url : "",
+    uv_heatmap_url: typeof data.uv_heatmap_url === "string" ? data.uv_heatmap_url : null,
+    white_overlay_url: typeof data.white_overlay_url === "string" ? data.white_overlay_url : null,
+  };
+}
+
 function App() {
   const [screen, setScreen] = useState<Screen>("profiles");
 
@@ -112,6 +169,10 @@ function App() {
 
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isHistoryCompareMode, setIsHistoryCompareMode] = useState(false);
+  const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
+  const [isLoadingCompare, setIsLoadingCompare] = useState(false);
+  const [compareResults, setCompareResults] = useState<PorphyrinCompareItem[]>([]);
 
   const [selectedHistory, setSelectedHistory] = useState<HistoryDetail | null>(null);
   const [isLoadingHistoryDetail, setIsLoadingHistoryDetail] = useState(false);
@@ -152,6 +213,17 @@ function App() {
     return normalizePercentagesTo100(porphyrinResult.region_analysis);
   }, [porphyrinResult]);
 
+  const compareChartMax = useMemo(() => {
+    return {
+      count: Math.max(1, ...compareResults.map((item) => item.porphyrin_count)),
+      rate: Math.max(1, ...compareResults.map((item) => item.detection_rate_percent)),
+      brightness: Math.max(
+        1,
+        ...compareResults.map((item) => item.porphyrin_top5_max_brightness)
+      ),
+    };
+  }, [compareResults]);
+
   const selectedImageLabel = isViewingPorphyrinHeatmap
     ? "Porphyrin_Heatmap"
     : currentImage?.display_name || "-";
@@ -174,7 +246,7 @@ function App() {
   const isAutoRunning = autoStatus?.running ?? false;
   const showAutoPanel = Boolean(autoStatus && (autoStatus.running || autoStatus.error));
 
-  const showToast = (
+  const showToast = useMemo(() => (
     message: string,
     type: "success" | "error" | "info" = "info"
   ) => {
@@ -188,7 +260,7 @@ function App() {
       setToast(null);
       toastTimerRef.current = null;
     }, 2500);
-  };
+  }, []);
 
   const selectHistoryFilter = (filter: HistoryFilter) => {
     setSelectedFilter(filter);
@@ -203,7 +275,7 @@ function App() {
     };
   }, []);
 
-  const fetchProfiles = async () => {
+  const fetchProfiles = useMemo(() => async () => {
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => {
       controller.abort();
@@ -231,28 +303,11 @@ function App() {
       window.clearTimeout(timeoutId);
       setIsLoadingProfiles(false);
     }
-  };
+  }, [showToast]);
 
   useEffect(() => {
     fetchProfiles();
-  }, []);
-
-  useEffect(() => {
-    if (screen !== "camera") {
-      return;
-    }
-
-    fetchWhiteLedStatus();
-    fetchAutoCaptureStatus(false);
-
-    const intervalId = window.setInterval(() => {
-      fetchAutoCaptureStatus(false);
-    }, 500);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [screen]);
+  }, [fetchProfiles]);
 
   useEffect(() => {
     if (!autoStatus?.captured || !autoStatus.capture_id) {
@@ -260,7 +315,7 @@ function App() {
     }
 
     showToast("자동 촬영이 완료되었습니다.", "success");
-  }, [autoStatus?.captured, autoStatus?.capture_id]);
+  }, [autoStatus?.captured, autoStatus?.capture_id, showToast]);
 
   useEffect(() => {
     if (screen !== "history") return;
@@ -608,6 +663,9 @@ function App() {
     setSelectedProfile(profile);
     setSelectedHistory(null);
     setHistoryItems([]);
+    setIsHistoryCompareMode(false);
+    setSelectedCompareIds([]);
+    setCompareResults([]);
     setPorphyrinResult(null);
     setDetailImageView("source");
     setAutoStatus(null);
@@ -619,6 +677,9 @@ function App() {
     setSelectedProfile(null);
     setSelectedHistory(null);
     setHistoryItems([]);
+    setIsHistoryCompareMode(false);
+    setSelectedCompareIds([]);
+    setCompareResults([]);
     setPorphyrinResult(null);
     setDetailImageView("source");
     setAutoStatus(null);
@@ -759,6 +820,12 @@ function App() {
       setHistoryItems((prev) =>
         prev.filter((item) => item.captureId !== target.captureId)
       );
+      setSelectedCompareIds((prev) =>
+        prev.filter((captureId) => captureId !== target.captureId)
+      );
+      setCompareResults((prev) =>
+        prev.filter((item) => item.captureId !== target.captureId)
+      );
 
       if (selectedHistory?.captureId === target.captureId) {
         setSelectedHistory(null);
@@ -774,6 +841,85 @@ function App() {
       showToast("기록 삭제 실패", "error");
     } finally {
       setIsDeletingHistory(null);
+    }
+  };
+
+  const startHistoryCompareMode = () => {
+    setIsHistoryCompareMode(true);
+    setSelectedCompareIds([]);
+    setCompareResults([]);
+  };
+
+  const cancelHistoryCompareMode = () => {
+    setIsHistoryCompareMode(false);
+    setSelectedCompareIds([]);
+  };
+
+  const toggleCompareSelection = (captureId: string) => {
+    setSelectedCompareIds((prev) => {
+      if (prev.includes(captureId)) {
+        return prev.filter((id) => id !== captureId);
+      }
+
+      if (prev.length >= 5) {
+        showToast("비교는 최대 5개까지 선택할 수 있습니다.", "error");
+        return prev;
+      }
+
+      return [...prev, captureId];
+    });
+  };
+
+  const openHistoryCompare = async () => {
+    if (!selectedProfile) {
+      showToast("프로필을 먼저 선택하세요.", "error");
+      return;
+    }
+
+    if (selectedCompareIds.length < 2) {
+      showToast("비교할 기록을 2개 이상 선택하세요.", "error");
+      return;
+    }
+
+    try {
+      setIsLoadingCompare(true);
+
+      const encodedProfileId = encodeURIComponent(selectedProfile.folderId);
+      const reports = await Promise.all(
+        selectedCompareIds.map(async (captureId) => {
+          const encodedCaptureId = encodeURIComponent(captureId);
+          const res = await fetch(
+            `${API_BASE}/profiles/${encodedProfileId}/history/${encodedCaptureId}/analysis/porphyrin-report`
+          );
+          const data = await res.json();
+
+          if (!data.ok) {
+            const item = historyItems.find((history) => history.captureId === captureId);
+            throw new Error(`${item?.displayTime || captureId}: ${data.error || "분석 결과 없음"}`);
+          }
+
+          const historyItem = historyItems.find((history) => history.captureId === captureId);
+          return {
+            ...mapPorphyrinResult(data),
+            captureId,
+            displayTime: historyItem?.displayTime || captureId,
+          };
+        })
+      );
+
+      setCompareResults(reports);
+      setScreen("historyCompare");
+      showToast("비교 결과를 불러왔습니다.", "success");
+    } catch (error) {
+      console.error(error);
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "비교 결과를 불러오지 못했습니다.",
+        "error"
+      );
+    } finally {
+      setIsLoadingCompare(false);
     }
   };
 
@@ -804,28 +950,7 @@ function App() {
         return;
       }
 
-      setPorphyrinResult({
-        porphyrin_count: Number(data.porphyrin_count || 0),
-        porphyrin_area: data.porphyrin_area,
-        detection_rate_percent: data.detection_rate_percent,
-        grade: data.grade,
-        skin_score: data.skin_score || {
-          score: 0,
-          grade: "-",
-          label: "분석 필요",
-          basis: "porphyrin_count",
-          porphyrin_count: Number(data.porphyrin_count || 0),
-          reference_bad_count: 80,
-        },
-        region_analysis: data.region_analysis || {},
-        threshold_percentile: data.threshold_percentile,
-        threshold_value: data.threshold_value,
-        min_area: data.min_area,
-        max_area: data.max_area,
-        heatmap_url: data.heatmap_url,
-        uv_heatmap_url: data.uv_heatmap_url ?? null,
-        white_overlay_url: data.white_overlay_url ?? null,
-      });
+      setPorphyrinResult(mapPorphyrinResult(data));
       setSelectedFilter("660nm_filter");
       setDetailImageView("porphyrin_heatmap");
       showToast("포르피린 분석 완료", "success");
@@ -837,7 +962,7 @@ function App() {
     }
   };
 
-  const fetchWhiteLedStatus = async () => {
+  const fetchWhiteLedStatus = useMemo(() => async () => {
     try {
       const res = await fetch(`${API_BASE}/white-led/status`);
       const data = await res.json();
@@ -848,7 +973,7 @@ function App() {
     } catch (error) {
       console.error(error);
     }
-  };
+  }, []);
 
   const toggleWhiteLed = async () => {
     try {
@@ -875,7 +1000,7 @@ function App() {
     }
   };
 
-  const fetchAutoCaptureStatus = async (showError = false) => {
+  const fetchAutoCaptureStatus = useMemo(() => async (showError = false) => {
     try {
       const res = await fetch(`${API_BASE}/auto-capture/status`);
       const data = await res.json();
@@ -887,20 +1012,7 @@ function App() {
         return;
       }
 
-      setAutoStatus({
-        running: Boolean(data.running),
-        captured: Boolean(data.captured),
-        profile_id: data.profile_id ?? null,
-        capture_id: data.capture_id ?? null,
-        status: data.status || "자동 촬영 대기 중",
-        error: data.error ?? null,
-        checks: data.checks || EMPTY_AUTO_CHECKS,
-        stable_face_count: Number(data.stable_face_count || 0),
-        eyes_closed_count: Number(data.eyes_closed_count || 0),
-        dynamic_eye_threshold: Number(data.dynamic_eye_threshold || 0),
-        white_led_is_on: Boolean(data.white_led_is_on),
-        last_update: data.last_update ?? null,
-      });
+      setAutoStatus(mapAutoCaptureStatus(data, "자동 촬영 대기 중"));
 
       if (typeof data.white_led_is_on === "boolean") {
         setWhiteLedOn(data.white_led_is_on);
@@ -911,7 +1023,24 @@ function App() {
         showToast("자동 촬영 상태 확인 실패", "error");
       }
     }
-  };
+  }, [showToast]);
+
+  useEffect(() => {
+    if (screen !== "camera") {
+      return;
+    }
+
+    fetchWhiteLedStatus();
+    fetchAutoCaptureStatus(false);
+
+    const intervalId = window.setInterval(() => {
+      fetchAutoCaptureStatus(false);
+    }, 500);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [fetchAutoCaptureStatus, fetchWhiteLedStatus, screen]);
 
   const startAutoCapture = async () => {
     if (!selectedProfile) {
@@ -940,20 +1069,7 @@ function App() {
         return;
       }
 
-      setAutoStatus({
-        running: Boolean(data.running),
-        captured: Boolean(data.captured),
-        profile_id: data.profile_id ?? null,
-        capture_id: data.capture_id ?? null,
-        status: data.status || "자동 촬영 조건 확인 중",
-        error: data.error ?? null,
-        checks: data.checks || EMPTY_AUTO_CHECKS,
-        stable_face_count: Number(data.stable_face_count || 0),
-        eyes_closed_count: Number(data.eyes_closed_count || 0),
-        dynamic_eye_threshold: Number(data.dynamic_eye_threshold || 0),
-        white_led_is_on: Boolean(data.white_led_is_on),
-        last_update: data.last_update ?? null,
-      });
+      setAutoStatus(mapAutoCaptureStatus(data, "자동 촬영 조건 확인 중"));
 
       if (typeof data.white_led_is_on === "boolean") {
         setWhiteLedOn(data.white_led_is_on);
@@ -1313,9 +1429,46 @@ function App() {
               </div>
 
               <div className="history-container" ref={historyScrollRef}>
-                <button className="mini-back-btn" onClick={backToCamera}>
-                  카메라로 돌아가기
-                </button>
+                <div className="history-action-row">
+                  <button className="mini-back-btn" onClick={backToCamera}>
+                    카메라로 돌아가기
+                  </button>
+
+                  {historyItems.length > 0 && (
+                    <div className="history-compare-actions">
+                      {isHistoryCompareMode ? (
+                        <>
+                          <button
+                            className="compare-secondary-btn"
+                            type="button"
+                            onClick={cancelHistoryCompareMode}
+                            disabled={isLoadingCompare}
+                          >
+                            취소
+                          </button>
+                          <button
+                            className="compare-primary-btn"
+                            type="button"
+                            onClick={openHistoryCompare}
+                            disabled={isLoadingCompare || selectedCompareIds.length < 2}
+                          >
+                            {isLoadingCompare
+                              ? "불러오는 중..."
+                              : `비교 보기 ${selectedCompareIds.length}/5`}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="compare-primary-btn"
+                          type="button"
+                          onClick={startHistoryCompareMode}
+                        >
+                          비교하기
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {isLoadingHistory ? (
                   <div className="loading-box">이전 기록 불러오는 중...</div>
@@ -1330,10 +1483,31 @@ function App() {
                     {historyItems.map((item) => (
                       <div
                         key={item.captureId}
-                        className="history-card"
-                        onClick={() => openHistoryCard(item.captureId)}
+                        className={`history-card ${isHistoryCompareMode ? "compare-mode" : ""} ${
+                          selectedCompareIds.includes(item.captureId) ? "selected" : ""
+                        }`}
+                        onClick={() => {
+                          if (isHistoryCompareMode) {
+                            toggleCompareSelection(item.captureId);
+                            return;
+                          }
+
+                          openHistoryCard(item.captureId);
+                        }}
                       >
                         <div className="history-card-header">
+                          {isHistoryCompareMode && (
+                            <label className="history-compare-check">
+                              <input
+                                type="checkbox"
+                                checked={selectedCompareIds.includes(item.captureId)}
+                                onChange={() => toggleCompareSelection(item.captureId)}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <span></span>
+                            </label>
+                          )}
+
                           <div>
                             <div className="history-card-time">{item.displayTime}</div>
                             <div className="history-card-sub">
@@ -1341,21 +1515,187 @@ function App() {
                             </div>
                           </div>
 
-                          <button
-                            className="history-delete-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              requestDeleteHistory(item);
-                            }}
-                            disabled={isDeletingHistory === item.captureId}
-                          >
-                            {isDeletingHistory === item.captureId ? "삭제 중..." : "삭제"}
-                          </button>
+                          {!isHistoryCompareMode && (
+                            <button
+                              className="history-delete-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                requestDeleteHistory(item);
+                              }}
+                              disabled={isDeletingHistory === item.captureId}
+                            >
+                              {isDeletingHistory === item.captureId ? "삭제 중..." : "삭제"}
+                            </button>
+                          )}
                         </div>
 
-                        <div className="history-tag">기록 열기</div>
+                        <div className="history-tag">
+                          {isHistoryCompareMode ? "비교 선택" : "기록 열기"}
+                        </div>
                       </div>
                     ))}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
+          {screen === "historyCompare" && (
+            <>
+              <div className="header">
+                <div>
+                  <h1 className="header-title">포르피린 비교</h1>
+                  <div className="header-subtitle">
+                    선택한 촬영 기록의 포르피린 수치와 부위별 분포를 비교합니다.
+                  </div>
+                </div>
+
+                <div className="time-badge">
+                  {new Intl.DateTimeFormat("ko-KR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  }).format(new Date())}
+                </div>
+              </div>
+
+              <div className="history-compare-container">
+                <button className="mini-back-btn" onClick={backToHistory}>
+                  기록 목록으로 돌아가기
+                </button>
+
+                {compareResults.length === 0 ? (
+                  <div className="empty-box">
+                    비교할 포르피린 분석 결과가 없습니다.
+                    <br />
+                    기록 목록에서 비교할 기록을 다시 선택해 주세요.
+                  </div>
+                ) : (
+                  <>
+                    <div className="compare-summary-grid">
+                      {compareResults.map((item) => (
+                        <div className="compare-summary-card" key={item.captureId}>
+                          <div className="compare-summary-date">{item.displayTime}</div>
+                          <div className="compare-summary-values">
+                            <span>{item.porphyrin_count.toLocaleString()}개</span>
+                            <span>{item.detection_rate_percent.toFixed(2)}%</span>
+                          </div>
+                          <div className="compare-summary-brightness">
+                            최대 {item.porphyrin_top5_max_brightness.toFixed(0)}
+                            <span>평균 {item.porphyrin_mean_brightness.toFixed(1)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="compare-chart-section">
+                      <div className="compare-section-title">포르피린 디텍션 수</div>
+                      <div className="compare-bars">
+                        {compareResults.map((item) => (
+                          <div className="compare-bar-row" key={`count-${item.captureId}`}>
+                            <div className="compare-bar-label">{item.displayTime}</div>
+                            <div className="compare-bar-track">
+                              <div
+                                className="compare-bar-fill count"
+                                style={{
+                                  width: `${Math.max(
+                                    4,
+                                    (item.porphyrin_count / compareChartMax.count) * 100
+                                  )}%`,
+                                }}
+                              ></div>
+                            </div>
+                            <div className="compare-bar-value">
+                              {item.porphyrin_count.toLocaleString()}개
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="compare-chart-section">
+                      <div className="compare-section-title">포르피린 분포 비율</div>
+                      <div className="compare-bars">
+                        {compareResults.map((item) => (
+                          <div className="compare-bar-row" key={`rate-${item.captureId}`}>
+                            <div className="compare-bar-label">{item.displayTime}</div>
+                            <div className="compare-bar-track">
+                              <div
+                                className="compare-bar-fill rate"
+                                style={{
+                                  width: `${Math.max(
+                                    4,
+                                    (item.detection_rate_percent / compareChartMax.rate) * 100
+                                  )}%`,
+                                }}
+                              ></div>
+                            </div>
+                            <div className="compare-bar-value">
+                              {item.detection_rate_percent.toFixed(2)}%
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="compare-chart-section">
+                      <div className="compare-section-title">포르피린 최대 밝기</div>
+                      <div className="compare-bars">
+                        {compareResults.map((item) => (
+                          <div className="compare-bar-row" key={`brightness-${item.captureId}`}>
+                            <div className="compare-bar-label">{item.displayTime}</div>
+                            <div className="compare-bar-track">
+                              <div
+                                className="compare-bar-fill brightness"
+                                style={{
+                                  width: `${Math.max(
+                                    4,
+                                    (item.porphyrin_top5_max_brightness / compareChartMax.brightness) * 100
+                                  )}%`,
+                                }}
+                              ></div>
+                            </div>
+                            <div className="compare-bar-value">
+                              {item.porphyrin_top5_max_brightness.toFixed(0)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="compare-chart-section">
+                      <div className="compare-section-title">부위별 분포 비교</div>
+                      <div className="compare-region-grid">
+                        {PORPHYRIN_REGION_ORDER.map((regionKey) => (
+                          <div className="compare-region-card" key={regionKey}>
+                            <div className="compare-region-name">
+                              {PORPHYRIN_REGION_LABELS[regionKey]}
+                            </div>
+
+                            {compareResults.map((item) => {
+                              const percentages = normalizePercentagesTo100(item.region_analysis);
+                              const value = percentages[regionKey] || 0;
+
+                              return (
+                                <div
+                                  className="compare-region-row"
+                                  key={`${regionKey}-${item.captureId}`}
+                                >
+                                  <span>{item.displayTime}</span>
+                                  <div className="compare-region-track">
+                                    <div
+                                      className="compare-region-fill"
+                                      style={{ width: `${Math.max(4, value)}%` }}
+                                    ></div>
+                                  </div>
+                                  <strong>{value}%</strong>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
@@ -1536,6 +1876,18 @@ function App() {
                               <div className="analysis-stat-label">포르피린 분포 비율</div>
                               <div className="analysis-stat-value">
                                 {porphyrinResult.detection_rate_percent.toFixed(2)}%
+                              </div>
+                            </div>
+                            <div className="analysis-stat-card analysis-stat-primary">
+                              <div className="analysis-stat-label">포르피린 최대 밝기</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_top5_max_brightness.toFixed(0)}
+                              </div>
+                            </div>
+                            <div className="analysis-stat-card analysis-stat-primary">
+                              <div className="analysis-stat-label">포르피린 평균 밝기</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_mean_brightness.toFixed(1)}
                               </div>
                             </div>
                           </div>

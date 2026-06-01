@@ -2,6 +2,7 @@
   | "profiles"
   | "camera"
   | "history"
+  | "historyCompare"
   | "historyDetail";
 
 export type Profile = {
@@ -50,6 +51,8 @@ export type PorphyrinResult = {
   porphyrin_count: number;
   porphyrin_area: number;
   detection_rate_percent: number;
+  porphyrin_mean_brightness: number;
+  porphyrin_top5_max_brightness: number;
   grade: string;
   skin_score: {
     score: number;
@@ -69,42 +72,10 @@ export type PorphyrinResult = {
   white_overlay_url?: string | null;
 };
 
-export type FocusCareArea = {
-  id: number;
-  region: string;
-  bbox: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  center: {
-    x: number;
-    y: number;
-  };
-  area: number;
-  mean_intensity: number;
-  risk_score: number;
+export type PorphyrinCompareItem = PorphyrinResult & {
+  captureId: string;
+  displayTime: string;
 };
-
-export type TroubleRiskResult = {
-  risk_area: number;
-  risk_rate_percent: number;
-  risk_grade: string;
-  region_analysis: Record<string, number>;
-  focus_areas: FocusCareArea[];
-  top_region: string | null;
-  threshold_value: number;
-  risk_heatmap_url: string;
-  focus_overlay_url: string;
-  risk_mask_url: string;
-};
-
-export type AnalysisImageMode =
-  | "source"
-  | "porphyrin_heatmap"
-  | "trouble_risk_heatmap"
-  | "focus_care_overlay";
 
 export type AutoCaptureChecks = {
   face_found: boolean;
