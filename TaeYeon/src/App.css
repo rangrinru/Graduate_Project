@@ -987,9 +987,15 @@
         }
 
         .history-compare-container {
-          padding: 16px 22px 22px;
-          height: calc(100% - 112px);
+          padding: 110px 88px 22px 20px;
+          height: 100%;
           overflow-y: auto;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        .history-compare-container::-webkit-scrollbar {
+          display: none;
         }
 
         .compare-summary-grid {

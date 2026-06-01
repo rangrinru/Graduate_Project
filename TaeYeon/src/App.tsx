@@ -190,6 +190,7 @@ function App() {
   const [isAnalyzingPorphyrin, setIsAnalyzingPorphyrin] = useState(false);
   const [porphyrinResult, setPorphyrinResult] = useState<PorphyrinResult | null>(null);
   const historyScrollRef = useRef<HTMLDivElement | null>(null);
+  const compareScrollRef = useRef<HTMLDivElement | null>(null);
   const historyScrollTopRef = useRef(0);
 
   const [whiteLedOn, setWhiteLedOn] = useState(false);
@@ -1136,6 +1137,17 @@ function App() {
     });
   };
 
+  const scrollCompareView = (direction: "up" | "down") => {
+    const target = compareScrollRef.current;
+    if (!target) return;
+
+    const distance = Math.max(260, Math.floor(target.clientHeight * 0.72));
+    target.scrollBy({
+      top: direction === "up" ? -distance : distance,
+      behavior: "smooth",
+    });
+  };
+
   const getImageSrc = (imageUrl: string | null | undefined) => {
     if (!imageUrl) return "";
 
@@ -1559,8 +1571,27 @@ function App() {
                 </div>
               </div>
 
-              <div className="history-compare-container">
-                <button className="mini-back-btn" onClick={backToHistory}>
+              <div className="history-scroll-controls" aria-label="비교 결과 스크롤">
+                <button
+                  className="history-scroll-btn"
+                  type="button"
+                  onClick={() => scrollCompareView("up")}
+                  aria-label="비교 결과 위로 스크롤"
+                >
+                  ▲
+                </button>
+                <button
+                  className="history-scroll-btn"
+                  type="button"
+                  onClick={() => scrollCompareView("down")}
+                  aria-label="비교 결과 아래로 스크롤"
+                >
+                  ▼
+                </button>
+              </div>
+
+              <div className="history-compare-container" ref={compareScrollRef}>
+                <button className="mini-back-btn" type="button" onClick={backToHistory}>
                   기록 목록으로 돌아가기
                 </button>
 
