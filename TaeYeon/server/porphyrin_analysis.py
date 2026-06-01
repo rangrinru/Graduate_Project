@@ -391,13 +391,21 @@ def analyze_porphyrin_heatmap_v04(
     if landmark_pts is not None and landmark_source_shape is not None:
         landmark_pts = rescale_landmarks(landmark_pts, landmark_source_shape, gray.shape)
 
-    # Do not crop to a face silhouette for porphyrin analysis.
-    # The 660nm frame is evaluated directly with fixed absolute thresholds.
-    face_mask = np.full_like(gray, 255)
-    face_pixels = gray.size
-    face_rect = (0, 0, gray.shape[1], gray.shape[0])
-    landmark_metrics = get_landmark_metrics(None, face_rect)
-    landmark_pts = None
+    face_mask = make_landmark_face_mask(gray.shape, landmark_pts)
+    if face_mask is None:
+        face_mask = make_porphyrin_face_mask(gray)
+
+    face_pixels = int(np.count_nonzero(face_mask))
+    if face_pixels <= 0:
+        face_mask = np.full_like(gray, 255)
+        face_pixels = gray.size
+
+    face_contours, _ = cv2.findContours(face_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if face_contours:
+        face_rect = cv2.boundingRect(max(face_contours, key=cv2.contourArea))
+    else:
+        face_rect = (0, 0, gray.shape[1], gray.shape[0])
+    landmark_metrics = get_landmark_metrics(landmark_pts, face_rect)
 
     # Same absolute-threshold preview logic as porphyrin_threshold_viewer.py.
     heatmap, clean_mask, low_mask, heatmap_source, accepted_count, low_count, max_component_area = (
@@ -413,13 +421,16 @@ def analyze_porphyrin_heatmap_v04(
         "left_cheek": 0.0,
     }
 
-    ys, xs = np.where(clean_mask > 0)
+    ys, xs = np.where(low_mask > 0)
     total_area = float(len(xs))
     low_total_area = float(np.count_nonzero(low_mask))
     intensity_values = heatmap_source[ys, xs].astype(np.float32) / 255.0 if len(xs) else []
 
     for x, y, intensity in zip(xs, ys, intensity_values):
-        region_key = classify_face_region(int(x), int(y), face_rect)
+        if landmark_pts is not None:
+            region_key = classify_face_region_by_landmarks(int(x), int(y), face_rect, landmark_metrics)
+        else:
+            region_key = classify_face_region(int(x), int(y), face_rect)
         region_score[region_key] += float(intensity)
 
     detection_rate = (total_area / face_pixels) * 100 if face_pixels else 0.0
@@ -431,7 +442,7 @@ def analyze_porphyrin_heatmap_v04(
         grade = "High"
 
     region_analysis = normalize_region_scores(region_score)
-    skin_score = calculate_skin_score_from_porphyrin_count(accepted_count)
+    skin_score = calculate_skin_score_from_porphyrin_count(low_count)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     heatmap_path = output_dir / "porphyrin_heatmap.jpg"
@@ -453,8 +464,10 @@ def analyze_porphyrin_heatmap_v04(
     cv2.imwrite(str(face_mask_path), face_mask)
 
     report = {
-        "porphyrin_count": int(accepted_count),
+        "porphyrin_count": int(low_count),
         "porphyrin_area": float(total_area),
+        "strong_porphyrin_count": int(accepted_count),
+        "strong_porphyrin_area": float(np.count_nonzero(clean_mask)),
         "low_candidate_count": int(low_count),
         "low_candidate_area": float(low_total_area),
         "detection_rate_percent": float(detection_rate),
