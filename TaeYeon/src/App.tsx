@@ -746,6 +746,22 @@ function App() {
     }
   };
 
+  const fetchPorphyrinReport = async (
+    encodedProfileId: string,
+    encodedCaptureId: string
+  ): Promise<PorphyrinResult | null> => {
+    const res = await fetch(
+      `${API_BASE}/profiles/${encodedProfileId}/history/${encodedCaptureId}/analysis/porphyrin-report`
+    );
+    const data = await res.json();
+
+    if (!data.ok) {
+      return null;
+    }
+
+    return mapPorphyrinResult(data);
+  };
+
   const openHistoryDetail = async (captureId: string, resetFilter = true) => {
     if (!selectedProfile) {
       showToast("프로필을 먼저 선택하세요.", "error");
@@ -773,7 +789,11 @@ function App() {
         setSelectedFilter("no_filter");
       }
       setDetailImageView("source");
-      setPorphyrinResult(null);
+      const savedPorphyrinResult = await fetchPorphyrinReport(
+        encodedProfileId,
+        encodedCaptureId
+      );
+      setPorphyrinResult(savedPorphyrinResult);
       setScreen("historyDetail");
     } catch (error) {
       console.error(error);
