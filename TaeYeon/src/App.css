@@ -917,7 +917,7 @@
         .history-compare-actions {
           position: fixed;
           right: 88px;
-          bottom: 22px;
+          top: 102px;
           z-index: 45;
           display: flex;
           gap: 8px;
@@ -929,6 +929,22 @@
           background: rgba(15, 23, 42, 0.92);
           box-shadow: 0 18px 40px rgba(0,0,0,0.32);
           backdrop-filter: blur(10px);
+        }
+
+        .history-camera-back-btn {
+          position: fixed;
+          left: 22px;
+          top: 102px;
+          z-index: 45;
+          min-height: 58px;
+          min-width: 156px;
+          padding: 16px 22px;
+          border-radius: 18px;
+          background: rgba(15, 23, 42, 0.92);
+          box-shadow: 0 18px 40px rgba(0,0,0,0.32);
+          backdrop-filter: blur(10px);
+          font-size: 16px;
+          font-weight: 900;
         }
 
         .compare-primary-btn,

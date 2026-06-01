@@ -1480,7 +1480,11 @@ function App() {
 
               <div className="history-container" ref={historyScrollRef}>
                 <div className="history-action-row">
-                  <button className="mini-back-btn" onClick={backToCamera}>
+                  <button
+                    className="mini-back-btn history-camera-back-btn"
+                    type="button"
+                    onClick={backToCamera}
+                  >
                     카메라로 돌아가기
                   </button>
 
