@@ -1144,6 +1144,20 @@
           text-align: center;
         }
 
+        .analysis-stat-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+          margin-top: 10px;
+        }
+
+        .analysis-stat-card {
+          border-radius: 12px;
+          background: rgba(255,255,255,0.07);
+          padding: 10px 12px;
+          text-align: center;
+        }
+
         .analysis-stat-label {
           color: rgba(255,255,255,0.6);
           font-size: 12px;
@@ -1167,6 +1181,13 @@
           color: rgba(255,255,255,0.7);
           font-size: 11px;
           font-weight: 800;
+        }
+
+        .analysis-region-title {
+          color: white;
+          font-size: 13px;
+          font-weight: 800;
+          margin-top: 12px;
         }
 
         .analysis-region-grid {

@@ -34,6 +34,63 @@ const PROFILE_FETCH_TIMEOUT_MS = 4000;
 type HistoryFilter = "no_filter" | "405nm_filter" | "660nm_filter";
 type DetailImageView = "source" | "porphyrin_heatmap";
 
+const PORPHYRIN_REGION_LABELS: Record<string, string> = {
+  forehead: "이마",
+  chin: "턱",
+  nose: "코",
+  right_cheek: "오른쪽 볼",
+  left_cheek: "왼쪽 볼",
+  philtrum: "인중",
+};
+
+const PORPHYRIN_REGION_ORDER = [
+  "forehead",
+  "chin",
+  "nose",
+  "right_cheek",
+  "left_cheek",
+  "philtrum",
+];
+
+function normalizePercentagesTo100(values: Record<string, number>) {
+  const rawValues = PORPHYRIN_REGION_ORDER.map((key) => ({
+    key,
+    value: Math.max(0, Number(values[key] || 0)),
+  }));
+  const total = rawValues.reduce((sum, item) => sum + item.value, 0);
+
+  if (total <= 0) {
+    return Object.fromEntries(PORPHYRIN_REGION_ORDER.map((key) => [key, 0]));
+  }
+
+  const normalized = rawValues.map((item) => {
+    const raw = (item.value / total) * 100;
+    const rounded = Math.round(raw);
+    return {
+      ...item,
+      raw,
+      rounded,
+      remainder: Math.abs(raw - rounded),
+    };
+  });
+
+  let diff = 100 - normalized.reduce((sum, item) => sum + item.rounded, 0);
+  const ordered = [...normalized].sort((a, b) => b.remainder - a.remainder);
+
+  for (let idx = 0; diff !== 0 && ordered.length > 0; idx += 1) {
+    const target = ordered[idx % ordered.length];
+    if (diff > 0) {
+      target.rounded += 1;
+      diff -= 1;
+    } else if (target.rounded > 0) {
+      target.rounded -= 1;
+      diff += 1;
+    }
+  }
+
+  return Object.fromEntries(normalized.map((item) => [item.key, item.rounded]));
+}
+
 function App() {
   const [screen, setScreen] = useState<Screen>("profiles");
 
@@ -86,6 +143,14 @@ function App() {
 
   const isViewingPorphyrinHeatmap =
     detailImageView === "porphyrin_heatmap" && Boolean(porphyrinResult?.heatmap_url);
+
+  const porphyrinRegionPercentages = useMemo(() => {
+    if (!porphyrinResult?.region_analysis) {
+      return normalizePercentagesTo100({});
+    }
+
+    return normalizePercentagesTo100(porphyrinResult.region_analysis);
+  }, [porphyrinResult]);
 
   const selectedImageLabel = isViewingPorphyrinHeatmap
     ? "Porphyrin_Heatmap"
@@ -1457,6 +1522,35 @@ function App() {
                       >
                         {isAnalyzingPorphyrin ? "포르피린 분석 중..." : "포르피린 분석하기"}
                       </button>
+
+                      {porphyrinResult && (
+                        <>
+                          <div className="analysis-stat-grid">
+                            <div className="analysis-stat-card analysis-stat-primary">
+                              <div className="analysis-stat-label">포르피린 디텍션 수</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_count.toLocaleString()}개
+                              </div>
+                            </div>
+                            <div className="analysis-stat-card analysis-stat-primary">
+                              <div className="analysis-stat-label">전체 대비 포르피린</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.detection_rate_percent.toFixed(2)}%
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="analysis-region-title">포르피린 분포도</div>
+                          <div className="analysis-region-grid">
+                            {PORPHYRIN_REGION_ORDER.map((regionKey) => (
+                              <div className="analysis-region-item" key={regionKey}>
+                                <span>{PORPHYRIN_REGION_LABELS[regionKey]}</span>
+                                <strong>{porphyrinRegionPercentages[regionKey]}%</strong>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
 
                     </div>
                   </>
