@@ -50,8 +50,6 @@ export type PorphyrinResult = {
   porphyrin_count: number;
   porphyrin_area: number;
   detection_rate_percent: number;
-  porphyrin_mean_brightness: number;
-  porphyrin_top5_max_brightness: number;
   grade: string;
   skin_score: {
     score: number;

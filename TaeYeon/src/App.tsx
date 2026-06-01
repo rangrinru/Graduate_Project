@@ -808,8 +808,6 @@ function App() {
         porphyrin_count: Number(data.porphyrin_count || 0),
         porphyrin_area: data.porphyrin_area,
         detection_rate_percent: data.detection_rate_percent,
-        porphyrin_mean_brightness: Number(data.porphyrin_mean_brightness || 0),
-        porphyrin_top5_max_brightness: Number(data.porphyrin_top5_max_brightness || 0),
         grade: data.grade,
         skin_score: data.skin_score || {
           score: 0,
@@ -1538,18 +1536,6 @@ function App() {
                               <div className="analysis-stat-label">포르피린 분포 비율</div>
                               <div className="analysis-stat-value">
                                 {porphyrinResult.detection_rate_percent.toFixed(2)}%
-                              </div>
-                            </div>
-                            <div className="analysis-stat-card analysis-stat-primary">
-                              <div className="analysis-stat-label">포르피린 최대 밝기</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.porphyrin_top5_max_brightness.toFixed(0)}
-                              </div>
-                            </div>
-                            <div className="analysis-stat-card analysis-stat-primary">
-                              <div className="analysis-stat-label">포르피린 평균 밝기</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.porphyrin_mean_brightness.toFixed(1)}
                               </div>
                             </div>
                           </div>
