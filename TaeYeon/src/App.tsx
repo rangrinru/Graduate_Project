@@ -1533,7 +1533,7 @@ function App() {
                               </div>
                             </div>
                             <div className="analysis-stat-card analysis-stat-primary">
-                              <div className="analysis-stat-label">전체 대비 포르피린</div>
+                              <div className="analysis-stat-label">포르피린 분포 비율</div>
                               <div className="analysis-stat-value">
                                 {porphyrinResult.detection_rate_percent.toFixed(2)}%
                               </div>

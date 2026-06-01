@@ -391,13 +391,21 @@ def analyze_porphyrin_heatmap_v04(
     if landmark_pts is not None and landmark_source_shape is not None:
         landmark_pts = rescale_landmarks(landmark_pts, landmark_source_shape, gray.shape)
 
-    # Do not crop to a face silhouette for porphyrin analysis.
-    # The 660nm frame is evaluated directly with fixed absolute thresholds.
-    face_mask = np.full_like(gray, 255)
-    face_pixels = gray.size
-    face_rect = (0, 0, gray.shape[1], gray.shape[0])
-    landmark_metrics = get_landmark_metrics(None, face_rect)
-    landmark_pts = None
+    face_mask = make_landmark_face_mask(gray.shape, landmark_pts)
+    if face_mask is None:
+        face_mask = make_porphyrin_face_mask(gray)
+
+    face_pixels = int(np.count_nonzero(face_mask))
+    if face_pixels <= 0:
+        face_mask = np.full_like(gray, 255)
+        face_pixels = gray.size
+
+    face_contours, _ = cv2.findContours(face_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if face_contours:
+        face_rect = cv2.boundingRect(max(face_contours, key=cv2.contourArea))
+    else:
+        face_rect = (0, 0, gray.shape[1], gray.shape[0])
+    landmark_metrics = get_landmark_metrics(landmark_pts, face_rect)
 
     # Same absolute-threshold preview logic as porphyrin_threshold_viewer.py.
     heatmap, clean_mask, low_mask, heatmap_source, accepted_count, low_count, max_component_area = (
@@ -419,7 +427,10 @@ def analyze_porphyrin_heatmap_v04(
     intensity_values = heatmap_source[ys, xs].astype(np.float32) / 255.0 if len(xs) else []
 
     for x, y, intensity in zip(xs, ys, intensity_values):
-        region_key = classify_face_region(int(x), int(y), face_rect)
+        if landmark_pts is not None:
+            region_key = classify_face_region_by_landmarks(int(x), int(y), face_rect, landmark_metrics)
+        else:
+            region_key = classify_face_region(int(x), int(y), face_rect)
         region_score[region_key] += float(intensity)
 
     detection_rate = (total_area / face_pixels) * 100 if face_pixels else 0.0
