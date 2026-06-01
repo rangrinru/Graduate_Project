@@ -14,8 +14,6 @@ LOW_VISIBLE_THRESHOLD = 45
 LOW_LOCAL_CONTRAST_THRESHOLD = 3
 LOW_STRONG_ABSOLUTE_THRESHOLD = 80
 MIN_COMPONENT_AREA = 2
-
-
 def clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 

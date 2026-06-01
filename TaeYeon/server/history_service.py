@@ -210,3 +210,25 @@ def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: s
         raise ValueError("분석 결과 이미지가 없습니다. 먼저 분석을 실행하세요.")
 
     return image_path
+
+
+def resolve_porphyrin_report_path(profile_id: str, capture_id: str) -> Path:
+    profile_root = get_profile_root(profile_id)
+    report_path = (
+        profile_root
+        / CAMERA_INFO["cam4"]["folder"]
+        / capture_id
+        / "analysis"
+        / "porphyrin_report.json"
+    )
+
+    if not report_path.exists() or not report_path.is_file():
+        raise ValueError("포르피린 분석 결과가 없습니다. 먼저 분석을 실행하세요.")
+
+    return report_path
+
+
+def get_porphyrin_analysis_report(profile_id: str, capture_id: str):
+    report_path = resolve_porphyrin_report_path(profile_id, capture_id)
+    with open(report_path, "r", encoding="utf-8") as f:
+        return json.load(f)
