@@ -421,7 +421,7 @@ def analyze_porphyrin_heatmap_v04(
         "left_cheek": 0.0,
     }
 
-    ys, xs = np.where(clean_mask > 0)
+    ys, xs = np.where(low_mask > 0)
     total_area = float(len(xs))
     low_total_area = float(np.count_nonzero(low_mask))
     intensity_values = heatmap_source[ys, xs].astype(np.float32) / 255.0 if len(xs) else []
@@ -442,7 +442,7 @@ def analyze_porphyrin_heatmap_v04(
         grade = "High"
 
     region_analysis = normalize_region_scores(region_score)
-    skin_score = calculate_skin_score_from_porphyrin_count(accepted_count)
+    skin_score = calculate_skin_score_from_porphyrin_count(low_count)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     heatmap_path = output_dir / "porphyrin_heatmap.jpg"
@@ -464,8 +464,10 @@ def analyze_porphyrin_heatmap_v04(
     cv2.imwrite(str(face_mask_path), face_mask)
 
     report = {
-        "porphyrin_count": int(accepted_count),
+        "porphyrin_count": int(low_count),
         "porphyrin_area": float(total_area),
+        "strong_porphyrin_count": int(accepted_count),
+        "strong_porphyrin_area": float(np.count_nonzero(clean_mask)),
         "low_candidate_count": int(low_count),
         "low_candidate_area": float(low_total_area),
         "detection_rate_percent": float(detection_rate),
