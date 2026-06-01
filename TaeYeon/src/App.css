@@ -1033,16 +1033,6 @@
           font-weight: 900;
         }
 
-        .compare-summary-brightness {
-          display: flex;
-          justify-content: space-between;
-          gap: 8px;
-          margin-top: 8px;
-          color: rgba(255,255,255,0.7);
-          font-size: 12px;
-          font-weight: 800;
-        }
-
         .compare-chart-section {
           margin-top: 12px;
           padding: 14px;
@@ -1102,10 +1092,6 @@
         .compare-bar-fill.rate,
         .compare-region-fill {
           background: linear-gradient(90deg, #67e8f9, #22d3ee);
-        }
-
-        .compare-bar-fill.brightness {
-          background: linear-gradient(90deg, #fbbf24, #f97316);
         }
 
         .compare-region-grid {

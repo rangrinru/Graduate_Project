@@ -120,8 +120,6 @@ function mapPorphyrinResult(data: Record<string, unknown>): PorphyrinResult {
     porphyrin_count: Number(data.porphyrin_count || 0),
     porphyrin_area: Number(data.porphyrin_area || 0),
     detection_rate_percent: Number(data.detection_rate_percent || 0),
-    porphyrin_mean_brightness: Number(data.porphyrin_mean_brightness || 0),
-    porphyrin_top5_max_brightness: Number(data.porphyrin_top5_max_brightness || 0),
     grade: typeof data.grade === "string" ? data.grade : "-",
     skin_score:
       typeof data.skin_score === "object" && data.skin_score !== null
@@ -218,10 +216,6 @@ function App() {
     return {
       count: Math.max(1, ...compareResults.map((item) => item.porphyrin_count)),
       rate: Math.max(1, ...compareResults.map((item) => item.detection_rate_percent)),
-      brightness: Math.max(
-        1,
-        ...compareResults.map((item) => item.porphyrin_top5_max_brightness)
-      ),
     };
   }, [compareResults]);
 
@@ -886,31 +880,55 @@ function App() {
       setIsLoadingCompare(true);
 
       const encodedProfileId = encodeURIComponent(selectedProfile.folderId);
-      const reports = await Promise.all(
-        selectedCompareIds.map(async (captureId) => {
-          const encodedCaptureId = encodeURIComponent(captureId);
-          const res = await fetch(
-            `${API_BASE}/profiles/${encodedProfileId}/history/${encodedCaptureId}/analysis/porphyrin-report`
+      const reports: PorphyrinCompareItem[] = [];
+      let analyzedMissingResult = false;
+
+      for (const captureId of selectedCompareIds) {
+        const encodedCaptureId = encodeURIComponent(captureId);
+        const historyItem = historyItems.find((history) => history.captureId === captureId);
+        const reportUrl =
+          `${API_BASE}/profiles/${encodedProfileId}/history/${encodedCaptureId}/analysis/porphyrin-report`;
+
+        let res = await fetch(reportUrl);
+        let data = await res.json();
+
+        if (!data.ok) {
+          analyzedMissingResult = true;
+          showToast(
+            `${historyItem?.displayTime || "선택한 기록"} 포르피린 분석 중...`,
+            "info"
           );
-          const data = await res.json();
+
+          res = await fetch(
+            `${API_BASE}/profiles/${encodedProfileId}/history/${encodedCaptureId}/analyze-porphyrin`,
+            {
+              method: "POST",
+            }
+          );
+          data = await res.json();
 
           if (!data.ok) {
-            const item = historyItems.find((history) => history.captureId === captureId);
-            throw new Error(`${item?.displayTime || captureId}: ${data.error || "분석 결과 없음"}`);
+            throw new Error(
+              `${historyItem?.displayTime || captureId}: ${data.error || "포르피린 분석 실패"}`
+            );
           }
+        }
 
-          const historyItem = historyItems.find((history) => history.captureId === captureId);
-          return {
-            ...mapPorphyrinResult(data),
-            captureId,
-            displayTime: historyItem?.displayTime || captureId,
-          };
-        })
-      );
+        reports.push({
+          ...mapPorphyrinResult(data),
+          captureId,
+          displayTime: historyItem?.displayTime || captureId,
+        });
+      }
 
       setCompareResults(reports);
       setScreen("historyCompare");
-      showToast("비교 결과를 불러왔습니다.", "success");
+      showToast(
+        analyzedMissingResult
+          ? "분석 후 비교 결과를 불러왔습니다."
+          : "비교 결과를 불러왔습니다.",
+        "success"
+      );
     } catch (error) {
       console.error(error);
       showToast(
@@ -1611,10 +1629,6 @@ function App() {
                             <span>{item.porphyrin_count.toLocaleString()}개</span>
                             <span>{item.detection_rate_percent.toFixed(2)}%</span>
                           </div>
-                          <div className="compare-summary-brightness">
-                            최대 {item.porphyrin_top5_max_brightness.toFixed(0)}
-                            <span>평균 {item.porphyrin_mean_brightness.toFixed(1)}</span>
-                          </div>
                         </div>
                       ))}
                     </div>
@@ -1663,31 +1677,6 @@ function App() {
                             </div>
                             <div className="compare-bar-value">
                               {item.detection_rate_percent.toFixed(2)}%
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="compare-chart-section">
-                      <div className="compare-section-title">포르피린 최대 밝기</div>
-                      <div className="compare-bars">
-                        {compareResults.map((item) => (
-                          <div className="compare-bar-row" key={`brightness-${item.captureId}`}>
-                            <div className="compare-bar-label">{item.displayTime}</div>
-                            <div className="compare-bar-track">
-                              <div
-                                className="compare-bar-fill brightness"
-                                style={{
-                                  width: `${Math.max(
-                                    4,
-                                    (item.porphyrin_top5_max_brightness / compareChartMax.brightness) * 100
-                                  )}%`,
-                                }}
-                              ></div>
-                            </div>
-                            <div className="compare-bar-value">
-                              {item.porphyrin_top5_max_brightness.toFixed(0)}
                             </div>
                           </div>
                         ))}
@@ -1907,18 +1896,6 @@ function App() {
                               <div className="analysis-stat-label">포르피린 분포 비율</div>
                               <div className="analysis-stat-value">
                                 {porphyrinResult.detection_rate_percent.toFixed(2)}%
-                              </div>
-                            </div>
-                            <div className="analysis-stat-card analysis-stat-primary">
-                              <div className="analysis-stat-label">포르피린 최대 밝기</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.porphyrin_top5_max_brightness.toFixed(0)}
-                              </div>
-                            </div>
-                            <div className="analysis-stat-card analysis-stat-primary">
-                              <div className="analysis-stat-label">포르피린 평균 밝기</div>
-                              <div className="analysis-stat-value">
-                                {porphyrinResult.porphyrin_mean_brightness.toFixed(1)}
                               </div>
                             </div>
                           </div>
