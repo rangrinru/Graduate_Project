@@ -15,16 +15,23 @@ LOW_LOCAL_CONTRAST_THRESHOLD = 3
 LOW_STRONG_ABSOLUTE_THRESHOLD = 80
 MIN_COMPONENT_AREA = 2
 TOP_BRIGHT_PERCENT = 5.0
-RISK_SCORE_MEAN = 326.71636363636367
-RISK_SCORE_STD = 186.04406971920915
-RISK_PORPHYRIN_COUNT_WEIGHT = 0.5
-RISK_MEAN_WEIGHT = 0.3
-RISK_TOP5_MAX_WEIGHT = 0.2
+RISK_SCORE_MEAN = 50.0
+RISK_SCORE_STD = 25.0
+RISK_Z_RANGE = 2.0
+RISK_PORPHYRIN_COUNT_MEAN = 578.8636363636364
+RISK_PORPHYRIN_COUNT_STD = 360.73123909567926
+RISK_MEAN_BRIGHTNESS_MEAN = 60.91818181818182
+RISK_MEAN_BRIGHTNESS_STD = 11.652024262826076
+RISK_TOP5_MAX_BRIGHTNESS_MEAN = 95.04545454545455
+RISK_TOP5_MAX_BRIGHTNESS_STD = 26.06892485269016
+RISK_PORPHYRIN_COUNT_MAX_SCORE = 60.0
+RISK_MEAN_BRIGHTNESS_MAX_SCORE = 30.0
+RISK_TOP5_MAX_BRIGHTNESS_MAX_SCORE = 10.0
 RISK_SCORE_BOUNDARIES = {
-    "a_max": round(RISK_SCORE_MEAN - RISK_SCORE_STD, 1),
-    "b_max": round(RISK_SCORE_MEAN - (RISK_SCORE_STD * 0.5), 1),
-    "c_max": round(RISK_SCORE_MEAN + (RISK_SCORE_STD * 0.5), 1),
-    "d_max": round(RISK_SCORE_MEAN + RISK_SCORE_STD, 1),
+    "a_max": 20.0,
+    "b_max": 40.0,
+    "c_max": 60.0,
+    "d_max": 80.0,
 }
 
 
@@ -32,15 +39,46 @@ def clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
 
+def clamp_float(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
+
+
+def calculate_metric_risk_score(value: float, mean: float, std: float, max_score: float) -> float:
+    if std <= 0:
+        return max_score / 2.0
+
+    z_score = (float(value) - mean) / std
+    normalized = (z_score + RISK_Z_RANGE) / (RISK_Z_RANGE * 2.0)
+    return clamp_float(normalized * max_score, 0.0, max_score)
+
+
 def calculate_skin_score_from_risk(
     porphyrin_count: int,
     mean_brightness: float,
     top5_max_brightness: float
 ):
+    porphyrin_count_score = calculate_metric_risk_score(
+        porphyrin_count,
+        RISK_PORPHYRIN_COUNT_MEAN,
+        RISK_PORPHYRIN_COUNT_STD,
+        RISK_PORPHYRIN_COUNT_MAX_SCORE
+    )
+    mean_brightness_score = calculate_metric_risk_score(
+        mean_brightness,
+        RISK_MEAN_BRIGHTNESS_MEAN,
+        RISK_MEAN_BRIGHTNESS_STD,
+        RISK_MEAN_BRIGHTNESS_MAX_SCORE
+    )
+    top5_max_brightness_score = calculate_metric_risk_score(
+        top5_max_brightness,
+        RISK_TOP5_MAX_BRIGHTNESS_MEAN,
+        RISK_TOP5_MAX_BRIGHTNESS_STD,
+        RISK_TOP5_MAX_BRIGHTNESS_MAX_SCORE
+    )
     risk_score = (
-        (float(porphyrin_count) * RISK_PORPHYRIN_COUNT_WEIGHT)
-        + (float(mean_brightness) * RISK_MEAN_WEIGHT)
-        + (float(top5_max_brightness) * RISK_TOP5_MAX_WEIGHT)
+        porphyrin_count_score
+        + mean_brightness_score
+        + top5_max_brightness_score
     )
     z_score = (
         (risk_score - RISK_SCORE_MEAN) / RISK_SCORE_STD
@@ -74,15 +112,24 @@ def calculate_skin_score_from_risk(
         "grade": grade,
         "label": label,
         "level": level,
-        "basis": "count_brightness_risk_score",
+        "basis": "standardized_metric_risk_score",
         "risk_score": float(risk_score),
         "risk_z_score": float(z_score),
         "risk_score_mean": RISK_SCORE_MEAN,
         "risk_score_std": RISK_SCORE_STD,
         "risk_score_boundaries": RISK_SCORE_BOUNDARIES,
-        "porphyrin_count_weight": RISK_PORPHYRIN_COUNT_WEIGHT,
-        "mean_brightness_weight": RISK_MEAN_WEIGHT,
-        "top5_max_brightness_weight": RISK_TOP5_MAX_WEIGHT,
+        "porphyrin_count_score": float(porphyrin_count_score),
+        "mean_brightness_score": float(mean_brightness_score),
+        "top5_max_brightness_score": float(top5_max_brightness_score),
+        "porphyrin_count_max_score": RISK_PORPHYRIN_COUNT_MAX_SCORE,
+        "mean_brightness_max_score": RISK_MEAN_BRIGHTNESS_MAX_SCORE,
+        "top5_max_brightness_max_score": RISK_TOP5_MAX_BRIGHTNESS_MAX_SCORE,
+        "porphyrin_count_mean": RISK_PORPHYRIN_COUNT_MEAN,
+        "porphyrin_count_std": RISK_PORPHYRIN_COUNT_STD,
+        "mean_brightness_mean": RISK_MEAN_BRIGHTNESS_MEAN,
+        "mean_brightness_std": RISK_MEAN_BRIGHTNESS_STD,
+        "top5_max_brightness_mean": RISK_TOP5_MAX_BRIGHTNESS_MEAN,
+        "top5_max_brightness_std": RISK_TOP5_MAX_BRIGHTNESS_STD,
         "porphyrin_count": int(porphyrin_count),
         "porphyrin_mean_brightness": float(mean_brightness),
         "porphyrin_top5_max_brightness": float(top5_max_brightness),

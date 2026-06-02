@@ -53,16 +53,23 @@ const PORPHYRIN_REGION_ORDER = [
   "philtrum",
 ];
 
-const PORPHYRIN_RISK_SCORE_MEAN = 326.71636363636367;
-const PORPHYRIN_RISK_SCORE_STD = 186.04406971920915;
-const PORPHYRIN_RISK_COUNT_WEIGHT = 0.5;
-const PORPHYRIN_RISK_MEAN_WEIGHT = 0.3;
-const PORPHYRIN_RISK_TOP5_WEIGHT = 0.2;
+const PORPHYRIN_RISK_SCORE_MEAN = 50.0;
+const PORPHYRIN_RISK_SCORE_STD = 25.0;
+const PORPHYRIN_RISK_Z_RANGE = 2.0;
+const PORPHYRIN_RISK_COUNT_MEAN = 578.8636363636364;
+const PORPHYRIN_RISK_COUNT_STD = 360.73123909567926;
+const PORPHYRIN_RISK_MEAN_BRIGHTNESS_MEAN = 60.91818181818182;
+const PORPHYRIN_RISK_MEAN_BRIGHTNESS_STD = 11.652024262826076;
+const PORPHYRIN_RISK_TOP5_MAX_MEAN = 95.04545454545455;
+const PORPHYRIN_RISK_TOP5_MAX_STD = 26.06892485269016;
+const PORPHYRIN_RISK_COUNT_MAX_SCORE = 60.0;
+const PORPHYRIN_RISK_MEAN_BRIGHTNESS_MAX_SCORE = 30.0;
+const PORPHYRIN_RISK_TOP5_MAX_SCORE = 10.0;
 const PORPHYRIN_RISK_SCORE_BOUNDARIES = {
-  a_max: Number((PORPHYRIN_RISK_SCORE_MEAN - PORPHYRIN_RISK_SCORE_STD).toFixed(1)),
-  b_max: Number((PORPHYRIN_RISK_SCORE_MEAN - PORPHYRIN_RISK_SCORE_STD * 0.5).toFixed(1)),
-  c_max: Number((PORPHYRIN_RISK_SCORE_MEAN + PORPHYRIN_RISK_SCORE_STD * 0.5).toFixed(1)),
-  d_max: Number((PORPHYRIN_RISK_SCORE_MEAN + PORPHYRIN_RISK_SCORE_STD).toFixed(1)),
+  a_max: 20.0,
+  b_max: 40.0,
+  c_max: 60.0,
+  d_max: 80.0,
 };
 
 const PORPHYRIN_GRADE_LABELS: Record<string, string> = {
@@ -124,15 +131,44 @@ function isPorphyrinGrade(value: string) {
   return Object.prototype.hasOwnProperty.call(PORPHYRIN_GRADE_LABELS, value);
 }
 
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getMetricRiskScore(value: number, mean: number, std: number, maxScore: number) {
+  if (std <= 0) {
+    return maxScore / 2;
+  }
+
+  const zScore = (Number(value || 0) - mean) / std;
+  const normalized = (zScore + PORPHYRIN_RISK_Z_RANGE) / (PORPHYRIN_RISK_Z_RANGE * 2);
+  return clampNumber(normalized * maxScore, 0, maxScore);
+}
+
 function getPorphyrinRiskScore(
   porphyrinCount: number,
   meanBrightness: number,
   top5MaxBrightness: number
 ) {
   return (
-    Number(porphyrinCount || 0) * PORPHYRIN_RISK_COUNT_WEIGHT
-    + Number(meanBrightness || 0) * PORPHYRIN_RISK_MEAN_WEIGHT
-    + Number(top5MaxBrightness || 0) * PORPHYRIN_RISK_TOP5_WEIGHT
+    getMetricRiskScore(
+      porphyrinCount,
+      PORPHYRIN_RISK_COUNT_MEAN,
+      PORPHYRIN_RISK_COUNT_STD,
+      PORPHYRIN_RISK_COUNT_MAX_SCORE
+    )
+    + getMetricRiskScore(
+      meanBrightness,
+      PORPHYRIN_RISK_MEAN_BRIGHTNESS_MEAN,
+      PORPHYRIN_RISK_MEAN_BRIGHTNESS_STD,
+      PORPHYRIN_RISK_MEAN_BRIGHTNESS_MAX_SCORE
+    )
+    + getMetricRiskScore(
+      top5MaxBrightness,
+      PORPHYRIN_RISK_TOP5_MAX_MEAN,
+      PORPHYRIN_RISK_TOP5_MAX_STD,
+      PORPHYRIN_RISK_TOP5_MAX_SCORE
+    )
   );
 }
 
@@ -145,11 +181,11 @@ function getPorphyrinRiskGrade(riskScore: number) {
 }
 
 function getPorphyrinRiskComment(grade: string) {
-  if (grade === "A") return "평균보다 매우 낮은 포르피린 반응입니다.";
-  if (grade === "B") return "평균보다 낮은 포르피린 반응입니다.";
-  if (grade === "C") return "평균 근처의 포르피린 반응입니다.";
-  if (grade === "D") return "평균보다 높은 포르피린 반응입니다.";
-  return "평균보다 매우 높은 포르피린 반응입니다.";
+  if (grade === "A") return "위험점수가 낮은 구간입니다.";
+  if (grade === "B") return "위험점수가 비교적 낮은 구간입니다.";
+  if (grade === "C") return "위험점수가 보통 구간입니다.";
+  if (grade === "D") return "위험점수가 높은 구간입니다.";
+  return "위험점수가 매우 높은 구간입니다.";
 }
 
 function getPorphyrinRiskReview(result: PorphyrinResult) {
@@ -208,7 +244,7 @@ function mapPorphyrinResult(data: Record<string, unknown>): PorphyrinResult {
     top5MaxBrightness
   );
   const apiRiskScore = Number(data.risk_score);
-  const usesCurrentRiskBasis = skinScore.basis === "count_brightness_risk_score";
+  const usesCurrentRiskBasis = skinScore.basis === "standardized_metric_risk_score";
   const apiRiskScoreMean = Number(data.risk_score_mean);
   const apiRiskScoreStd = Number(data.risk_score_std);
   const usesCurrentRiskScale =
@@ -250,7 +286,7 @@ function mapPorphyrinResult(data: Record<string, unknown>): PorphyrinResult {
       grade,
       label: PORPHYRIN_GRADE_LABELS[grade] || "분석 필요",
       level: PORPHYRIN_GRADE_LEVELS[grade] || 0,
-      basis: "count_brightness_risk_score",
+      basis: "standardized_metric_risk_score",
       porphyrin_count: porphyrinCount || Number(skinScore.porphyrin_count || 0),
       reference_bad_count: Number(skinScore.reference_bad_count || 0),
       risk_score: riskScore,
