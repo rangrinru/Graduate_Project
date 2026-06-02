@@ -53,10 +53,11 @@ const PORPHYRIN_REGION_ORDER = [
   "philtrum",
 ];
 
-const PORPHYRIN_RISK_SCORE_MEAN = 71.16;
-const PORPHYRIN_RISK_SCORE_STD = 15.44;
-const PORPHYRIN_RISK_MEAN_WEIGHT = 0.7;
-const PORPHYRIN_RISK_TOP5_WEIGHT = 0.3;
+const PORPHYRIN_RISK_SCORE_MEAN = 326.71636363636367;
+const PORPHYRIN_RISK_SCORE_STD = 186.04406971920915;
+const PORPHYRIN_RISK_COUNT_WEIGHT = 0.5;
+const PORPHYRIN_RISK_MEAN_WEIGHT = 0.3;
+const PORPHYRIN_RISK_TOP5_WEIGHT = 0.2;
 const PORPHYRIN_RISK_SCORE_BOUNDARIES = {
   a_max: Number((PORPHYRIN_RISK_SCORE_MEAN - PORPHYRIN_RISK_SCORE_STD).toFixed(1)),
   b_max: Number((PORPHYRIN_RISK_SCORE_MEAN - PORPHYRIN_RISK_SCORE_STD * 0.5).toFixed(1)),
@@ -123,9 +124,14 @@ function isPorphyrinGrade(value: string) {
   return Object.prototype.hasOwnProperty.call(PORPHYRIN_GRADE_LABELS, value);
 }
 
-function getPorphyrinRiskScore(meanBrightness: number, top5MaxBrightness: number) {
+function getPorphyrinRiskScore(
+  porphyrinCount: number,
+  meanBrightness: number,
+  top5MaxBrightness: number
+) {
   return (
-    Number(meanBrightness || 0) * PORPHYRIN_RISK_MEAN_WEIGHT
+    Number(porphyrinCount || 0) * PORPHYRIN_RISK_COUNT_WEIGHT
+    + Number(meanBrightness || 0) * PORPHYRIN_RISK_MEAN_WEIGHT
     + Number(top5MaxBrightness || 0) * PORPHYRIN_RISK_TOP5_WEIGHT
   );
 }
@@ -191,41 +197,51 @@ function mapAutoCaptureStatus(
 function mapPorphyrinResult(data: Record<string, unknown>): PorphyrinResult {
   const meanBrightness = Number(data.porphyrin_mean_brightness || 0);
   const top5MaxBrightness = Number(data.porphyrin_top5_max_brightness || 0);
-  const fallbackRiskScore = getPorphyrinRiskScore(meanBrightness, top5MaxBrightness);
-  const apiRiskScore = Number(data.risk_score);
-  const riskScore = Number.isFinite(apiRiskScore) && apiRiskScore > 0
-    ? apiRiskScore
-    : fallbackRiskScore;
-  const apiRiskZScore = Number(data.risk_z_score);
-  const riskZScore = Number.isFinite(apiRiskZScore)
-    ? apiRiskZScore
-    : (riskScore - PORPHYRIN_RISK_SCORE_MEAN) / PORPHYRIN_RISK_SCORE_STD;
-  const apiGrade = typeof data.grade === "string" ? data.grade : "";
-  const grade = isPorphyrinGrade(apiGrade) ? apiGrade : getPorphyrinRiskGrade(riskScore);
+  const porphyrinCount = Number(data.porphyrin_count || 0);
   const skinScore =
     typeof data.skin_score === "object" && data.skin_score !== null
       ? data.skin_score as Partial<PorphyrinResult["skin_score"]>
       : {};
-  const riskScoreBoundaries =
-    typeof data.risk_score_boundaries === "object" && data.risk_score_boundaries !== null
-      ? data.risk_score_boundaries as Partial<PorphyrinResult["risk_score_boundaries"]>
-      : {};
+  const fallbackRiskScore = getPorphyrinRiskScore(
+    porphyrinCount,
+    meanBrightness,
+    top5MaxBrightness
+  );
+  const apiRiskScore = Number(data.risk_score);
+  const usesCurrentRiskBasis = skinScore.basis === "count_brightness_risk_score";
+  const apiRiskScoreMean = Number(data.risk_score_mean);
+  const apiRiskScoreStd = Number(data.risk_score_std);
+  const usesCurrentRiskScale =
+    usesCurrentRiskBasis
+    && Math.abs(apiRiskScoreMean - PORPHYRIN_RISK_SCORE_MEAN) < 0.01
+    && Math.abs(apiRiskScoreStd - PORPHYRIN_RISK_SCORE_STD) < 0.01;
+  const riskScore = usesCurrentRiskBasis && Number.isFinite(apiRiskScore) && apiRiskScore > 0
+    ? apiRiskScore
+    : fallbackRiskScore;
+  const apiRiskZScore = Number(data.risk_z_score);
+  const riskZScore = usesCurrentRiskScale && Number.isFinite(apiRiskZScore)
+    ? apiRiskZScore
+    : (riskScore - PORPHYRIN_RISK_SCORE_MEAN) / PORPHYRIN_RISK_SCORE_STD;
+  const apiGrade = typeof data.grade === "string" ? data.grade : "";
+  const grade = usesCurrentRiskScale && isPorphyrinGrade(apiGrade)
+    ? apiGrade
+    : getPorphyrinRiskGrade(riskScore);
 
   return {
-    porphyrin_count: Number(data.porphyrin_count || 0),
+    porphyrin_count: porphyrinCount,
     porphyrin_area: Number(data.porphyrin_area || 0),
     detection_rate_percent: Number(data.detection_rate_percent || 0),
     porphyrin_mean_brightness: meanBrightness,
     porphyrin_top5_max_brightness: top5MaxBrightness,
     risk_score: riskScore,
     risk_z_score: riskZScore,
-    risk_score_mean: Number(data.risk_score_mean || PORPHYRIN_RISK_SCORE_MEAN),
-    risk_score_std: Number(data.risk_score_std || PORPHYRIN_RISK_SCORE_STD),
+    risk_score_mean: PORPHYRIN_RISK_SCORE_MEAN,
+    risk_score_std: PORPHYRIN_RISK_SCORE_STD,
     risk_score_boundaries: {
-      a_max: Number(riskScoreBoundaries.a_max || PORPHYRIN_RISK_SCORE_BOUNDARIES.a_max),
-      b_max: Number(riskScoreBoundaries.b_max || PORPHYRIN_RISK_SCORE_BOUNDARIES.b_max),
-      c_max: Number(riskScoreBoundaries.c_max || PORPHYRIN_RISK_SCORE_BOUNDARIES.c_max),
-      d_max: Number(riskScoreBoundaries.d_max || PORPHYRIN_RISK_SCORE_BOUNDARIES.d_max),
+      a_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.a_max,
+      b_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.b_max,
+      c_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.c_max,
+      d_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.d_max,
     },
     grade,
     skin_score: {
@@ -234,18 +250,18 @@ function mapPorphyrinResult(data: Record<string, unknown>): PorphyrinResult {
       grade,
       label: PORPHYRIN_GRADE_LABELS[grade] || "분석 필요",
       level: PORPHYRIN_GRADE_LEVELS[grade] || 0,
-      basis: "brightness_risk_score",
-      porphyrin_count: Number(data.porphyrin_count || skinScore.porphyrin_count || 0),
+      basis: "count_brightness_risk_score",
+      porphyrin_count: porphyrinCount || Number(skinScore.porphyrin_count || 0),
       reference_bad_count: Number(skinScore.reference_bad_count || 0),
       risk_score: riskScore,
       risk_z_score: riskZScore,
-      risk_score_mean: Number(data.risk_score_mean || PORPHYRIN_RISK_SCORE_MEAN),
-      risk_score_std: Number(data.risk_score_std || PORPHYRIN_RISK_SCORE_STD),
+      risk_score_mean: PORPHYRIN_RISK_SCORE_MEAN,
+      risk_score_std: PORPHYRIN_RISK_SCORE_STD,
       risk_score_boundaries: {
-        a_max: Number(riskScoreBoundaries.a_max || PORPHYRIN_RISK_SCORE_BOUNDARIES.a_max),
-        b_max: Number(riskScoreBoundaries.b_max || PORPHYRIN_RISK_SCORE_BOUNDARIES.b_max),
-        c_max: Number(riskScoreBoundaries.c_max || PORPHYRIN_RISK_SCORE_BOUNDARIES.c_max),
-        d_max: Number(riskScoreBoundaries.d_max || PORPHYRIN_RISK_SCORE_BOUNDARIES.d_max),
+        a_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.a_max,
+        b_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.b_max,
+        c_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.c_max,
+        d_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.d_max,
       },
     },
     region_analysis:

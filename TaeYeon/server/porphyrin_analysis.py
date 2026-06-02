@@ -15,10 +15,11 @@ LOW_LOCAL_CONTRAST_THRESHOLD = 3
 LOW_STRONG_ABSOLUTE_THRESHOLD = 80
 MIN_COMPONENT_AREA = 2
 TOP_BRIGHT_PERCENT = 5.0
-RISK_SCORE_MEAN = 71.16
-RISK_SCORE_STD = 15.44
-RISK_MEAN_WEIGHT = 0.7
-RISK_TOP5_MAX_WEIGHT = 0.3
+RISK_SCORE_MEAN = 326.71636363636367
+RISK_SCORE_STD = 186.04406971920915
+RISK_PORPHYRIN_COUNT_WEIGHT = 0.5
+RISK_MEAN_WEIGHT = 0.3
+RISK_TOP5_MAX_WEIGHT = 0.2
 RISK_SCORE_BOUNDARIES = {
     "a_max": round(RISK_SCORE_MEAN - RISK_SCORE_STD, 1),
     "b_max": round(RISK_SCORE_MEAN - (RISK_SCORE_STD * 0.5), 1),
@@ -31,9 +32,14 @@ def clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
 
-def calculate_skin_score_from_brightness(mean_brightness: float, top5_max_brightness: float):
+def calculate_skin_score_from_risk(
+    porphyrin_count: int,
+    mean_brightness: float,
+    top5_max_brightness: float
+):
     risk_score = (
-        (float(mean_brightness) * RISK_MEAN_WEIGHT)
+        (float(porphyrin_count) * RISK_PORPHYRIN_COUNT_WEIGHT)
+        + (float(mean_brightness) * RISK_MEAN_WEIGHT)
         + (float(top5_max_brightness) * RISK_TOP5_MAX_WEIGHT)
     )
     z_score = (
@@ -68,14 +74,16 @@ def calculate_skin_score_from_brightness(mean_brightness: float, top5_max_bright
         "grade": grade,
         "label": label,
         "level": level,
-        "basis": "brightness_risk_score",
+        "basis": "count_brightness_risk_score",
         "risk_score": float(risk_score),
         "risk_z_score": float(z_score),
         "risk_score_mean": RISK_SCORE_MEAN,
         "risk_score_std": RISK_SCORE_STD,
         "risk_score_boundaries": RISK_SCORE_BOUNDARIES,
+        "porphyrin_count_weight": RISK_PORPHYRIN_COUNT_WEIGHT,
         "mean_brightness_weight": RISK_MEAN_WEIGHT,
         "top5_max_brightness_weight": RISK_TOP5_MAX_WEIGHT,
+        "porphyrin_count": int(porphyrin_count),
         "porphyrin_mean_brightness": float(mean_brightness),
         "porphyrin_top5_max_brightness": float(top5_max_brightness),
     }
@@ -484,7 +492,8 @@ def analyze_porphyrin_heatmap_v04(
     brightness_summary = summarize_detected_brightness(blur, low_mask)
 
     region_analysis = normalize_region_scores(region_score)
-    skin_score = calculate_skin_score_from_brightness(
+    skin_score = calculate_skin_score_from_risk(
+        low_count,
         brightness_summary["mean"],
         brightness_summary["top5_max"]
     )
