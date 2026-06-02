@@ -53,6 +53,41 @@ const PORPHYRIN_REGION_ORDER = [
   "philtrum",
 ];
 
+const PORPHYRIN_RISK_SCORE_MEAN = 50.0;
+const PORPHYRIN_RISK_SCORE_STD = 25.0;
+const PORPHYRIN_RISK_Z_RANGE = 2.0;
+const PORPHYRIN_RISK_COUNT_MEAN = 578.8636363636364;
+const PORPHYRIN_RISK_COUNT_STD = 360.73123909567926;
+const PORPHYRIN_RISK_MEAN_BRIGHTNESS_MEAN = 60.91818181818182;
+const PORPHYRIN_RISK_MEAN_BRIGHTNESS_STD = 11.652024262826076;
+const PORPHYRIN_RISK_TOP5_MAX_MEAN = 95.04545454545455;
+const PORPHYRIN_RISK_TOP5_MAX_STD = 26.06892485269016;
+const PORPHYRIN_RISK_COUNT_MAX_SCORE = 60.0;
+const PORPHYRIN_RISK_MEAN_BRIGHTNESS_MAX_SCORE = 30.0;
+const PORPHYRIN_RISK_TOP5_MAX_SCORE = 10.0;
+const PORPHYRIN_RISK_SCORE_BOUNDARIES = {
+  a_max: 20.0,
+  b_max: 40.0,
+  c_max: 60.0,
+  d_max: 80.0,
+};
+
+const PORPHYRIN_GRADE_LABELS: Record<string, string> = {
+  A: "매우 양호",
+  B: "양호",
+  C: "보통",
+  D: "주의",
+  E: "관리 필요",
+};
+
+const PORPHYRIN_GRADE_LEVELS: Record<string, number> = {
+  A: 1,
+  B: 2,
+  C: 3,
+  D: 4,
+  E: 5,
+};
+
 function normalizePercentagesTo100(values: Record<string, number>) {
   const rawValues = PORPHYRIN_REGION_ORDER.map((key) => ({
     key,
@@ -92,6 +127,86 @@ function normalizePercentagesTo100(values: Record<string, number>) {
   return Object.fromEntries(normalized.map((item) => [item.key, item.rounded]));
 }
 
+function isPorphyrinGrade(value: string) {
+  return Object.prototype.hasOwnProperty.call(PORPHYRIN_GRADE_LABELS, value);
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getMetricRiskScore(value: number, mean: number, std: number, maxScore: number) {
+  if (std <= 0) {
+    return maxScore / 2;
+  }
+
+  const zScore = (Number(value || 0) - mean) / std;
+  const normalized = (zScore + PORPHYRIN_RISK_Z_RANGE) / (PORPHYRIN_RISK_Z_RANGE * 2);
+  return clampNumber(normalized * maxScore, 0, maxScore);
+}
+
+function getPorphyrinRiskScore(
+  porphyrinCount: number,
+  meanBrightness: number,
+  top5MaxBrightness: number
+) {
+  return (
+    getMetricRiskScore(
+      porphyrinCount,
+      PORPHYRIN_RISK_COUNT_MEAN,
+      PORPHYRIN_RISK_COUNT_STD,
+      PORPHYRIN_RISK_COUNT_MAX_SCORE
+    )
+    + getMetricRiskScore(
+      meanBrightness,
+      PORPHYRIN_RISK_MEAN_BRIGHTNESS_MEAN,
+      PORPHYRIN_RISK_MEAN_BRIGHTNESS_STD,
+      PORPHYRIN_RISK_MEAN_BRIGHTNESS_MAX_SCORE
+    )
+    + getMetricRiskScore(
+      top5MaxBrightness,
+      PORPHYRIN_RISK_TOP5_MAX_MEAN,
+      PORPHYRIN_RISK_TOP5_MAX_STD,
+      PORPHYRIN_RISK_TOP5_MAX_SCORE
+    )
+  );
+}
+
+function getPorphyrinRiskGrade(riskScore: number) {
+  if (riskScore <= PORPHYRIN_RISK_SCORE_BOUNDARIES.a_max) return "A";
+  if (riskScore <= PORPHYRIN_RISK_SCORE_BOUNDARIES.b_max) return "B";
+  if (riskScore <= PORPHYRIN_RISK_SCORE_BOUNDARIES.c_max) return "C";
+  if (riskScore <= PORPHYRIN_RISK_SCORE_BOUNDARIES.d_max) return "D";
+  return "E";
+}
+
+function getPorphyrinRiskComment(grade: string) {
+  if (grade === "A") return "위험점수가 낮은 구간입니다.";
+  if (grade === "B") return "위험점수가 비교적 낮은 구간입니다.";
+  if (grade === "C") return "위험점수가 보통 구간입니다.";
+  if (grade === "D") return "위험점수가 높은 구간입니다.";
+  return "위험점수가 매우 높은 구간입니다.";
+}
+
+function getPorphyrinRiskReview(result: PorphyrinResult) {
+  const riskScore = Number(result.risk_score || 0);
+  const zScore =
+    Number(result.risk_z_score || 0)
+    || ((riskScore - PORPHYRIN_RISK_SCORE_MEAN) / PORPHYRIN_RISK_SCORE_STD);
+  const grade = isPorphyrinGrade(result.grade)
+    ? result.grade
+    : getPorphyrinRiskGrade(riskScore);
+
+  return {
+    level: PORPHYRIN_GRADE_LEVELS[grade] || 0,
+    grade,
+    status: PORPHYRIN_GRADE_LABELS[grade] || "분석 필요",
+    comment: getPorphyrinRiskComment(grade),
+    riskScore,
+    zScore,
+  };
+}
+
 function mapAutoCaptureStatus(
   data: Record<string, unknown>,
   fallbackStatus: string
@@ -116,22 +231,75 @@ function mapAutoCaptureStatus(
 }
 
 function mapPorphyrinResult(data: Record<string, unknown>): PorphyrinResult {
+  const meanBrightness = Number(data.porphyrin_mean_brightness || 0);
+  const top5MaxBrightness = Number(data.porphyrin_top5_max_brightness || 0);
+  const porphyrinCount = Number(data.porphyrin_count || 0);
+  const skinScore =
+    typeof data.skin_score === "object" && data.skin_score !== null
+      ? data.skin_score as Partial<PorphyrinResult["skin_score"]>
+      : {};
+  const fallbackRiskScore = getPorphyrinRiskScore(
+    porphyrinCount,
+    meanBrightness,
+    top5MaxBrightness
+  );
+  const apiRiskScore = Number(data.risk_score);
+  const usesCurrentRiskBasis = skinScore.basis === "standardized_metric_risk_score";
+  const apiRiskScoreMean = Number(data.risk_score_mean);
+  const apiRiskScoreStd = Number(data.risk_score_std);
+  const usesCurrentRiskScale =
+    usesCurrentRiskBasis
+    && Math.abs(apiRiskScoreMean - PORPHYRIN_RISK_SCORE_MEAN) < 0.01
+    && Math.abs(apiRiskScoreStd - PORPHYRIN_RISK_SCORE_STD) < 0.01;
+  const riskScore = usesCurrentRiskBasis && Number.isFinite(apiRiskScore) && apiRiskScore > 0
+    ? apiRiskScore
+    : fallbackRiskScore;
+  const apiRiskZScore = Number(data.risk_z_score);
+  const riskZScore = usesCurrentRiskScale && Number.isFinite(apiRiskZScore)
+    ? apiRiskZScore
+    : (riskScore - PORPHYRIN_RISK_SCORE_MEAN) / PORPHYRIN_RISK_SCORE_STD;
+  const apiGrade = typeof data.grade === "string" ? data.grade : "";
+  const grade = usesCurrentRiskScale && isPorphyrinGrade(apiGrade)
+    ? apiGrade
+    : getPorphyrinRiskGrade(riskScore);
+
   return {
-    porphyrin_count: Number(data.porphyrin_count || 0),
+    porphyrin_count: porphyrinCount,
     porphyrin_area: Number(data.porphyrin_area || 0),
     detection_rate_percent: Number(data.detection_rate_percent || 0),
-    grade: typeof data.grade === "string" ? data.grade : "-",
-    skin_score:
-      typeof data.skin_score === "object" && data.skin_score !== null
-        ? data.skin_score as PorphyrinResult["skin_score"]
-        : {
-            score: 0,
-            grade: "-",
-            label: "분석 필요",
-            basis: "porphyrin_count",
-            porphyrin_count: Number(data.porphyrin_count || 0),
-            reference_bad_count: 80,
-          },
+    porphyrin_mean_brightness: meanBrightness,
+    porphyrin_top5_max_brightness: top5MaxBrightness,
+    risk_score: riskScore,
+    risk_z_score: riskZScore,
+    risk_score_mean: PORPHYRIN_RISK_SCORE_MEAN,
+    risk_score_std: PORPHYRIN_RISK_SCORE_STD,
+    risk_score_boundaries: {
+      a_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.a_max,
+      b_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.b_max,
+      c_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.c_max,
+      d_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.d_max,
+    },
+    grade,
+    skin_score: {
+      ...skinScore,
+      score: riskScore,
+      grade,
+      label: PORPHYRIN_GRADE_LABELS[grade] || "분석 필요",
+      level: PORPHYRIN_GRADE_LEVELS[grade] || 0,
+      basis: "standardized_metric_risk_score",
+      porphyrin_count: porphyrinCount || Number(skinScore.porphyrin_count || 0),
+      reference_bad_count: Number(skinScore.reference_bad_count || 0),
+      risk_score: riskScore,
+      risk_z_score: riskZScore,
+      risk_score_mean: PORPHYRIN_RISK_SCORE_MEAN,
+      risk_score_std: PORPHYRIN_RISK_SCORE_STD,
+      risk_score_boundaries: {
+        a_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.a_max,
+        b_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.b_max,
+        c_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.c_max,
+        d_max: PORPHYRIN_RISK_SCORE_BOUNDARIES.d_max,
+      },
+    },
     region_analysis:
       typeof data.region_analysis === "object" && data.region_analysis !== null
         ? data.region_analysis as Record<string, number>
@@ -225,6 +393,7 @@ function App() {
     const plotHeight = height - padding.top - padding.bottom;
     const maxCount = Math.max(1, ...compareResults.map((item) => item.porphyrin_count));
     const maxRate = Math.max(1, ...compareResults.map((item) => item.detection_rate_percent));
+    const maxRisk = Math.max(1, ...compareResults.map((item) => item.risk_score));
     const lastIndex = Math.max(1, compareResults.length - 1);
 
     const toPoint = (value: number, maxValue: number, index: number) => {
@@ -239,6 +408,9 @@ function App() {
     const ratePoints = compareResults.map((item, index) =>
       toPoint(item.detection_rate_percent, maxRate, index)
     );
+    const riskPoints = compareResults.map((item, index) =>
+      toPoint(item.risk_score, maxRisk, index)
+    );
 
     return {
       width,
@@ -248,12 +420,20 @@ function App() {
       plotHeight,
       maxCount,
       maxRate,
+      maxRisk,
       countPoints,
       ratePoints,
+      riskPoints,
       countPolyline: countPoints.map((point) => `${point.x},${point.y}`).join(" "),
       ratePolyline: ratePoints.map((point) => `${point.x},${point.y}`).join(" "),
+      riskPolyline: riskPoints.map((point) => `${point.x},${point.y}`).join(" "),
     };
   }, [compareResults]);
+
+  const porphyrinRiskReview = useMemo(() => {
+    if (!porphyrinResult) return null;
+    return getPorphyrinRiskReview(porphyrinResult);
+  }, [porphyrinResult]);
 
   const selectedImageLabel = isViewingPorphyrinHeatmap
     ? "Porphyrin_Heatmap"
@@ -1706,8 +1886,8 @@ function App() {
                         <div className="compare-summary-card" key={item.captureId}>
                           <div className="compare-summary-date">{item.displayTime}</div>
                           <div className="compare-summary-values">
-                            <span>{item.porphyrin_count.toLocaleString()}개</span>
-                            <span>{item.detection_rate_percent.toFixed(2)}%</span>
+                            <span>{item.grade}등급</span>
+                            <span>{item.risk_score.toFixed(1)}점</span>
                           </div>
                         </div>
                       ))}
@@ -1719,6 +1899,7 @@ function App() {
                         <div className="compare-line-legend">
                           <span className="count">디텍션 수</span>
                           <span className="rate">분포 비율</span>
+                          <span className="risk">위험점수</span>
                         </div>
                       </div>
 
@@ -1770,10 +1951,15 @@ function App() {
                             className="compare-line rate"
                             points={compareLineChart.ratePolyline}
                           />
+                          <polyline
+                            className="compare-line risk"
+                            points={compareLineChart.riskPolyline}
+                          />
 
                           {compareResults.map((item, index) => {
                             const countPoint = compareLineChart.countPoints[index];
                             const ratePoint = compareLineChart.ratePoints[index];
+                            const riskPoint = compareLineChart.riskPoints[index];
 
                             return (
                               <g key={`line-point-${item.captureId}`}>
@@ -1787,6 +1973,12 @@ function App() {
                                   className="compare-line-dot rate"
                                   cx={ratePoint.x}
                                   cy={ratePoint.y}
+                                  r="5"
+                                />
+                                <circle
+                                  className="compare-line-dot risk"
+                                  cx={riskPoint.x}
+                                  cy={riskPoint.y}
                                   r="5"
                                 />
                                 <text
@@ -1808,6 +2000,7 @@ function App() {
                           <div className="compare-line-value-card" key={`line-value-${item.captureId}`}>
                             <span>{index + 1}. {item.displayTime}</span>
                             <strong>
+                              {item.grade}등급 {item.risk_score.toFixed(1)}점 /{" "}
                               {item.porphyrin_count.toLocaleString()}개 /{" "}
                               {item.detection_rate_percent.toFixed(2)}%
                             </strong>
@@ -2030,6 +2223,17 @@ function App() {
                           선택한 필터의 이미지가 없습니다.
                         </div>
                       )}
+
+                      {isViewingPorphyrinHeatmap && porphyrinRiskReview && (
+                        <div className="porphyrin-review-box">
+                          <div className="porphyrin-review-meta">
+                            {porphyrinRiskReview.grade}등급 · {porphyrinRiskReview.status}
+                          </div>
+                          <div className="porphyrin-review-comment">
+                            위험점수 {porphyrinRiskReview.riskScore.toFixed(1)} · {porphyrinRiskReview.comment}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="analysis-panel">
@@ -2053,6 +2257,18 @@ function App() {
                         <>
                           <div className="analysis-stat-grid">
                             <div className="analysis-stat-card analysis-stat-primary">
+                              <div className="analysis-stat-label">피부 등급</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinRiskReview?.grade || porphyrinResult.grade}
+                              </div>
+                            </div>
+                            <div className="analysis-stat-card analysis-stat-primary">
+                              <div className="analysis-stat-label">위험 점수</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.risk_score.toFixed(1)}
+                              </div>
+                            </div>
+                            <div className="analysis-stat-card analysis-stat-primary">
                               <div className="analysis-stat-label">포르피린 디텍션 수</div>
                               <div className="analysis-stat-value">
                                 {porphyrinResult.porphyrin_count.toLocaleString()}개
@@ -2062,6 +2278,18 @@ function App() {
                               <div className="analysis-stat-label">포르피린 분포 비율</div>
                               <div className="analysis-stat-value">
                                 {porphyrinResult.detection_rate_percent.toFixed(2)}%
+                              </div>
+                            </div>
+                            <div className="analysis-stat-card analysis-stat-primary">
+                              <div className="analysis-stat-label">포르피린 최대 밝기</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_top5_max_brightness.toFixed(0)}
+                              </div>
+                            </div>
+                            <div className="analysis-stat-card analysis-stat-primary">
+                              <div className="analysis-stat-label">포르피린 평균 밝기</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_mean_brightness.toFixed(1)}
                               </div>
                             </div>
                           </div>

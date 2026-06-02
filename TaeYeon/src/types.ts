@@ -51,14 +51,37 @@ export type PorphyrinResult = {
   porphyrin_count: number;
   porphyrin_area: number;
   detection_rate_percent: number;
+  porphyrin_mean_brightness: number;
+  porphyrin_top5_max_brightness: number;
+  risk_score: number;
+  risk_z_score: number;
+  risk_score_mean: number;
+  risk_score_std: number;
+  risk_score_boundaries: {
+    a_max: number;
+    b_max: number;
+    c_max: number;
+    d_max: number;
+  };
   grade: string;
   skin_score: {
     score: number;
     grade: string;
     label: string;
+    level?: number;
     basis: string;
-    porphyrin_count: number;
-    reference_bad_count: number;
+    porphyrin_count?: number;
+    reference_bad_count?: number;
+    risk_score?: number;
+    risk_z_score?: number;
+    risk_score_mean?: number;
+    risk_score_std?: number;
+    risk_score_boundaries?: {
+      a_max: number;
+      b_max: number;
+      c_max: number;
+      d_max: number;
+    };
   };
   region_analysis: Record<string, number>;
   threshold_percentile: number;

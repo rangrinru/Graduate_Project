@@ -1119,6 +1119,10 @@
           background: #22d3ee;
         }
 
+        .compare-line-legend .risk::before {
+          background: #facc15;
+        }
+
         .compare-line-chart {
           width: 100%;
           border: 1px solid rgba(255,255,255,0.08);
@@ -1159,6 +1163,10 @@
           stroke: #22d3ee;
         }
 
+        .compare-line.risk {
+          stroke: #facc15;
+        }
+
         .compare-line-dot {
           stroke: #0f172a;
           stroke-width: 3;
@@ -1170,6 +1178,10 @@
 
         .compare-line-dot.rate {
           fill: #22d3ee;
+        }
+
+        .compare-line-dot.risk {
+          fill: #facc15;
         }
 
         .compare-line-label {
@@ -1278,7 +1290,7 @@
 
         .compare-bar-row {
           display: grid;
-          grid-template-columns: 120px minmax(0, 1fr) 78px;
+          grid-template-columns: 120px minmax(0, 1fr) 96px;
           gap: 10px;
           align-items: center;
         }
@@ -1312,6 +1324,10 @@
 
         .compare-bar-fill.count {
           background: linear-gradient(90deg, #fb7185, #ef4444);
+        }
+
+        .compare-bar-fill.risk {
+          background: linear-gradient(90deg, #facc15, #ef4444);
         }
 
         .compare-bar-fill.rate,
@@ -1458,8 +1474,10 @@
           flex: 1;
           min-height: 0;
           display: flex;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
+          gap: 8px;
           padding: 8px;
         }
 
@@ -1467,6 +1485,8 @@
           width: 100%;
           height: 100%;
           max-height: none;
+          min-height: 0;
+          flex: 1;
           object-fit: contain;
           border-radius: 16px;
           background: #000;
@@ -1475,6 +1495,8 @@
         .porphyrin-comparison-view {
           width: 100%;
           height: 100%;
+          min-height: 0;
+          flex: 1;
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 8px;
@@ -1500,6 +1522,31 @@
         .comparison-image {
           min-height: 0;
           flex: 1;
+        }
+
+        .porphyrin-review-box {
+          width: 100%;
+          flex-shrink: 0;
+          border-radius: 14px;
+          border: 1px solid rgba(255,255,255,0.16);
+          background: rgba(0,0,0,0.42);
+          padding: 12px 14px;
+          text-align: center;
+        }
+
+        .porphyrin-review-meta {
+          color: #fbbf24;
+          font-size: 18px;
+          font-weight: 900;
+          line-height: 1.2;
+        }
+
+        .porphyrin-review-comment {
+          margin-top: 6px;
+          color: #ffffff;
+          font-size: 24px;
+          font-weight: 900;
+          line-height: 1.25;
         }
 
         .history-empty-image {
