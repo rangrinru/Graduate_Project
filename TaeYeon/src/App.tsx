@@ -207,6 +207,20 @@ function getPorphyrinRiskReview(result: PorphyrinResult) {
   };
 }
 
+function formatCompareAxisDate(displayTime: string) {
+  const dateMatch = displayTime.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (dateMatch) {
+    return `${dateMatch[2]}/${dateMatch[3]}`;
+  }
+
+  return displayTime;
+}
+
+function formatCompareAxisLabel(displayTime: string, index: number) {
+  return `${index + 1}. ${formatCompareAxisDate(displayTime)}`;
+}
+
 function mapAutoCaptureStatus(
   data: Record<string, unknown>,
   fallbackStatus: string
@@ -380,24 +394,28 @@ function App() {
     return normalizePercentagesTo100(porphyrinResult.region_analysis);
   }, [porphyrinResult]);
 
+  const orderedCompareResults = useMemo(() => {
+    return [...compareResults].sort((a, b) => a.captureId.localeCompare(b.captureId));
+  }, [compareResults]);
+
   const compareLineChart = useMemo(() => {
     const width = 640;
-    const height = 230;
+    const height = 250;
     const padding = {
       top: 20,
-      right: 28,
-      bottom: 42,
-      left: 52,
+      right: 34,
+      bottom: 54,
+      left: 82,
     };
     const plotWidth = width - padding.left - padding.right;
     const plotHeight = height - padding.top - padding.bottom;
-    const maxCount = Math.max(1, ...compareResults.map((item) => item.porphyrin_count));
+    const maxCount = Math.max(1, ...orderedCompareResults.map((item) => item.porphyrin_count));
     const maxMeanBrightness = Math.max(
       1,
-      ...compareResults.map((item) => item.porphyrin_mean_brightness)
+      ...orderedCompareResults.map((item) => item.porphyrin_mean_brightness)
     );
-    const maxRisk = Math.max(1, ...compareResults.map((item) => item.risk_score));
-    const lastIndex = Math.max(1, compareResults.length - 1);
+    const maxRisk = Math.max(1, ...orderedCompareResults.map((item) => item.risk_score));
+    const lastIndex = Math.max(1, orderedCompareResults.length - 1);
 
     const toPoint = (value: number, maxValue: number, index: number) => {
       const x = padding.left + (plotWidth * index) / lastIndex;
@@ -405,15 +423,19 @@ function App() {
       return { x, y };
     };
 
-    const countPoints = compareResults.map((item, index) =>
+    const countPoints = orderedCompareResults.map((item, index) =>
       toPoint(item.porphyrin_count, maxCount, index)
     );
-    const meanBrightnessPoints = compareResults.map((item, index) =>
+    const meanBrightnessPoints = orderedCompareResults.map((item, index) =>
       toPoint(item.porphyrin_mean_brightness, maxMeanBrightness, index)
     );
-    const riskPoints = compareResults.map((item, index) =>
+    const riskPoints = orderedCompareResults.map((item, index) =>
       toPoint(item.risk_score, maxRisk, index)
     );
+    const yAxisTicks = [1, 0.5, 0].map((ratio) => ({
+      ratio,
+      y: padding.top + plotHeight - plotHeight * ratio,
+    }));
 
     return {
       width,
@@ -427,13 +449,14 @@ function App() {
       countPoints,
       meanBrightnessPoints,
       riskPoints,
+      yAxisTicks,
       countPolyline: countPoints.map((point) => `${point.x},${point.y}`).join(" "),
       meanBrightnessPolyline: meanBrightnessPoints
         .map((point) => `${point.x},${point.y}`)
         .join(" "),
       riskPolyline: riskPoints.map((point) => `${point.x},${point.y}`).join(" "),
     };
-  }, [compareResults]);
+  }, [orderedCompareResults]);
 
   const porphyrinRiskReview = useMemo(() => {
     if (!porphyrinResult) return null;
@@ -1841,7 +1864,7 @@ function App() {
                 <div>
                   <h1 className="header-title">포르피린 비교</h1>
                   <div className="header-subtitle">
-                    선택한 촬영 기록의 포르피린 수치와 부위별 분포를 비교합니다.
+                    선택한 촬영 기록의 디텍션 수, 평균 밝기, 위험점수를 비교합니다.
                   </div>
                 </div>
 
@@ -1887,11 +1910,13 @@ function App() {
                 ) : (
                   <>
                     <div className="compare-summary-grid">
-                      {compareResults.map((item) => (
+                      {orderedCompareResults.map((item, index) => (
                         <div className="compare-summary-card" key={item.captureId}>
-                          <div className="compare-summary-date">{item.displayTime}</div>
+                          <div className="compare-summary-date">
+                            {index + 1}. {item.displayTime}
+                          </div>
                           <div className="compare-summary-values">
-                            <span>{item.grade}등급</span>
+                            <span>{item.grade}</span>
                             <span>{item.risk_score.toFixed(1)}점</span>
                           </div>
                         </div>
@@ -1908,107 +1933,115 @@ function App() {
                         </div>
                       </div>
 
-                      <div className="compare-line-chart" aria-label="포르피린 선그래프">
-                        <svg
-                          viewBox={`0 0 ${compareLineChart.width} ${compareLineChart.height}`}
-                          role="img"
-                          aria-label="선택한 기록의 포르피린 디텍션 수, 평균 밝기, 위험점수 변화"
-                        >
-                          <line
-                            className="compare-axis"
-                            x1={compareLineChart.padding.left}
-                            y1={compareLineChart.padding.top}
-                            x2={compareLineChart.padding.left}
-                            y2={compareLineChart.padding.top + compareLineChart.plotHeight}
-                          />
-                          <line
-                            className="compare-axis"
-                            x1={compareLineChart.padding.left}
-                            y1={compareLineChart.padding.top + compareLineChart.plotHeight}
-                            x2={compareLineChart.padding.left + compareLineChart.plotWidth}
-                            y2={compareLineChart.padding.top + compareLineChart.plotHeight}
-                          />
+                      {[
+                        {
+                          key: "count",
+                          title: "디텍션 수",
+                          max: compareLineChart.maxCount,
+                          points: compareLineChart.countPoints,
+                          polyline: compareLineChart.countPolyline,
+                          formatValue: (value: number) => Math.round(value).toLocaleString(),
+                        },
+                        {
+                          key: "brightness",
+                          title: "평균 밝기",
+                          max: compareLineChart.maxMeanBrightness,
+                          points: compareLineChart.meanBrightnessPoints,
+                          polyline: compareLineChart.meanBrightnessPolyline,
+                          formatValue: (value: number) => value.toFixed(1),
+                        },
+                        {
+                          key: "risk",
+                          title: "위험점수",
+                          max: compareLineChart.maxRisk,
+                          points: compareLineChart.riskPoints,
+                          polyline: compareLineChart.riskPolyline,
+                          formatValue: (value: number) => value.toFixed(1),
+                        },
+                      ].map((chart) => (
+                        <div className="compare-single-chart" key={chart.key}>
+                          <div className="compare-single-title">{chart.title}</div>
+                          <div className="compare-line-chart" aria-label={`${chart.title} 선그래프`}>
+                            <svg
+                              viewBox={`0 0 ${compareLineChart.width} ${compareLineChart.height}`}
+                              role="img"
+                              aria-label={`선택한 기록의 ${chart.title} 변화`}
+                            >
+                              <line
+                                className="compare-axis"
+                                x1={compareLineChart.padding.left}
+                                y1={compareLineChart.padding.top}
+                                x2={compareLineChart.padding.left}
+                                y2={compareLineChart.padding.top + compareLineChart.plotHeight}
+                              />
+                              <line
+                                className="compare-axis"
+                                x1={compareLineChart.padding.left}
+                                y1={compareLineChart.padding.top + compareLineChart.plotHeight}
+                                x2={compareLineChart.padding.left + compareLineChart.plotWidth}
+                                y2={compareLineChart.padding.top + compareLineChart.plotHeight}
+                              />
 
-                          {[0.25, 0.5, 0.75, 1].map((ratio) => (
-                            <line
-                              className="compare-grid-line"
-                              key={ratio}
-                              x1={compareLineChart.padding.left}
-                              y1={
-                                compareLineChart.padding.top +
-                                compareLineChart.plotHeight -
-                                compareLineChart.plotHeight * ratio
-                              }
-                              x2={compareLineChart.padding.left + compareLineChart.plotWidth}
-                              y2={
-                                compareLineChart.padding.top +
-                                compareLineChart.plotHeight -
-                                compareLineChart.plotHeight * ratio
-                              }
-                            />
-                          ))}
+                              {compareLineChart.yAxisTicks.map((tick) => (
+                                <g key={`${chart.key}-${tick.ratio}`}>
+                                  <line
+                                    className="compare-grid-line"
+                                    x1={compareLineChart.padding.left}
+                                    y1={tick.y}
+                                    x2={compareLineChart.padding.left + compareLineChart.plotWidth}
+                                    y2={tick.y}
+                                  />
+                                  <text
+                                    className="compare-y-label"
+                                    x={compareLineChart.padding.left - 12}
+                                    y={tick.y + 7}
+                                    textAnchor="end"
+                                  >
+                                    {chart.formatValue(chart.max * tick.ratio)}
+                                  </text>
+                                </g>
+                              ))}
 
-                          <polyline
-                            className="compare-line count"
-                            points={compareLineChart.countPolyline}
-                          />
-                          <polyline
-                            className="compare-line brightness"
-                            points={compareLineChart.meanBrightnessPolyline}
-                          />
-                          <polyline
-                            className="compare-line risk"
-                            points={compareLineChart.riskPolyline}
-                          />
+                              <polyline
+                                className={`compare-line ${chart.key}`}
+                                points={chart.polyline}
+                              />
 
-                          {compareResults.map((item, index) => {
-                            const countPoint = compareLineChart.countPoints[index];
-                            const meanBrightnessPoint =
-                              compareLineChart.meanBrightnessPoints[index];
-                            const riskPoint = compareLineChart.riskPoints[index];
+                              {orderedCompareResults.map((item, index) => {
+                                const point = chart.points[index];
 
-                            return (
-                              <g key={`line-point-${item.captureId}`}>
-                                <circle
-                                  className="compare-line-dot count"
-                                  cx={countPoint.x}
-                                  cy={countPoint.y}
-                                  r="5"
-                                />
-                                <circle
-                                  className="compare-line-dot brightness"
-                                  cx={meanBrightnessPoint.x}
-                                  cy={meanBrightnessPoint.y}
-                                  r="5"
-                                />
-                                <circle
-                                  className="compare-line-dot risk"
-                                  cx={riskPoint.x}
-                                  cy={riskPoint.y}
-                                  r="5"
-                                />
-                                <text
-                                  className="compare-line-label"
-                                  x={countPoint.x}
-                                  y={compareLineChart.height - 18}
-                                  textAnchor="middle"
-                                >
-                                  {index + 1}
-                                </text>
-                              </g>
-                            );
-                          })}
-                        </svg>
-                      </div>
+                                return (
+                                  <g key={`${chart.key}-line-point-${item.captureId}`}>
+                                    <circle
+                                      className={`compare-line-dot ${chart.key}`}
+                                      cx={point.x}
+                                      cy={point.y}
+                                      r="6"
+                                    />
+                                    <text
+                                      className="compare-line-label"
+                                      x={point.x}
+                                      y={compareLineChart.height - 20}
+                                      textAnchor="middle"
+                                    >
+                                      {formatCompareAxisLabel(item.displayTime, index)}
+                                    </text>
+                                  </g>
+                                );
+                              })}
+                            </svg>
+                          </div>
+                        </div>
+                      ))}
 
                       <div className="compare-line-values">
-                        {compareResults.map((item, index) => (
+                        {orderedCompareResults.map((item, index) => (
                           <div className="compare-line-value-card" key={`line-value-${item.captureId}`}>
                             <span>{index + 1}. {item.displayTime}</span>
                             <strong>
-                              {item.grade}등급 {item.risk_score.toFixed(1)}점 /{" "}
-                              {item.porphyrin_count.toLocaleString()}개 /{" "}
-                              평균 밝기 {item.porphyrin_mean_brightness.toFixed(1)}
+                              <span className="compare-metric-value">{item.grade} {item.risk_score.toFixed(1)}점</span>
+                              <span className="compare-metric-value">{item.porphyrin_count.toLocaleString()}개</span>
+                              <span className="compare-metric-value">평균 밝기 {item.porphyrin_mean_brightness.toFixed(1)}</span>
                             </strong>
                           </div>
                         ))}
@@ -2018,7 +2051,7 @@ function App() {
                     <div className="compare-chart-section">
                       <div className="compare-section-title">백색 LED 매칭 이미지</div>
                       <div className="compare-image-grid">
-                        {compareResults.map((item, index) => (
+                        {orderedCompareResults.map((item, index) => (
                           <div className="compare-image-card" key={`white-${item.captureId}`}>
                             <div className="compare-image-header">
                               <span>{index + 1}. {item.displayTime}</span>
@@ -2120,7 +2153,7 @@ function App() {
                           }`}
                           onClick={() => selectHistoryFilter("no_filter")}
                         >
-                          No_Filter
+                          기본
                         </button>
 
                         <button
@@ -2129,7 +2162,7 @@ function App() {
                           }`}
                           onClick={() => selectHistoryFilter("405nm_filter")}
                         >
-                          405nm_Filter
+                          405nm 필터
                         </button>
 
                         <button
@@ -2138,7 +2171,7 @@ function App() {
                           }`}
                           onClick={() => selectHistoryFilter("660nm_filter")}
                         >
-                          660nm_Filter
+                          660nm 필터
                         </button>
 
                         {porphyrinResult?.heatmap_url && (
@@ -2151,7 +2184,7 @@ function App() {
                               setDetailImageView("porphyrin_heatmap");
                             }}
                           >
-                            Porphyrin
+                            분석 결과
                           </button>
                         )}
                       </div>
