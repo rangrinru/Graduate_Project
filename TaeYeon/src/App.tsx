@@ -207,6 +207,16 @@ function getPorphyrinRiskReview(result: PorphyrinResult) {
   };
 }
 
+function formatCompareAxisDate(displayTime: string) {
+  const dateMatch = displayTime.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (dateMatch) {
+    return `${dateMatch[2]}/${dateMatch[3]}`;
+  }
+
+  return displayTime;
+}
+
 function mapAutoCaptureStatus(
   data: Record<string, unknown>,
   fallbackStatus: string
@@ -1891,7 +1901,7 @@ function App() {
                         <div className="compare-summary-card" key={item.captureId}>
                           <div className="compare-summary-date">{item.displayTime}</div>
                           <div className="compare-summary-values">
-                            <span>{item.grade}등급</span>
+                            <span>{item.grade}</span>
                             <span>{item.risk_score.toFixed(1)}점</span>
                           </div>
                         </div>
@@ -1993,7 +2003,7 @@ function App() {
                                   y={compareLineChart.height - 18}
                                   textAnchor="middle"
                                 >
-                                  {index + 1}
+                                  {formatCompareAxisDate(item.displayTime)}
                                 </text>
                               </g>
                             );
@@ -2006,7 +2016,7 @@ function App() {
                           <div className="compare-line-value-card" key={`line-value-${item.captureId}`}>
                             <span>{index + 1}. {item.displayTime}</span>
                             <strong>
-                              {item.grade}등급 {item.risk_score.toFixed(1)}점 /{" "}
+                              {item.grade} {item.risk_score.toFixed(1)}점 /{" "}
                               {item.porphyrin_count.toLocaleString()}개 /{" "}
                               평균 밝기 {item.porphyrin_mean_brightness.toFixed(1)}
                             </strong>
@@ -2120,7 +2130,7 @@ function App() {
                           }`}
                           onClick={() => selectHistoryFilter("no_filter")}
                         >
-                          No_Filter
+                          기본
                         </button>
 
                         <button
@@ -2129,7 +2139,7 @@ function App() {
                           }`}
                           onClick={() => selectHistoryFilter("405nm_filter")}
                         >
-                          405nm_Filter
+                          405nm 필터
                         </button>
 
                         <button
@@ -2138,7 +2148,7 @@ function App() {
                           }`}
                           onClick={() => selectHistoryFilter("660nm_filter")}
                         >
-                          660nm_Filter
+                          660nm 필터
                         </button>
 
                         {porphyrinResult?.heatmap_url && (
@@ -2151,7 +2161,7 @@ function App() {
                               setDetailImageView("porphyrin_heatmap");
                             }}
                           >
-                            Porphyrin
+                            분석 결과
                           </button>
                         )}
                       </div>
