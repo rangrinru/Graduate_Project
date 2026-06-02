@@ -912,8 +912,8 @@ function App() {
         return prev.filter((id) => id !== captureId);
       }
 
-      if (prev.length >= 5) {
-        showToast("비교는 최대 5개까지 선택할 수 있습니다.", "error");
+      if (prev.length >= 8) {
+        showToast("비교는 최대 8개까지 선택할 수 있습니다.", "error");
         return prev;
       }
 
@@ -1544,7 +1544,7 @@ function App() {
                           >
                             {isLoadingCompare
                               ? "불러오는 중..."
-                              : `비교 보기 ${selectedCompareIds.length}/5`}
+                              : `비교 보기 ${selectedCompareIds.length}/8`}
                           </button>
                         </>
                       ) : (
