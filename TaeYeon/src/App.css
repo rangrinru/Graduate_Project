@@ -1137,6 +1137,17 @@
           min-height: 230px;
         }
 
+        .compare-single-chart {
+          margin-top: 18px;
+        }
+
+        .compare-single-title {
+          color: white;
+          font-size: 24px;
+          font-weight: 900;
+          margin-bottom: 10px;
+        }
+
         .compare-axis {
           stroke: rgba(255,255,255,0.34);
           stroke-width: 2;
@@ -1189,6 +1200,12 @@
           font-weight: 900;
         }
 
+        .compare-y-label {
+          fill: rgba(255,255,255,0.72);
+          font-size: 14px;
+          font-weight: 900;
+        }
+
         .compare-line-values {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -1218,6 +1235,10 @@
           color: white;
           font-size: 14px;
           font-weight: 900;
+        }
+
+        .compare-metric-value {
+          display: block;
         }
 
         .compare-image-grid {
@@ -2065,7 +2086,7 @@
         }
 
         .compare-line-chart svg {
-          min-height: 330px;
+          min-height: 300px;
         }
 
         .compare-line {
@@ -2077,8 +2098,12 @@
         }
 
         .compare-line-label {
-          font-size: 22px;
+          font-size: 18px;
           fill: #bae6fd;
+        }
+
+        .compare-y-label {
+          font-size: 18px;
         }
 
         .compare-line-values {
@@ -2088,7 +2113,7 @@
         }
 
         .compare-line-value-card {
-          min-height: 96px;
+          min-height: 128px;
           padding: 18px;
           border-radius: 18px;
         }
@@ -2101,6 +2126,16 @@
         .compare-line-value-card strong {
           font-size: 24px;
           line-height: 1.25;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          white-space: normal;
+          overflow-wrap: anywhere;
+          word-break: keep-all;
+        }
+
+        .compare-metric-value {
+          display: block;
         }
 
         .compare-image-grid {
@@ -2169,6 +2204,21 @@
           font-size: 22px;
           min-height: 72px;
           padding: 18px 24px;
+        }
+
+        .history-detail-container > .mini-back-btn,
+        .history-compare-container > .mini-back-btn {
+          min-width: 300px;
+          min-height: 88px;
+          padding: 24px 32px;
+          border-radius: 28px;
+          font-size: 26px;
+          font-weight: 900;
+          margin-top: 0;
+          margin-bottom: 14px;
+          align-self: flex-start;
+          position: relative;
+          z-index: 80;
         }
 
         .porphyrin-comparison-label {
