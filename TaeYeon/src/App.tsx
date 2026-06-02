@@ -921,6 +921,18 @@ function App() {
     });
   };
 
+  const selectLatestCompareRecords = () => {
+    const latestIds = historyItems.slice(0, 8).map((item) => item.captureId);
+
+    if (latestIds.length < 2) {
+      showToast("비교할 기록이 2개 이상 필요합니다.", "error");
+      return;
+    }
+
+    setSelectedCompareIds(latestIds);
+    showToast(`최근 ${latestIds.length}개 기록을 선택했습니다.`, "success");
+  };
+
   const openHistoryCompare = async () => {
     if (!selectedProfile) {
       showToast("프로필을 먼저 선택하세요.", "error");
@@ -1535,6 +1547,14 @@ function App() {
                             disabled={isLoadingCompare}
                           >
                             취소
+                          </button>
+                          <button
+                            className="compare-secondary-btn"
+                            type="button"
+                            onClick={selectLatestCompareRecords}
+                            disabled={isLoadingCompare || historyItems.length < 2}
+                          >
+                            최근 8개 기록 선택하기
                           </button>
                           <button
                             className="compare-primary-btn"
