@@ -392,7 +392,10 @@ function App() {
     const plotWidth = width - padding.left - padding.right;
     const plotHeight = height - padding.top - padding.bottom;
     const maxCount = Math.max(1, ...compareResults.map((item) => item.porphyrin_count));
-    const maxRate = Math.max(1, ...compareResults.map((item) => item.detection_rate_percent));
+    const maxMeanBrightness = Math.max(
+      1,
+      ...compareResults.map((item) => item.porphyrin_mean_brightness)
+    );
     const maxRisk = Math.max(1, ...compareResults.map((item) => item.risk_score));
     const lastIndex = Math.max(1, compareResults.length - 1);
 
@@ -405,8 +408,8 @@ function App() {
     const countPoints = compareResults.map((item, index) =>
       toPoint(item.porphyrin_count, maxCount, index)
     );
-    const ratePoints = compareResults.map((item, index) =>
-      toPoint(item.detection_rate_percent, maxRate, index)
+    const meanBrightnessPoints = compareResults.map((item, index) =>
+      toPoint(item.porphyrin_mean_brightness, maxMeanBrightness, index)
     );
     const riskPoints = compareResults.map((item, index) =>
       toPoint(item.risk_score, maxRisk, index)
@@ -419,13 +422,15 @@ function App() {
       plotWidth,
       plotHeight,
       maxCount,
-      maxRate,
+      maxMeanBrightness,
       maxRisk,
       countPoints,
-      ratePoints,
+      meanBrightnessPoints,
       riskPoints,
       countPolyline: countPoints.map((point) => `${point.x},${point.y}`).join(" "),
-      ratePolyline: ratePoints.map((point) => `${point.x},${point.y}`).join(" "),
+      meanBrightnessPolyline: meanBrightnessPoints
+        .map((point) => `${point.x},${point.y}`)
+        .join(" "),
       riskPolyline: riskPoints.map((point) => `${point.x},${point.y}`).join(" "),
     };
   }, [compareResults]);
@@ -1898,7 +1903,7 @@ function App() {
                         <div className="compare-section-title">포르피린 추이</div>
                         <div className="compare-line-legend">
                           <span className="count">디텍션 수</span>
-                          <span className="rate">분포 비율</span>
+                          <span className="brightness">평균 밝기</span>
                           <span className="risk">위험점수</span>
                         </div>
                       </div>
@@ -1907,7 +1912,7 @@ function App() {
                         <svg
                           viewBox={`0 0 ${compareLineChart.width} ${compareLineChart.height}`}
                           role="img"
-                          aria-label="선택한 기록의 포르피린 디텍션 수와 분포 비율 변화"
+                          aria-label="선택한 기록의 포르피린 디텍션 수, 평균 밝기, 위험점수 변화"
                         >
                           <line
                             className="compare-axis"
@@ -1948,8 +1953,8 @@ function App() {
                             points={compareLineChart.countPolyline}
                           />
                           <polyline
-                            className="compare-line rate"
-                            points={compareLineChart.ratePolyline}
+                            className="compare-line brightness"
+                            points={compareLineChart.meanBrightnessPolyline}
                           />
                           <polyline
                             className="compare-line risk"
@@ -1958,7 +1963,8 @@ function App() {
 
                           {compareResults.map((item, index) => {
                             const countPoint = compareLineChart.countPoints[index];
-                            const ratePoint = compareLineChart.ratePoints[index];
+                            const meanBrightnessPoint =
+                              compareLineChart.meanBrightnessPoints[index];
                             const riskPoint = compareLineChart.riskPoints[index];
 
                             return (
@@ -1970,9 +1976,9 @@ function App() {
                                   r="5"
                                 />
                                 <circle
-                                  className="compare-line-dot rate"
-                                  cx={ratePoint.x}
-                                  cy={ratePoint.y}
+                                  className="compare-line-dot brightness"
+                                  cx={meanBrightnessPoint.x}
+                                  cy={meanBrightnessPoint.y}
                                   r="5"
                                 />
                                 <circle
@@ -2002,7 +2008,7 @@ function App() {
                             <strong>
                               {item.grade}등급 {item.risk_score.toFixed(1)}점 /{" "}
                               {item.porphyrin_count.toLocaleString()}개 /{" "}
-                              {item.detection_rate_percent.toFixed(2)}%
+                              평균 밝기 {item.porphyrin_mean_brightness.toFixed(1)}
                             </strong>
                           </div>
                         ))}
@@ -2040,39 +2046,6 @@ function App() {
                       </div>
                     </div>
 
-                    <div className="compare-chart-section">
-                      <div className="compare-section-title">부위별 분포 비교</div>
-                      <div className="compare-region-grid">
-                        {PORPHYRIN_REGION_ORDER.map((regionKey) => (
-                          <div className="compare-region-card" key={regionKey}>
-                            <div className="compare-region-name">
-                              {PORPHYRIN_REGION_LABELS[regionKey]}
-                            </div>
-
-                            {compareResults.map((item) => {
-                              const percentages = normalizePercentagesTo100(item.region_analysis);
-                              const value = percentages[regionKey] || 0;
-
-                              return (
-                                <div
-                                  className="compare-region-row"
-                                  key={`${regionKey}-${item.captureId}`}
-                                >
-                                  <span>{item.displayTime}</span>
-                                  <div className="compare-region-track">
-                                    <div
-                                      className="compare-region-fill"
-                                      style={{ width: `${Math.max(4, value)}%` }}
-                                    ></div>
-                                  </div>
-                                  <strong>{value}%</strong>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
                   </>
                 )}
               </div>

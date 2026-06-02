@@ -1036,8 +1036,7 @@
         }
 
         .compare-summary-card,
-        .compare-chart-section,
-        .compare-region-card {
+        .compare-chart-section {
           border: 1px solid rgba(255,255,255,0.1);
           background: rgba(255,255,255,0.06);
           border-radius: 18px;
@@ -1115,7 +1114,7 @@
           background: #fb7185;
         }
 
-        .compare-line-legend .rate::before {
+        .compare-line-legend .brightness::before {
           background: #22d3ee;
         }
 
@@ -1159,7 +1158,7 @@
           stroke: #fb7185;
         }
 
-        .compare-line.rate {
+        .compare-line.brightness {
           stroke: #22d3ee;
         }
 
@@ -1176,7 +1175,7 @@
           fill: #fb7185;
         }
 
-        .compare-line-dot.rate {
+        .compare-line-dot.brightness {
           fill: #22d3ee;
         }
 
@@ -1307,16 +1306,14 @@
           text-align: right;
         }
 
-        .compare-bar-track,
-        .compare-region-track {
+        .compare-bar-track {
           height: 18px;
           border-radius: 999px;
           background: rgba(0,0,0,0.32);
           overflow: hidden;
         }
 
-        .compare-bar-fill,
-        .compare-region-fill {
+        .compare-bar-fill {
           height: 100%;
           border-radius: inherit;
           transition: width 0.2s ease;
@@ -1330,46 +1327,8 @@
           background: linear-gradient(90deg, #facc15, #ef4444);
         }
 
-        .compare-bar-fill.rate,
-        .compare-region-fill {
+        .compare-bar-fill.rate {
           background: linear-gradient(90deg, #67e8f9, #22d3ee);
-        }
-
-        .compare-region-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 10px;
-        }
-
-        .compare-region-card {
-          padding: 12px;
-        }
-
-        .compare-region-name {
-          color: white;
-          font-size: 14px;
-          font-weight: 900;
-          margin-bottom: 10px;
-        }
-
-        .compare-region-row {
-          display: grid;
-          grid-template-columns: 88px minmax(0, 1fr) 38px;
-          gap: 8px;
-          align-items: center;
-          margin-top: 8px;
-        }
-
-        .compare-region-row span,
-        .compare-region-row strong {
-          color: rgba(255,255,255,0.72);
-          font-size: 11px;
-          font-weight: 800;
-        }
-
-        .compare-region-row strong {
-          color: white;
-          text-align: right;
         }
 
         .history-detail-top {
