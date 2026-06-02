@@ -1955,6 +1955,274 @@
           font-size: 20px;
         }
 
+        .header {
+          padding: 28px 32px;
+          align-items: center;
+        }
+
+        .header-title {
+          font-size: 42px;
+          font-weight: 900;
+          line-height: 1.1;
+        }
+
+        .header-subtitle,
+        .history-card-sub,
+        .history-detail-sub,
+        .selected-profile small,
+        .profile-date,
+        .analysis-description {
+          display: none;
+        }
+
+        .time-badge {
+          padding: 14px 20px;
+          border-radius: 20px;
+          font-size: 24px;
+          font-weight: 900;
+        }
+
+        .history-scroll-btn {
+          width: 72px;
+          height: 72px;
+          font-size: 30px;
+        }
+
+        .history-compare-actions {
+          top: 118px;
+          right: 108px;
+          gap: 12px;
+          padding: 14px;
+          border-radius: 24px;
+        }
+
+        .compare-primary-btn,
+        .compare-secondary-btn {
+          min-height: 74px;
+          min-width: 172px;
+          padding: 20px 28px;
+          border-radius: 24px;
+          font-size: 24px;
+          font-weight: 900;
+        }
+
+        .history-compare-container {
+          padding: 150px 108px 32px 32px;
+        }
+
+        .compare-summary-grid {
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+          margin-top: 20px;
+        }
+
+        .compare-summary-card,
+        .compare-chart-section {
+          border-radius: 24px;
+        }
+
+        .compare-summary-card {
+          padding: 22px;
+        }
+
+        .compare-summary-date {
+          font-size: 21px;
+          font-weight: 900;
+          color: rgba(255,255,255,0.86);
+        }
+
+        .compare-summary-values {
+          margin-top: 14px;
+          font-size: 32px;
+          line-height: 1.15;
+        }
+
+        .compare-chart-section {
+          margin-top: 18px;
+          padding: 22px;
+        }
+
+        .compare-section-title {
+          font-size: 30px;
+          line-height: 1.15;
+        }
+
+        .compare-section-heading {
+          align-items: flex-start;
+          gap: 18px;
+        }
+
+        .compare-line-legend {
+          gap: 18px;
+          font-size: 22px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .compare-line-legend span::before {
+          width: 34px;
+          height: 6px;
+        }
+
+        .compare-line-chart svg {
+          min-height: 330px;
+        }
+
+        .compare-line {
+          stroke-width: 6;
+        }
+
+        .compare-line-dot {
+          stroke-width: 4;
+        }
+
+        .compare-line-label {
+          font-size: 24px;
+        }
+
+        .compare-line-values {
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          gap: 14px;
+          margin-top: 16px;
+        }
+
+        .compare-line-value-card {
+          min-height: 96px;
+          padding: 18px;
+          border-radius: 18px;
+        }
+
+        .compare-line-value-card span {
+          font-size: 20px;
+          color: rgba(255,255,255,0.86);
+        }
+
+        .compare-line-value-card strong {
+          font-size: 24px;
+          line-height: 1.25;
+        }
+
+        .compare-image-grid {
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          gap: 16px;
+        }
+
+        .compare-image-card {
+          padding: 16px;
+          border-radius: 20px;
+        }
+
+        .compare-image-header {
+          min-height: 64px;
+          margin-bottom: 12px;
+        }
+
+        .compare-image-header span,
+        .compare-image-header strong {
+          font-size: 20px;
+          color: rgba(255,255,255,0.9);
+        }
+
+        .compare-image-empty {
+          font-size: 20px;
+        }
+
+        .profiles-container,
+        .history-container {
+          padding-top: 150px;
+        }
+
+        .history-card {
+          padding: 30px;
+          margin-bottom: 22px;
+          border-radius: 30px;
+        }
+
+        .history-card-time {
+          font-size: 32px;
+          font-weight: 900;
+        }
+
+        .history-tag,
+        .profile-select-tag {
+          font-size: 22px;
+          font-weight: 900;
+          padding: 14px 20px;
+        }
+
+        .profile-name {
+          font-size: 36px;
+          line-height: 1.15;
+        }
+
+        .selected-profile strong {
+          font-size: 30px;
+        }
+
+        .history-detail-title {
+          font-size: 34px;
+          font-weight: 900;
+        }
+
+        .history-detail-container .filter-chip {
+          font-size: 22px;
+          min-height: 72px;
+          padding: 18px 24px;
+        }
+
+        .porphyrin-comparison-label {
+          font-size: 22px;
+        }
+
+        .porphyrin-review-meta {
+          font-size: 28px;
+        }
+
+        .porphyrin-review-comment {
+          font-size: 34px;
+        }
+
+        .analysis-title {
+          font-size: 28px;
+        }
+
+        .analysis-btn {
+          font-size: 24px;
+          min-height: 78px;
+        }
+
+        .analysis-stat-grid {
+          gap: 14px;
+        }
+
+        .analysis-stat-card {
+          padding: 18px;
+          border-radius: 18px;
+        }
+
+        .analysis-stat-label {
+          font-size: 20px;
+          color: rgba(255,255,255,0.82);
+        }
+
+        .analysis-stat-value {
+          font-size: 34px;
+          font-weight: 900;
+        }
+
+        .analysis-region-title {
+          font-size: 24px;
+        }
+
+        .analysis-region-item {
+          font-size: 22px;
+          padding: 16px 18px;
+        }
+
+        .analysis-region-item strong {
+          font-size: 24px;
+        }
+
         @media (max-width: 700px) {
           .modal-box {
             max-width: 96vw;

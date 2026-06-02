@@ -1841,7 +1841,7 @@ function App() {
                 <div>
                   <h1 className="header-title">포르피린 비교</h1>
                   <div className="header-subtitle">
-                    선택한 촬영 기록의 포르피린 수치와 부위별 분포를 비교합니다.
+                    선택한 촬영 기록의 디텍션 수, 평균 밝기, 위험점수를 비교합니다.
                   </div>
                 </div>
 
