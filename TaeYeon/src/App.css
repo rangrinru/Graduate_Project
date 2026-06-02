@@ -1082,7 +1082,7 @@
 
         .compare-bar-row {
           display: grid;
-          grid-template-columns: 120px minmax(0, 1fr) 78px;
+          grid-template-columns: 120px minmax(0, 1fr) 96px;
           gap: 10px;
           align-items: center;
         }
@@ -1116,6 +1116,10 @@
 
         .compare-bar-fill.count {
           background: linear-gradient(90deg, #fb7185, #ef4444);
+        }
+
+        .compare-bar-fill.risk {
+          background: linear-gradient(90deg, #facc15, #ef4444);
         }
 
         .compare-bar-fill.rate,

@@ -15,39 +15,69 @@ LOW_LOCAL_CONTRAST_THRESHOLD = 3
 LOW_STRONG_ABSOLUTE_THRESHOLD = 80
 MIN_COMPONENT_AREA = 2
 TOP_BRIGHT_PERCENT = 5.0
+RISK_SCORE_MEAN = 71.16
+RISK_SCORE_STD = 15.44
+RISK_MEAN_WEIGHT = 0.7
+RISK_TOP5_MAX_WEIGHT = 0.3
+RISK_SCORE_BOUNDARIES = {
+    "a_max": round(RISK_SCORE_MEAN - RISK_SCORE_STD, 1),
+    "b_max": round(RISK_SCORE_MEAN - (RISK_SCORE_STD * 0.5), 1),
+    "c_max": round(RISK_SCORE_MEAN + (RISK_SCORE_STD * 0.5), 1),
+    "d_max": round(RISK_SCORE_MEAN + RISK_SCORE_STD, 1),
+}
+
+
 def clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
 
-def calculate_skin_score_from_porphyrin_count(porphyrin_count: int):
-    reference_bad_count = 80
-    count = max(0, int(porphyrin_count))
-    count_risk = min(count / reference_bad_count, 1.0)
-    score = int(round(100 - (70 * count_risk)))
+def calculate_skin_score_from_brightness(mean_brightness: float, top5_max_brightness: float):
+    risk_score = (
+        (float(mean_brightness) * RISK_MEAN_WEIGHT)
+        + (float(top5_max_brightness) * RISK_TOP5_MAX_WEIGHT)
+    )
+    z_score = (
+        (risk_score - RISK_SCORE_MEAN) / RISK_SCORE_STD
+        if RISK_SCORE_STD > 0
+        else 0.0
+    )
 
-    if score >= 90:
+    if risk_score <= RISK_SCORE_BOUNDARIES["a_max"]:
         grade = "A"
         label = "매우 양호"
-    elif score >= 80:
+        level = 1
+    elif risk_score <= RISK_SCORE_BOUNDARIES["b_max"]:
         grade = "B"
         label = "양호"
-    elif score >= 70:
+        level = 2
+    elif risk_score <= RISK_SCORE_BOUNDARIES["c_max"]:
         grade = "C"
-        label = "주의"
-    elif score >= 60:
+        label = "보통"
+        level = 3
+    elif risk_score <= RISK_SCORE_BOUNDARIES["d_max"]:
         grade = "D"
-        label = "관리 필요"
+        label = "주의"
+        level = 4
     else:
         grade = "E"
-        label = "집중 관리"
+        label = "관리 필요"
+        level = 5
 
     return {
-        "score": score,
+        "score": round(risk_score, 1),
         "grade": grade,
         "label": label,
-        "basis": "porphyrin_count",
-        "porphyrin_count": count,
-        "reference_bad_count": reference_bad_count,
+        "level": level,
+        "basis": "brightness_risk_score",
+        "risk_score": float(risk_score),
+        "risk_z_score": float(z_score),
+        "risk_score_mean": RISK_SCORE_MEAN,
+        "risk_score_std": RISK_SCORE_STD,
+        "risk_score_boundaries": RISK_SCORE_BOUNDARIES,
+        "mean_brightness_weight": RISK_MEAN_WEIGHT,
+        "top5_max_brightness_weight": RISK_TOP5_MAX_WEIGHT,
+        "porphyrin_mean_brightness": float(mean_brightness),
+        "porphyrin_top5_max_brightness": float(top5_max_brightness),
     }
 
 
@@ -452,15 +482,13 @@ def analyze_porphyrin_heatmap_v04(
 
     detection_rate = (total_area / face_pixels) * 100 if face_pixels else 0.0
     brightness_summary = summarize_detected_brightness(blur, low_mask)
-    if detection_rate < 1:
-        grade = "Low"
-    elif detection_rate < 3:
-        grade = "Medium"
-    else:
-        grade = "High"
 
     region_analysis = normalize_region_scores(region_score)
-    skin_score = calculate_skin_score_from_porphyrin_count(low_count)
+    skin_score = calculate_skin_score_from_brightness(
+        brightness_summary["mean"],
+        brightness_summary["top5_max"]
+    )
+    grade = skin_score["grade"]
 
     output_dir.mkdir(parents=True, exist_ok=True)
     heatmap_path = output_dir / "porphyrin_heatmap.jpg"
@@ -490,6 +518,11 @@ def analyze_porphyrin_heatmap_v04(
         "low_candidate_area": float(low_total_area),
         "porphyrin_mean_brightness": brightness_summary["mean"],
         "porphyrin_top5_max_brightness": brightness_summary["top5_max"],
+        "risk_score": skin_score["risk_score"],
+        "risk_z_score": skin_score["risk_z_score"],
+        "risk_score_mean": skin_score["risk_score_mean"],
+        "risk_score_std": skin_score["risk_score_std"],
+        "risk_score_boundaries": skin_score["risk_score_boundaries"],
         "detection_rate_percent": float(detection_rate),
         "face_area_pixels": int(face_pixels),
         "grade": grade,
