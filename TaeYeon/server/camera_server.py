@@ -1524,6 +1524,8 @@ def analyze_porphyrin_api(profile_id, capture_id):
             "porphyrin_count": report["porphyrin_count"],
             "porphyrin_area": report["porphyrin_area"],
             "detection_rate_percent": report["detection_rate_percent"],
+            "porphyrin_mean_brightness": report["porphyrin_mean_brightness"],
+            "porphyrin_top5_max_brightness": report["porphyrin_top5_max_brightness"],
             "face_area_pixels": report["face_area_pixels"],
             "grade": report["grade"],
             "skin_score": report["skin_score"],
