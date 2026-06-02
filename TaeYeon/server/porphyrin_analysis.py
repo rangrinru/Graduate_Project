@@ -14,6 +14,7 @@ LOW_VISIBLE_THRESHOLD = 45
 LOW_LOCAL_CONTRAST_THRESHOLD = 3
 LOW_STRONG_ABSOLUTE_THRESHOLD = 80
 MIN_COMPONENT_AREA = 2
+TOP_BRIGHT_PERCENT = 5.0
 def clamp(value: int, low: int, high: int) -> int:
     return max(low, min(high, value))
 
@@ -149,6 +150,24 @@ def clean_component_mask(mask, min_area):
         max_component_area = max(max_component_area, area)
 
     return clean_mask, accepted_count, max_component_area
+
+
+def summarize_detected_brightness(heat_scaled, detected_mask):
+    detected_values = heat_scaled[detected_mask > 0].astype(np.float32)
+    if detected_values.size == 0:
+        return {
+            "mean": 0.0,
+            "top5_max": 0.0,
+        }
+
+    percentile = 100.0 - TOP_BRIGHT_PERCENT
+    top_threshold = float(np.percentile(detected_values, percentile))
+    top_values = detected_values[detected_values >= top_threshold]
+
+    return {
+        "mean": float(detected_values.mean()),
+        "top5_max": float(top_values.max()) if top_values.size else 0.0,
+    }
 
 
 def build_absolute_porphyrin_heatmap(heat_source, mask=None):
@@ -432,6 +451,7 @@ def analyze_porphyrin_heatmap_v04(
         region_score[region_key] += float(intensity)
 
     detection_rate = (total_area / face_pixels) * 100 if face_pixels else 0.0
+    brightness_summary = summarize_detected_brightness(blur, low_mask)
     if detection_rate < 1:
         grade = "Low"
     elif detection_rate < 3:
@@ -468,6 +488,8 @@ def analyze_porphyrin_heatmap_v04(
         "strong_porphyrin_area": float(np.count_nonzero(clean_mask)),
         "low_candidate_count": int(low_count),
         "low_candidate_area": float(low_total_area),
+        "porphyrin_mean_brightness": brightness_summary["mean"],
+        "porphyrin_top5_max_brightness": brightness_summary["top5_max"],
         "detection_rate_percent": float(detection_rate),
         "face_area_pixels": int(face_pixels),
         "grade": grade,

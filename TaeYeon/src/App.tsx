@@ -92,6 +92,46 @@ function normalizePercentagesTo100(values: Record<string, number>) {
   return Object.fromEntries(normalized.map((item) => [item.key, item.rounded]));
 }
 
+function getPorphyrinBrightnessReview(meanBrightness: number) {
+  if (meanBrightness > 70) {
+    return {
+      level: 5,
+      status: "집중 관리 필요",
+      comment: "피부 상태 개선을 위한 관리가 권장됩니다.",
+    };
+  }
+
+  if (meanBrightness >= 60) {
+    return {
+      level: 4,
+      status: "주의",
+      comment: "피지 및 모공 관리가 필요합니다.",
+    };
+  }
+
+  if (meanBrightness >= 50) {
+    return {
+      level: 3,
+      status: "보통",
+      comment: "피부 관리가 필요한 상태입니다.",
+    };
+  }
+
+  if (meanBrightness >= 40) {
+    return {
+      level: 2,
+      status: "양호",
+      comment: "전반적으로 건강한 피부 상태입니다.",
+    };
+  }
+
+  return {
+    level: 1,
+    status: "매우 양호",
+    comment: "깨끗한 피부 상태로 보입니다.",
+  };
+}
+
 function mapAutoCaptureStatus(
   data: Record<string, unknown>,
   fallbackStatus: string
@@ -120,6 +160,8 @@ function mapPorphyrinResult(data: Record<string, unknown>): PorphyrinResult {
     porphyrin_count: Number(data.porphyrin_count || 0),
     porphyrin_area: Number(data.porphyrin_area || 0),
     detection_rate_percent: Number(data.detection_rate_percent || 0),
+    porphyrin_mean_brightness: Number(data.porphyrin_mean_brightness || 0),
+    porphyrin_top5_max_brightness: Number(data.porphyrin_top5_max_brightness || 0),
     grade: typeof data.grade === "string" ? data.grade : "-",
     skin_score:
       typeof data.skin_score === "object" && data.skin_score !== null
@@ -210,6 +252,11 @@ function App() {
     }
 
     return normalizePercentagesTo100(porphyrinResult.region_analysis);
+  }, [porphyrinResult]);
+
+  const porphyrinBrightnessReview = useMemo(() => {
+    if (!porphyrinResult) return null;
+    return getPorphyrinBrightnessReview(porphyrinResult.porphyrin_mean_brightness);
   }, [porphyrinResult]);
 
   const compareChartMax = useMemo(() => {
@@ -1890,6 +1937,17 @@ function App() {
                           선택한 필터의 이미지가 없습니다.
                         </div>
                       )}
+
+                      {isViewingPorphyrinHeatmap && porphyrinBrightnessReview && (
+                        <div className="porphyrin-review-box">
+                          <div className="porphyrin-review-meta">
+                            {porphyrinBrightnessReview.level}단계 · {porphyrinBrightnessReview.status}
+                          </div>
+                          <div className="porphyrin-review-comment">
+                            {porphyrinBrightnessReview.comment}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="analysis-panel">
@@ -1922,6 +1980,18 @@ function App() {
                               <div className="analysis-stat-label">포르피린 분포 비율</div>
                               <div className="analysis-stat-value">
                                 {porphyrinResult.detection_rate_percent.toFixed(2)}%
+                              </div>
+                            </div>
+                            <div className="analysis-stat-card analysis-stat-primary">
+                              <div className="analysis-stat-label">포르피린 최대 밝기</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_top5_max_brightness.toFixed(0)}
+                              </div>
+                            </div>
+                            <div className="analysis-stat-card analysis-stat-primary">
+                              <div className="analysis-stat-label">포르피린 평균 밝기</div>
+                              <div className="analysis-stat-value">
+                                {porphyrinResult.porphyrin_mean_brightness.toFixed(1)}
                               </div>
                             </div>
                           </div>
