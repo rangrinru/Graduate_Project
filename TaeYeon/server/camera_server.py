@@ -1632,6 +1632,9 @@ def get_porphyrin_analysis_report_api(profile_id, capture_id):
             "porphyrin_count": report.get("porphyrin_count", 0),
             "porphyrin_area": report.get("porphyrin_area", 0),
             "detection_rate_percent": report.get("detection_rate_percent", 0),
+            "porphyrin_mean_brightness": report.get("porphyrin_mean_brightness", 0),
+            "porphyrin_top5_max_brightness": report.get("porphyrin_top5_max_brightness", 0),
+            "face_area_pixels": report.get("face_area_pixels", 0),
             "grade": report.get("grade", "-"),
             "skin_score": report.get("skin_score"),
             "region_analysis": report.get("region_analysis", {}),
@@ -1639,6 +1642,7 @@ def get_porphyrin_analysis_report_api(profile_id, capture_id):
             "threshold_value": report.get("threshold_value", 0),
             "min_area": report.get("min_area", 0),
             "max_area": report.get("max_area", 0),
+            "face_landmarks_used": report.get("face_landmarks_used", False),
             "heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-heatmap",
             "uv_heatmap_url": f"/profiles/{profile_id}/history/{capture_id}/analysis/porphyrin-heatmap",
             "white_overlay_url": (
