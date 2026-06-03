@@ -596,8 +596,8 @@
           position: absolute;
           left: 50%;
           top: clamp(145px, 13vh, 190px);
-          width: clamp(620px, 96vw, 820px);
-          height: clamp(900px, 88vh, 1160px);
+          width: clamp(660px, 102vw, 870px);
+          height: clamp(960px, 94vh, 1230px);
           transform: translateX(-50%);
           border: 4px dashed rgba(103,232,249,0.92);
           border-radius: 49% 49% 45% 45% / 35% 35% 61% 61%;
@@ -1654,8 +1654,8 @@
 
           .guide-face {
             top: clamp(92px, 13vh, 138px);
-            width: clamp(360px, 98vw, 470px);
-            height: clamp(560px, 86vh, 720px);
+            width: clamp(380px, 104vw, 500px);
+            height: clamp(600px, 92vh, 770px);
             border-width: 4px;
           }
 
@@ -1752,8 +1752,8 @@
 
         .guide-face {
           top: clamp(145px, 13vh, 190px);
-          width: clamp(620px, 96vw, 820px);
-          height: clamp(900px, 88vh, 1160px);
+          width: clamp(660px, 102vw, 870px);
+          height: clamp(960px, 94vh, 1230px);
           border-width: 5px;
         }
 
