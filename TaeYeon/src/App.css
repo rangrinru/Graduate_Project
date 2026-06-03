@@ -595,12 +595,12 @@
         .guide-face {
           position: absolute;
           left: 50%;
-          top: clamp(165px, 18vh, 245px);
-          width: clamp(480px, 92vw, 720px);
-          height: clamp(740px, 80vh, 980px);
+          top: clamp(88px, 10vh, 120px);
+          width: clamp(430px, 72vw, 560px);
+          height: clamp(620px, 68vh, 760px);
           transform: translateX(-50%);
           border: 4px dashed rgba(103,232,249,0.92);
-          border-radius: 47% 47% 43% 43% / 34% 34% 57% 57%;
+          border-radius: 50% 50% 46% 46% / 42% 42% 56% 56%;
           background:
             radial-gradient(ellipse at 50% 30%, rgba(103,232,249,0.08), transparent 56%),
             rgba(255,255,255,0.018);
@@ -621,16 +621,8 @@
         }
 
         .guide-face::after {
-          content: "";
-          position: absolute;
-          left: 30%;
-          right: 30%;
-          bottom: -18%;
-          height: 24%;
-          border-left: 3px dashed rgba(103,232,249,0.56);
-          border-right: 3px dashed rgba(103,232,249,0.56);
-          border-bottom: 3px dashed rgba(103,232,249,0.46);
-          border-radius: 0 0 42% 42%;
+          content: none;
+          display: none;
         }
 
         .guide-eye-line,
@@ -645,7 +637,7 @@
         }
 
         .guide-eye-line {
-          top: 35%;
+          top: 34%;
           width: 48%;
           height: 3px;
         }
@@ -657,7 +649,7 @@
         }
 
         .guide-mouth-line {
-          top: 55%;
+          top: 56%;
           width: 24%;
           height: 3px;
         }
@@ -1661,9 +1653,9 @@
           }
 
           .guide-face {
-            top: clamp(175px, 19vh, 230px);
-            width: clamp(520px, 98vw, 560px);
-            height: clamp(800px, 84vh, 900px);
+            top: clamp(78px, 10vh, 112px);
+            width: clamp(330px, 84vw, 430px);
+            height: clamp(520px, 68vh, 680px);
             border-width: 4px;
           }
 
@@ -1759,9 +1751,9 @@
         }
 
         .guide-face {
-          top: clamp(185px, 18vh, 250px);
-          width: clamp(535px, 98vw, 760px);
-          height: clamp(800px, 82vh, 1020px);
+          top: clamp(86px, 10vh, 120px);
+          width: clamp(430px, 72vw, 560px);
+          height: clamp(620px, 68vh, 760px);
           border-width: 5px;
         }
 
