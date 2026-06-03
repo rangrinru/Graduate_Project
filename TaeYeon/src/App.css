@@ -595,12 +595,12 @@
         .guide-face {
           position: absolute;
           left: 50%;
-          top: clamp(88px, 10vh, 120px);
-          width: clamp(430px, 72vw, 560px);
-          height: clamp(620px, 68vh, 760px);
+          top: clamp(78px, 9vh, 108px);
+          width: clamp(520px, 90vw, 690px);
+          height: clamp(720px, 78vh, 900px);
           transform: translateX(-50%);
           border: 4px dashed rgba(103,232,249,0.92);
-          border-radius: 50% 50% 46% 46% / 42% 42% 56% 56%;
+          border-radius: 49% 49% 45% 45% / 38% 38% 58% 58%;
           background:
             radial-gradient(ellipse at 50% 30%, rgba(103,232,249,0.08), transparent 56%),
             rgba(255,255,255,0.018);
@@ -1653,9 +1653,9 @@
           }
 
           .guide-face {
-            top: clamp(78px, 10vh, 112px);
-            width: clamp(330px, 84vw, 430px);
-            height: clamp(520px, 68vh, 680px);
+            top: clamp(58px, 8vh, 88px);
+            width: clamp(330px, 96vw, 380px);
+            height: clamp(440px, 70vh, 540px);
             border-width: 4px;
           }
 
@@ -1751,9 +1751,9 @@
         }
 
         .guide-face {
-          top: clamp(86px, 10vh, 120px);
-          width: clamp(430px, 72vw, 560px);
-          height: clamp(620px, 68vh, 760px);
+          top: clamp(72px, 9vh, 106px);
+          width: clamp(520px, 90vw, 690px);
+          height: clamp(720px, 78vh, 900px);
           border-width: 5px;
         }
 
