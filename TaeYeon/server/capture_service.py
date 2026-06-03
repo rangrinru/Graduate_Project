@@ -1,7 +1,8 @@
-﻿import cv2
+import cv2
 import json
 
 from config import CAMERA_INFO, CAPTURE_HEIGHT, CAPTURE_WIDTH, SINGLE_WIDTH, WHITE_CAM4_REFERENCE_NAME
+from storage_utils import safe_capture_path
 
 
 def extract_cam_frame(full_frame_bgr, cam_key):
@@ -31,7 +32,7 @@ def save_one_camera_image(
 ):
     info = CAMERA_INFO[cam_key]
     frame_bgr = cv2.rotate(frame_bgr, cv2.ROTATE_90_CLOCKWISE)
-    target_dir = profile_root / info["folder"] / capture_id
+    target_dir = safe_capture_path(profile_root, info["folder"], capture_id)
     target_dir.mkdir(parents=True, exist_ok=True)
 
     image_path = target_dir / f"{cam_key}.{ext}"
@@ -91,7 +92,7 @@ def save_white_cam4_reference_image(
 ):
     info = CAMERA_INFO["cam4"]
     frame_bgr = cv2.rotate(frame_bgr, cv2.ROTATE_90_CLOCKWISE)
-    target_dir = profile_root / info["folder"] / capture_id
+    target_dir = safe_capture_path(profile_root, info["folder"], capture_id)
     target_dir.mkdir(parents=True, exist_ok=True)
 
     image_path = target_dir / f"{WHITE_CAM4_REFERENCE_NAME}.{ext}"

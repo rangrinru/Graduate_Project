@@ -39,7 +39,13 @@ from auto_capture_service import (
     calculate_eye_aspect_ratio_from_points,
     clamp,
 )
-from picamera2 import Picamera2
+try:
+    from picamera2 import Picamera2
+
+    PICAMERA_IMPORT_ERROR = None
+except Exception as e:
+    Picamera2 = None
+    PICAMERA_IMPORT_ERROR = e
 
 # 카메라 동기화용 스레드 락 import
 import threading
@@ -183,6 +189,10 @@ def read_picamera_cam_frame_bgr(cam_key):
 def init_camera():
     # 전역 변수 사용 선언
     global picam2, preview_config, still_config, camera_ready
+
+    if Picamera2 is None:
+        camera_ready = False
+        raise RuntimeError(f"Picamera2를 사용할 수 없습니다: {PICAMERA_IMPORT_ERROR}")
 
     camera_list = Picamera2.global_camera_info()
     print("Detected cameras:", camera_list)
@@ -679,7 +689,7 @@ def perform_capture_for_profile(profile_id: str, trigger_metadata=None):
     folder_id = profile["folderId"]
 
     # 프로필 루트 경로 생성
-    profile_root = SAVE_ROOT / folder_id
+    profile_root = get_profile_root(profile_id)
 
     # 프로필 폴더가 없으면 예외 발생
     if not profile_root.exists():
@@ -921,6 +931,12 @@ def auto_capture_worker(profile_id: str):
             # 다음 검사 전 짧게 대기
             sleep(AUTO_CAPTURE_INTERVAL_SEC)
 
+        with auto_state_lock:
+            captured = AUTO_STATE["captured"]
+
+        if not captured:
+            white_led_off()
+
     except Exception as e:
         # 오류 발생 시 자동 촬영 상태에 오류 저장
         with auto_state_lock:
@@ -929,6 +945,7 @@ def auto_capture_worker(profile_id: str):
             AUTO_STATE["error"] = str(e)
             AUTO_STATE["status"] = f"자동 촬영 오류: {e}"
             AUTO_STATE["last_update"] = datetime.now().isoformat()
+        white_led_off()
 
 
 # =========================
@@ -1249,6 +1266,8 @@ def white_led_on_api():
         })
 
     except Exception as e:
+        white_led_off()
+
         # 실패 응답 반환
         return jsonify({
             "ok": False,
@@ -1380,11 +1399,22 @@ def auto_capture_status_api():
 
 @app.route("/auto-capture/cancel", methods=["POST"])
 def auto_capture_cancel_api():
+    global auto_capture_thread
+
     # 자동 촬영 상태를 중지로 변경
     with auto_state_lock:
         AUTO_STATE["running"] = False
         AUTO_STATE["status"] = "자동 촬영 취소"
         AUTO_STATE["last_update"] = datetime.now().isoformat()
+
+    white_led_off()
+
+    thread = auto_capture_thread
+    if thread is not None and thread.is_alive() and thread is not threading.current_thread():
+        thread.join(timeout=AUTO_CANCEL_JOIN_TIMEOUT_SEC)
+
+    if thread is not None and not thread.is_alive():
+        auto_capture_thread = None
 
     # 취소 후 현재 상태 반환
     return jsonify({

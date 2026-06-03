@@ -2,8 +2,9 @@
 import shutil
 from pathlib import Path
 
-from config import CAMERA_INFO, SAVE_ROOT, WHITE_CAM4_REFERENCE_NAME
+from config import CAMERA_INFO, WHITE_CAM4_REFERENCE_NAME
 from profile_service import find_profile_by_id
+from storage_utils import safe_capture_path, safe_profile_path
 
 
 def format_capture_id_to_text(capture_id: str) -> str:
@@ -21,7 +22,7 @@ def get_profile_root(profile_id: str) -> Path:
     profile = find_profile_by_id(profile_id)
     if profile is None:
         raise ValueError("존재하지 않는 프로필입니다.")
-    return SAVE_ROOT / profile["folderId"]
+    return safe_profile_path(profile["folderId"])
 
 
 def get_capture_history(profile_id: str):
@@ -74,7 +75,7 @@ def get_capture_detail(profile_id: str, capture_id: str):
     captured_at = None
 
     for cam_key, info in CAMERA_INFO.items():
-        target_dir = profile_root / info["folder"] / capture_id
+        target_dir = safe_capture_path(profile_root, info["folder"], capture_id)
         candidates = [
             target_dir / f"{cam_key}.png",
             target_dir / f"{cam_key}.jpg",
@@ -133,7 +134,7 @@ def delete_capture_history(profile_id: str, capture_id: str):
     deleted_any = False
 
     for _cam_key, info in CAMERA_INFO.items():
-        target_dir = profile_root / info["folder"] / capture_id
+        target_dir = safe_capture_path(profile_root, info["folder"], capture_id)
         if target_dir.exists() and target_dir.is_dir():
             shutil.rmtree(target_dir)
             deleted_any = True
@@ -156,7 +157,7 @@ def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Pa
     if matched_cam_key is None:
         raise ValueError("유효하지 않은 필터 타입입니다.")
 
-    target_dir = profile_root / matched_info["folder"] / capture_id
+    target_dir = safe_capture_path(profile_root, matched_info["folder"], capture_id)
     candidates = [
         target_dir / f"{matched_cam_key}.png",
         target_dir / f"{matched_cam_key}.jpg",
@@ -172,7 +173,7 @@ def resolve_image_path(profile_id: str, capture_id: str, filter_type: str) -> Pa
 
 def resolve_white_cam4_reference_path(profile_id: str, capture_id: str) -> Path:
     profile_root = get_profile_root(profile_id)
-    target_dir = profile_root / CAMERA_INFO["cam4"]["folder"] / capture_id
+    target_dir = safe_capture_path(profile_root, CAMERA_INFO["cam4"]["folder"], capture_id)
     candidates = [
         target_dir / f"{WHITE_CAM4_REFERENCE_NAME}.png",
         target_dir / f"{WHITE_CAM4_REFERENCE_NAME}.jpg",
@@ -204,7 +205,7 @@ def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: s
         raise ValueError("유효하지 않은 분석 이미지 타입입니다.")
 
     folder, file_name = file_map[result_type]
-    analysis_dir = profile_root / folder / capture_id / "analysis"
+    analysis_dir = safe_capture_path(profile_root, folder, capture_id, "analysis")
     image_path = analysis_dir / file_name
     if not image_path.exists() or not image_path.is_file():
         raise ValueError("분석 결과 이미지가 없습니다. 먼저 분석을 실행하세요.")
@@ -214,12 +215,12 @@ def resolve_analysis_image_path(profile_id: str, capture_id: str, result_type: s
 
 def resolve_porphyrin_report_path(profile_id: str, capture_id: str) -> Path:
     profile_root = get_profile_root(profile_id)
-    report_path = (
-        profile_root
-        / CAMERA_INFO["cam4"]["folder"]
-        / capture_id
-        / "analysis"
-        / "porphyrin_report.json"
+    report_path = safe_capture_path(
+        profile_root,
+        CAMERA_INFO["cam4"]["folder"],
+        capture_id,
+        "analysis",
+        "porphyrin_report.json",
     )
 
     if not report_path.exists() or not report_path.is_file():

@@ -1,11 +1,13 @@
-﻿from pathlib import Path
+import os
+from pathlib import Path
 
 # Capture image size.
 CAPTURE_WIDTH = 5120
 CAPTURE_HEIGHT = 800
 SINGLE_WIDTH = CAPTURE_WIDTH // 4
 
-SAVE_ROOT = Path.home() / "Graduate_Project" / "TaeYeon" / "captures"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SAVE_ROOT = Path(os.environ.get("TAEYEON_SAVE_ROOT", PROJECT_ROOT / "captures")).expanduser().resolve()
 SAVE_ROOT.mkdir(parents=True, exist_ok=True)
 PROFILES_FILE = SAVE_ROOT / "profiles.json"
 
@@ -54,6 +56,7 @@ EYES_CLOSED_DELAY_SEC = 2.0
 AUTO_DETECTION_CAM_KEY = "cam2"
 AUTO_DETECTION_PROCESS_WIDTH = 960
 AUTO_CAPTURE_INTERVAL_SEC = 0.12
+AUTO_CANCEL_JOIN_TIMEOUT_SEC = 2.0
 
 RAW_WIDTH = CAPTURE_WIDTH
 RAW_HEIGHT = CAPTURE_HEIGHT

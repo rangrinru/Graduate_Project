@@ -13,7 +13,15 @@ from time import sleep
 
 import cv2
 import numpy as np
-from picamera2 import Picamera2
+from config import PROJECT_ROOT
+
+try:
+    from picamera2 import Picamera2
+
+    PICAMERA_IMPORT_ERROR = None
+except Exception as e:
+    Picamera2 = None
+    PICAMERA_IMPORT_ERROR = e
 
 try:
     from gpiozero import LED
@@ -24,7 +32,7 @@ except Exception:
 CAPTURE_WIDTH = 5120
 CAPTURE_HEIGHT = 800
 
-SAVE_ROOT = Path.home() / "camera_deep_debug"
+SAVE_ROOT = PROJECT_ROOT / "camera_deep_debug"
 
 
 def str_to_bool(value: str) -> bool:
@@ -154,6 +162,9 @@ def relay_test(relay_pin: int, relay_active_high: bool, relay_on: bool, warmup_s
 
 
 def main():
+    if Picamera2 is None:
+        raise RuntimeError(f"Picamera2를 사용할 수 없습니다: {PICAMERA_IMPORT_ERROR}")
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--exposure-ms", type=int, default=1000)

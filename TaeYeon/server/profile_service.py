@@ -3,7 +3,8 @@ import re
 import shutil
 from datetime import datetime
 
-from config import CAMERA_INFO, PROFILES_FILE, SAVE_ROOT
+from config import CAMERA_INFO, PROFILES_FILE
+from storage_utils import safe_profile_path
 
 
 def sanitize_profile_name(profile_name: str) -> str:
@@ -33,7 +34,7 @@ def save_profiles(profiles):
 
 
 def ensure_profile_dirs(folder_id: str):
-    profile_root = SAVE_ROOT / folder_id
+    profile_root = safe_profile_path(folder_id)
     profile_root.mkdir(parents=True, exist_ok=True)
     for cam in CAMERA_INFO.values():
         (profile_root / cam["folder"]).mkdir(parents=True, exist_ok=True)
@@ -71,7 +72,7 @@ def delete_profile(profile_id: str):
     if target is None:
         raise ValueError("삭제할 프로필이 없습니다.")
 
-    profile_root = SAVE_ROOT / target["folderId"]
+    profile_root = safe_profile_path(target["folderId"])
     if profile_root.exists() and profile_root.is_dir():
         shutil.rmtree(profile_root)
 

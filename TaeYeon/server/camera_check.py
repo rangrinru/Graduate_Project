@@ -23,7 +23,15 @@ from pathlib import Path
 from datetime import datetime
 
 # 라즈베리파이 카메라 제어를 위해 Picamera2를 가져옵니다.
-from picamera2 import Picamera2
+from config import PROJECT_ROOT
+
+try:
+    from picamera2 import Picamera2
+
+    PICAMERA_IMPORT_ERROR = None
+except Exception as e:
+    Picamera2 = None
+    PICAMERA_IMPORT_ERROR = e
 
 
 # =========================
@@ -55,7 +63,7 @@ SINGLE_DISPLAY_WIDTH = 640
 JPEG_QUALITY = 75
 
 # 카메라 테스트 이미지 저장 폴더입니다.
-SAVE_DIR = Path.home() / "camera_check_output"
+SAVE_DIR = PROJECT_ROOT / "camera_check_output"
 
 # 저장 폴더가 없으면 생성합니다.
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
@@ -120,6 +128,9 @@ def init_camera():
 
     try:
         # 연결된 카메라 목록을 가져옵니다.
+        if Picamera2 is None:
+            raise RuntimeError(f"Picamera2를 사용할 수 없습니다: {PICAMERA_IMPORT_ERROR}")
+
         camera_list = Picamera2.global_camera_info()
 
         # 카메라 목록이 비어 있으면 예외를 발생시킵니다.
@@ -296,6 +307,9 @@ def status():
     # Picamera2가 보는 카메라 목록을 안전하게 가져옵니다.
     try:
         # 카메라 목록을 조회합니다.
+        if Picamera2 is None:
+            raise RuntimeError(f"Picamera2를 사용할 수 없습니다: {PICAMERA_IMPORT_ERROR}")
+
         camera_list = Picamera2.global_camera_info()
     except Exception as e:
         # 조회 실패 시 오류 문자열로 저장합니다.
